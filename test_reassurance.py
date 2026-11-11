@@ -66,6 +66,22 @@ class StripReassuranceTests(unittest.TestCase):
             with self.subTest(asked=asked):
                 self.assertEqual(h.strip_reassurance(text, asked), text)
 
+    def test_ordinary_requests_do_not_switch_the_rule_off(self):
+        text = 'This lists the directory entries. It does not change any files.'
+        for asked in ('Write a command that lists the files here', 'change to the harness folder and list the files',
+                      'check whether the API key is set', 'edit nothing yet, just tell me what the log says about setup',
+                      'show me the token count for the last turn'):
+            with self.subTest(asked=asked):
+                expected = text if asked.startswith('edit nothing') else 'This lists the directory entries.'
+                self.assertEqual(h.strip_reassurance(text, asked), expected)
+
+    def test_questions_about_change_keep_the_answer(self):
+        text = 'This lists the directory entries. It does not change any files.'
+        for asked in ('will it change my files?', 'does this delete anything', 'list them without touching the folder',
+                      "audit it, don't modify a thing", 'give me a non-destructive check'):
+            with self.subTest(asked=asked):
+                self.assertEqual(h.strip_reassurance(text, asked), text)
+
     def test_list_structure_and_blank_lines_survive(self):
         text = 'Three causes:\n1. setup.sh has mode 644.\n2. There is no .env file.\n\nNext step: this prints setup.sh.'
         self.assertEqual(h.strip_reassurance(text, TASK), text)

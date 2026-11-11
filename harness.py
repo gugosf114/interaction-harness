@@ -159,10 +159,20 @@ REASSURANCE_CLAUSE = re.compile(
     r",?\s+(?:(?:and|but)\s+(?:(?:it|this|they|these)\s+)?" + _RE_NEG
     + r"\s+(?:change|modify|alter|delete|remove|overwrite|touch|edit)" + _RE_OBJECT + r"[^.!?\n,;]*|"
     r"without\s+(?:changing|modifying|altering|touching|deleting|editing)" + _RE_OBJECT + r"[^.!?\n,;]*)", re.IGNORECASE)
-# The operator raised safety, change or secrets: then such a sentence is the answer, not decoration.
+# The operator's own request raised it: "don't change anything", "is it safe", "read-only", "do not print the key".
+# Then such a sentence is the answer, not decoration. A bare "write a command" or "change to the folder"
+# does not count; the request must negate or question a change, or name safety.
+_ASK_NEG = r"(?:don['’]?t|do\s+not|never|without|no|not|avoid|must\s+not|should\s+not|shouldn['’]t|mustn['’]t)"
+_ASK_CHANGE = r"(?:chang|modif|alter|delet|remov|overwrit|touch|edit|writ|harm|damag|break)\w*"
 SAFETY_ASKED = re.compile(
-    r"\b(?:chang\w*|modif\w*|alter\w*|delet\w*|remov\w*|overwrit\w*|touch\w*|edit\w*|writ\w*|read[- ]only|safe\w*|harm\w*|"
-    r"damag\w*|risk\w*|destruct\w*|danger\w*|keys?|secrets?|credentials?|tokens?|passwords?)\b", re.IGNORECASE)
+    r"\b" + _ASK_NEG + r"\s+(?:\w+\s+){0,4}?" + _ASK_CHANGE + r"\b|"
+    r"\b" + _ASK_NEG + r"\s+(?:\w+\s+){0,4}?(?:print|show|reveal|display|expos|leak|log)\w*\s+(?:\w+\s+){0,6}?(?:keys?|secrets?|credentials?|tokens?|passwords?)\b|"
+    r"\b" + _ASK_CHANGE + r"\s+(?:nothing|none|no\s+\w+)\b|"
+    r"\b(?:no\s+key|key\s+(?:contents?|values?))\b|"
+    r"\bread[- ]only\b|\bnon[- ]destructive\b|"
+    r"\b(?:safe|safely|safety|unsafe|risk\w*|danger\w*|harm\w*|destructive)\b|"
+    r"\b(?:will|does|did|would|can|could|is|are)\s+(?:it|this|that|they|these)\s+(?:going\s+to\s+)?" + _ASK_CHANGE + r"\b",
+    re.IGNORECASE)
 _LIST_MARK = re.compile(r"^(\s*(?:[-*•]|\d+[.)])\s+)")
 
 
