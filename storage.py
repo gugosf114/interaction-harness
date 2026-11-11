@@ -1,0 +1,189 @@
+"""Private SQLite history and locked, bounded session files."""
+from contextlib import contextmanager
+from datetime import datetime, timezone
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import sqlite3
+import tempfile
+import uuid
+
+NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z')
+METRIC_COLUMNS = ('input_tokens', 'output_tokens', 'cache_creation_tokens',
+                  'cache_hit_requests', 'latency_ms')
+
+
+def request_metrics(events):
+    """Normalize provider counters; OpenAI's input already includes cache reads."""
+    metrics=dict(tokens_used=0,cache_read_tokens=0,
+                 **{name:0 for name in METRIC_COLUMNS})
+    has_usage=False
+    has_latency=False
+    for event in events:
+        if event.get('elapsed_ms') is not None:
+            metrics['latency_ms']+=event['elapsed_ms'];has_latency=True
+        usage=event.get('usage') or {}
+        if not usage:continue
+        has_usage=True
+        creation=usage.get('cache_creation_input_tokens',0)
+        anthropic_read=usage.get('cache_read_input_tokens',0)
+        cached=anthropic_read+(usage.get('input_tokens_details') or {}).get('cached_tokens',0)
+        inputs=usage.get('input_tokens',0)+creation+anthropic_read
+        outputs=usage.get('output_tokens',0)
+        metrics['input_tokens']+=inputs
+        metrics['output_tokens']+=outputs
+        metrics['cache_creation_tokens']+=creation
+        metrics['cache_read_tokens']+=cached
+        metrics['cache_hit_requests']+=int(cached>0)
+        metrics['tokens_used']+=usage.get('total_tokens',0) or inputs+outputs
+    if not has_usage:
+        for name in ('input_tokens','output_tokens','cache_creation_tokens','cache_hit_requests'):
+            metrics[name]=None
+    if not has_latency:metrics['latency_ms']=None
+    return metrics
+
+
+def now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def private_dir(path):
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.chmod(0o700)
+
+
+def atomic_json(path, data):
+    private_dir(path.parent)
+    fd, name = tempfile.mkstemp(prefix='.write-', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write('\n'); f.flush(); os.fsync(f.fileno())
+        os.replace(name, path)
+    finally:
+        if os.path.exists(name): os.unlink(name)
+
+
+class Store:
+    def __init__(self, root):
+        self.root = Path(root)
+        private_dir(self.root)
+        self.sessions = self.root / 'sessions'
+        private_dir(self.sessions)
+        db = self.root / 'history.db'
+        fd = os.open(db, os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+        os.close(fd); db.chmod(0o600)
+        self.db = sqlite3.connect(db, timeout=30)
+        self.db.row_factory = sqlite3.Row
+        self.db.execute('PRAGMA journal_mode=WAL')
+        self.db.executescript('''
+        CREATE TABLE IF NOT EXISTS history (
+            id INTEGER PRIMARY KEY, timestamp TEXT NOT NULL, engine TEXT NOT NULL,
+            session_id TEXT, raw_input TEXT NOT NULL, cleaned_input TEXT,
+            intent TEXT, direct_answer TEXT, execution_payload TEXT,
+            tokens_used INTEGER NOT NULL DEFAULT 0, cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+            normalized_input TEXT, model TEXT, status TEXT NOT NULL DEFAULT 'pending',
+            error TEXT, execution_result TEXT
+        );
+        CREATE INDEX IF NOT EXISTS history_session ON history(session_id, id);
+        CREATE VIRTUAL TABLE IF NOT EXISTS history_fts USING fts5(
+            raw_input, cleaned_input, direct_answer, execution_payload,
+            content='history', content_rowid='id', tokenize='unicode61'
+        );
+        CREATE TRIGGER IF NOT EXISTS history_insert AFTER INSERT ON history BEGIN
+          INSERT INTO history_fts(rowid,raw_input,cleaned_input,direct_answer,execution_payload)
+          VALUES(new.id,new.raw_input,new.cleaned_input,new.direct_answer,new.execution_payload);
+        END;
+        CREATE TRIGGER IF NOT EXISTS history_update AFTER UPDATE ON history BEGIN
+          INSERT INTO history_fts(history_fts,rowid,raw_input,cleaned_input,direct_answer,execution_payload)
+          VALUES('delete',old.id,old.raw_input,old.cleaned_input,old.direct_answer,old.execution_payload);
+          INSERT INTO history_fts(rowid,raw_input,cleaned_input,direct_answer,execution_payload)
+          VALUES(new.id,new.raw_input,new.cleaned_input,new.direct_answer,new.execution_payload);
+        END;
+        ''')
+        # Old rows retain NULL for metrics that were never recorded.
+        # BEGIN IMMEDIATE serializes first-time migrations in concurrent launches.
+        with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
+            columns={row[1] for row in self.db.execute('PRAGMA table_info(history)')}
+            for name in METRIC_COLUMNS:
+                if name not in columns:
+                    self.db.execute(f'ALTER TABLE history ADD COLUMN {name} INTEGER')
+
+    def close(self):
+        self.db.close()
+
+    def begin(self, raw, normalized, engine, model, session_id=None):
+        with self.db:
+            cur = self.db.execute('INSERT INTO history(timestamp,engine,model,session_id,raw_input,normalized_input) VALUES(?,?,?,?,?,?)',
+                                  (now(),engine,model,session_id,raw,normalized))
+        return cur.lastrowid
+
+    def finish(self, row_id, reply=None, events=(), error=None, execution=None, status=None):
+        fields = dict(status=status or ('error' if error else 'accepted'), error=error,
+                      **request_metrics(events))
+        if reply:
+            fields.update(reply.model_dump())
+        if execution is not None: fields['execution_result'] = json.dumps(execution)
+        with self.db:
+            self.db.execute('UPDATE history SET '+','.join(k+'=?' for k in fields)+' WHERE id=?', [*fields.values(),row_id])
+
+    def recall(self, query, limit=5):
+        words = re.findall(r'\w+', query, re.UNICODE)
+        if not words: return []
+        expression = ' AND '.join('"'+word+'"' for word in words)
+        return [dict(r) for r in self.db.execute('''
+            SELECT h.* FROM history_fts f JOIN history h ON h.id=f.rowid
+            WHERE history_fts MATCH ? AND h.direct_answer IS NOT NULL
+            ORDER BY bm25(history_fts), h.id DESC LIMIT ?''', (expression,limit))]
+
+    def select_session(self, name=None, continuing=False):
+        if continuing:
+            try: name = json.loads((self.root/'active-session.json').read_text())['id']
+            except (OSError, ValueError, KeyError): raise ValueError('No previous session. Start with --session NAME.')
+        name = name or 'turn-' + uuid.uuid4().hex[:16]
+        if not NAME.fullmatch(name): raise ValueError('Session names use 1–64 letters, digits, underscores, or hyphens.')
+        return name
+
+    @contextmanager
+    def session(self, name, turns=6):
+        if not NAME.fullmatch(name): raise ValueError('Invalid session name.')
+        lock_path = self.sessions/(name+'.lock')
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+        with os.fdopen(fd,'a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            path = self.sessions/(name+'.json')
+            try:
+                data = json.loads(path.read_text())
+                if data.get('id') != name or not isinstance(data.get('turns'),list): raise ValueError()
+            except FileNotFoundError:
+                data = {'version':1,'id':name,'created_at':now(),'turns':[]}
+            except (ValueError, TypeError):
+                raise ValueError('The saved session is invalid; it was not overwritten.')
+            data['turns'] = data['turns'][-turns:]
+            yield data
+
+    def save_session(self, data, exchange, turns=6):
+        data['turns'] = (data['turns']+[exchange])[-turns:]
+        data['updated_at'] = now()
+        atomic_json(self.sessions/(data['id']+'.json'),data)
+        atomic_json(self.root/'active-session.json',{'id':data['id']})
+
+
+def history_messages(exchanges, max_chars=24000):
+    selected, used = [], 0
+    for exchange in reversed(exchanges):
+        record = dict(exchange['reply'])
+        result = exchange.get('execution_result')
+        if result:
+            record['execution_record'] = {k:(v[:2000] if isinstance(v,str) else v) for k,v in result.items()}
+        pair = [
+            {'role':'user','content':exchange['normalized_input']},
+            {'role':'assistant','content':json.dumps(record,ensure_ascii=False)},
+        ]
+        size = sum(len(p['content']) for p in pair)
+        if used + size > max_chars: break
+        selected.insert(0,pair); used += size
+    return [message for pair in selected for message in pair]

@@ -1,0 +1,44 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "intent": {
+      "enum": [
+        "observation",
+        "action_request"
+      ],
+      "title": "Intent",
+      "type": "string"
+    },
+    "cleaned_input": {
+      "maxLength": 50000,
+      "minLength": 1,
+      "title": "Cleaned Input",
+      "type": "string"
+    },
+    "direct_answer": {
+      "maxLength": 16000,
+      "minLength": 1,
+      "title": "Direct Answer",
+      "type": "string"
+    },
+    "execution_payload": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Execution Payload"
+    }
+  },
+  "required": [
+    "intent",
+    "cleaned_input",
+    "direct_answer",
+    "execution_payload"
+  ],
+  "title": "HarnessReply",
+  "type": "object"
+}

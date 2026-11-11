@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+state/
+setup.log
+*.tmp
+backups/
+*.log
+verification.json
+.env
+.env.*
+*.key
+*.pem

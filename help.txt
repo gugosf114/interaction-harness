@@ -1,0 +1,35 @@
+usage: harness.py [-h] [--engine {openai,anthropic}] [--model MODEL]
+                  [--effort {low,medium,high,xhigh,max}] [--timeout TIMEOUT]
+                  [--usage-log USAGE_LOG] [--new | -c | --session NAME]
+                  [--turns TURNS] [--history-chars HISTORY_CHARS]
+                  [--no-normalize] [-x] [--exec-timeout EXEC_TIMEOUT]
+                  [--recall QUERY] [-l] [--listen-timeout LISTEN_TIMEOUT]
+                  [text ...]
+
+Direct answers, bounded memory, optional confirmed Termux execution.
+
+positional arguments:
+  text                  Quoted input, or pipe text on stdin.
+
+options:
+  -h, --help            show this help message and exit
+  --engine {openai,anthropic}
+  --model MODEL
+  --effort {low,medium,high,xhigh,max}
+                        OpenAI reasoning effort.
+  --timeout TIMEOUT
+  --usage-log USAGE_LOG
+  --new                 Fresh isolated turn (default); its ID becomes
+                        available to --continue.
+  -c, --continue
+  --session NAME
+  --turns TURNS         Exchanges kept in the rolling session (1–50).
+  --history-chars HISTORY_CHARS
+                        Maximum prior-history characters sent to the model.
+  --no-normalize        Send exact typed input without phonetic substitutions.
+  -x, --exec            Ask y/N before running the returned command in native
+                        Termux.
+  --exec-timeout EXEC_TIMEOUT
+  --recall QUERY        Search local history without an API call.
+  -l, --listen          Use Android speech recognition through Termux:API.
+  --listen-timeout LISTEN_TIMEOUT

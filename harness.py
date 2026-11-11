@@ -1,0 +1,367 @@
+#!/data/data/com.termux/files/usr/bin/python
+"""Structured OpenAI/Anthropic replies with one shared local display gate."""
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import sys
+import time
+from typing import Literal
+
+# Let both `python harness.py ...` and the short wrapper work from native Termux.
+# Only standard-library imports have happened here; compiled clients live in Debian.
+if __name__ == '__main__' and sys.executable.startswith('/data/data/com.termux/files/usr/'):
+    launcher = Path(__file__).resolve().parent / 'launch.py'
+    os.execv(sys.executable, [sys.executable, '-B', str(launcher), 'harness.py', *sys.argv[1:]])
+
+from openai import (
+    OpenAI, APIConnectionError, APIStatusError, APITimeoutError,
+    AuthenticationError, PermissionDeniedError, RateLimitError,
+)
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+import anthropic
+
+ROOT = Path(__file__).resolve().parent
+PREFIX_SHA256 = '14bc2141eec7833c616e42db1398fd19f51bf33a3d1e253874d14bd9dd7b4965'
+DEFAULT_MODEL = 'gpt-6.1-sol'
+ANTHROPIC_MODEL = 'claude-opus-5-5'
+DEFAULT_EFFORT = 'high'
+MAX_OUTPUT_TOKENS = 8192
+MAX_INPUT_CHARS = 50000
+STATE = Path(os.environ.get('HARNESS_STATE_DIR', str(ROOT / 'state'))).expanduser()
+
+
+class HarnessError(Exception):
+    """A short, user-visible operational failure."""
+
+
+class GateError(HarnessError):
+    """Output that must not reach stdout."""
+
+
+class OpeningScrubError(GateError):
+    """Opening-line removal left no answer; never spend another API call on it."""
+
+
+class HarnessReply(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    intent: Literal['observation', 'action_request']
+    cleaned_input: str = Field(min_length=1, max_length=MAX_INPUT_CHARS)
+    direct_answer: str = Field(min_length=1, max_length=16000)
+    execution_payload: str | None
+
+    @model_validator(mode='after')
+    def check_intent(self):
+        if self.intent == 'observation' and self.execution_payload is not None:
+            raise ValueError('An observation cannot contain an execution payload.')
+        if not self.cleaned_input.strip() or not self.direct_answer.strip():
+            raise ValueError('Required text cannot be whitespace.')
+        if self.execution_payload is not None and not self.execution_payload.strip():
+            raise ValueError('An execution payload must contain a command or be null.')
+        return self
+
+
+def api_schema():
+    """One common wire schema; local Pydantic retains string-length constraints."""
+    schema=HarnessReply.model_json_schema()
+    def walk(value):
+        if isinstance(value,dict):
+            minimum=value.pop('minLength',None); maximum=value.pop('maxLength',None)
+            if minimum is not None or maximum is not None:
+                value['description']=(value.get('description','')+f' Length: {minimum or 0} to {maximum or MAX_INPUT_CHARS} characters.').strip()
+            for child in value.values(): walk(child)
+        elif isinstance(value,list):
+            for child in value: walk(child)
+    walk(schema)
+    return schema
+
+
+# This is a finite wording check, not a claim to recognize every possible hedge.
+FILLER = re.compile(
+    r"(?:\A|(?<=[.!?\n])\s*)(?:[*_#>]+\s*)*(?:"
+    r"(?:certainly|sure|absolutely|of course|no problem|great question|good question)\b|"
+    r"(?:hello|hi|hey)(?:\s+George)?[!,.:\s]|"
+    r"(?:I(?:['’]m| am) (?:happy|glad) to help|I(?:['’]d| would) be happy to)\b|"
+    r"(?:sorry|I apologize|my apologies|as an AI|as a language model|you(?:'|’)re right,? my mistake)\b|"
+    r"(?:please note|it(?:'s| is) worth noting)\b|"
+    r"(?:I hope this helps|hope this helps|let me know if|feel free to|I(?:'d| would) be happy to)\b|"
+    r"(?:here(?:'s| is) (?:the|your) (?:answer|response)|let me (?:explain|break this down)|"
+    r"before we (?:begin|start)|for (?:your )?safety|use (?:this )?at your own risk|"
+    r"this is not (?:legal|medical|financial) advice|always consult (?:a|an) professional|"
+    r"nothing (?:has been|was|is) (?:changed|lost|wasted)|rest assured|"
+    r"you (?:do not|don't) need to worry)\b"
+    r")", re.IGNORECASE,
+)
+FALSE_EXECUTION = re.compile(
+    r"\A(?:done|completed|installed|deleted|fixed)[.!]|"
+    r"\bI(?:'ve| have)? (?:ran|executed|installed|deleted|audited|checked your|changed your)\b",
+    re.IGNORECASE,
+)
+CONTROLS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+OPENING_ECHO = re.compile(
+    r"^(?:"
+    r"you\s+asked\b|you(?:['’]re|\s+are)\s+asking\b|"
+    r"your\s+(?:question|request|prompt)(?:\s+(?:is|was))?\s*[:—–-]|"
+    r"let\s+me\s+restate\b"
+    r")", re.IGNORECASE,
+)
+# Remove only the canned opening, never the factual sentence after it.
+# Probability, missing evidence, and requirements to inspect logs are content.
+OPENING_FILLER = re.compile(
+    r"^(?:"
+    r"(?:certainly|sure|absolutely|of course|no problem|great question|good question)(?:[!,.:;]\s*|$)|"
+    r"(?:hello|hi|hey)(?:\s+George)?(?:[!,.:;]\s*|$)|"
+    r"(?:I(?:['’]m| am) (?:happy|glad) to help|I(?:['’]d| would) be happy to help)(?:[!,.:;]\s*|$)|"
+    r"(?:sorry|my apologies|I apologize(?: for (?:the )?(?:confusion|mistake))?|"
+    r"you(?:['’]re| are) right,? my mistake)(?:[!,.:;]\s*|$)|"
+    r"as an (?:AI(?: language model)?|language model)(?:[!,.:;]\s*|$)|"
+    r"it(?:\s+is|['’]s)\s+important\s+to\s+note\s+that(?:\s+|$)|"
+    r"(?:please note|it(?:['’]s| is) worth noting)(?: that)?(?:[!,.:;]\s*|\s+|$)|"
+    r"here(?:['’]s| is) (?:the|your) (?:answer|response)\s*:\s*|"
+    r"for (?:your )?safety(?:[,;:]\s*|$)|"
+    r"this is not (?:legal|medical|financial) advice(?:[.!;:]\s*|$)"
+    r")", re.IGNORECASE,
+)
+OPENING_MARKUP = re.compile(r'^(?:(?:\*\*|__)|[>#*-]\s*)+')
+
+
+def scrub_opening(text: str, input_text: str | None = None) -> str:
+    """Strip canned prefixes and prompt echoes; preserve epistemic content."""
+    def plain(line):
+        return OPENING_MARKUP.sub('', line.strip()).strip()
+
+    def echo_key(value):
+        value=plain(value).strip(' \t\r\n\"\'“”‘’`*_')
+        return ' '.join(value.casefold().split()).rstrip('?.!:;')
+
+    prompt=echo_key(input_text) if input_text else ''
+    lines=text.splitlines(keepends=True)
+    first=0
+    while first<len(lines):
+        line=plain(lines[first])
+        if not line:
+            first+=1; continue
+        if OPENING_ECHO.match(line) or (prompt and echo_key(line)==prompt):
+            first+=1; continue
+        filler=OPENING_FILLER.match(line)
+        if filler:
+            remainder=re.sub(r'^(?:\*\*|__)\s*','',line[filler.end():]).lstrip()
+            newline='\n' if lines[first].endswith('\n') else ''
+            lines[first]=remainder+newline
+            if not remainder:first+=1
+            continue
+        break
+    return ''.join(lines[first:]).rstrip()
+
+
+def load_prefix() -> str:
+    try:
+        raw = (ROOT / 'prefix_block.txt').read_bytes()
+    except OSError as exc:
+        raise HarnessError('The frozen prefix file cannot be read.') from exc
+    if hashlib.sha256(raw).hexdigest() != PREFIX_SHA256:
+        raise HarnessError('The frozen prefix changed. Restore the approved prefix before running.')
+    return raw.decode('utf-8')
+
+
+def load_key(engine='openai') -> str:
+    if engine not in {'openai','anthropic'}: raise HarnessError('Unknown engine.')
+    variable = 'OPENAI_API_KEY' if engine == 'openai' else 'ANTHROPIC_API_KEY'
+    value = os.environ.get(variable, '').strip()
+    if not value:
+        key_state = ROOT / 'state' if os.environ.get('HARNESS_STATE_DIR') else STATE
+        path = key_state / ('api-key' if engine == 'openai' else 'anthropic-api-key')
+        try:
+            mode = path.lstat().st_mode
+            if not stat.S_ISREG(mode) or mode & 0o077:
+                raise HarnessError('The saved API key must be a private regular file (mode 600).')
+            value = path.read_text().strip()
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            raise HarnessError('The saved API key cannot be read.') from exc
+    if not value:
+        script = 'export-key.sh' if engine == 'openai' else 'export-anthropic-key.sh'
+        raise HarnessError(f'Export {variable} or run the provided {script} setup.')
+    if '\n' in value or '\r' in value:
+        raise HarnessError('The API key contains a line break.')
+    return value
+
+
+def validate_reply(raw: str, input_text: str | None = None) -> HarnessReply:
+    try:
+        reply = HarnessReply.model_validate_json(raw, strict=True)
+    except (ValidationError, ValueError) as exc:
+        # Never echo the rejected response, which could contain unwanted prose.
+        raise GateError('Reply failed the schema or observation/command check.') from exc
+    for text in (reply.cleaned_input, reply.direct_answer, reply.execution_payload or ''):
+        if CONTROLS.search(text):
+            raise GateError('Reply contains terminal control characters.')
+    answer = scrub_opening(reply.direct_answer, input_text)
+    if not answer:
+        raise OpeningScrubError('No substantive answer remains after opening-line cleanup.')
+    reply=reply.model_copy(update={'direct_answer':answer})
+    filler = FILLER.search(answer)
+    if filler:
+        raise GateError('Reply contains blocked filler: ' + repr(filler.group(0).strip()[:100]) + '.')
+    if FALSE_EXECUTION.search(answer):
+        raise GateError('Reply claims execution before a confirmed command result exists.')
+    if reply.execution_payload is not None and '```' in reply.execution_payload:
+        raise GateError('Execution payload must be plain command text, without Markdown fences.')
+    return reply
+
+
+def display_text(reply: HarnessReply) -> str:
+    text = scrub_opening(reply.direct_answer)
+    if not text:
+        raise OpeningScrubError('No substantive answer remains after opening-line cleanup.')
+    if reply.execution_payload is not None:
+        text += '\n\n' + reply.execution_payload.strip()
+    return text + '\n'
+
+
+def record_event(event: dict, log_path: Path | None = None) -> None:
+    path = log_path or STATE / 'usage.jsonl'
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, 'O_NOFOLLOW', 0)
+    fd = os.open(path, flags, 0o600)
+    with os.fdopen(fd, 'a') as f:
+        os.fchmod(f.fileno(), 0o600)
+        f.write(json.dumps(event, ensure_ascii=True, separators=(',', ':')) + '\n')
+
+
+def request_reply(
+    raw_input: str, *, client=None, model: str | None = None, engine: str = 'openai',
+    effort: str = DEFAULT_EFFORT, timeout: float = 90,
+    log_path: Path | None = None, events: list | None = None, history: list | None = None,
+) -> HarnessReply:
+    if len(raw_input) > MAX_INPUT_CHARS:
+        raise HarnessError(f'Input exceeds {MAX_INPUT_CHARS} characters.')
+    raw_input = raw_input.strip()
+    if not raw_input:
+        raise HarnessError('Input is empty.')
+    prefix = load_prefix()
+    if engine not in {'openai','anthropic'}: raise HarnessError('Unknown engine.')
+    model = model or (DEFAULT_MODEL if engine == 'openai' else ANTHROPIC_MODEL)
+    if client is None:
+        if engine == 'openai':
+            client = OpenAI(api_key=load_key(engine), base_url='https://api.openai.com/v1', timeout=timeout, max_retries=0)
+        else:
+            client = anthropic.Anthropic(api_key=load_key(engine), base_url='https://api.anthropic.com', timeout=timeout, max_retries=0)
+    messages = [
+        {'role': 'system', 'content': prefix},
+        *(history or []),
+        {'role': 'user', 'content': raw_input},
+    ]
+    schema = api_schema()
+    for attempt in (1, 2):
+        started = time.monotonic()
+        event = {
+            'time_utc': datetime.now(timezone.utc).isoformat(),
+            'model_requested': model, 'effort': effort,
+                'engine':engine,
+            'prefix_sha256': PREFIX_SHA256, 'attempt': attempt,
+            'input_chars': len(raw_input), 'status': 'pending',
+        }
+        try:
+            if engine == 'openai':
+                response = client.responses.create(
+                    model=model, input=messages,
+                    reasoning={'effort': effort}, max_output_tokens=MAX_OUTPUT_TOKENS,
+                    text={'format': {'type':'json_schema','name':'interaction_reply','strict':True,'schema':schema}},
+                    prompt_cache_key='interaction-harness-' + PREFIX_SHA256[:24], store=False,
+                )
+            else:
+                response = client.messages.create(
+                    model=model, max_tokens=MAX_OUTPUT_TOKENS,
+                    thinking={'type':'adaptive'}, output_config={'effort':effort},
+                    system=[{'type':'text','text':prefix,'cache_control':{'type':'ephemeral'}}],
+                    messages=messages[1:],
+                    tools=[{'name':'emit_reply','description':'Required final response channel for every user request. Call this tool exactly once with the final four-field interaction reply. Do not return the object as ordinary text. This tool returns data and never executes a command.','input_schema':schema,'strict':True}],
+                    tool_choice={'type':'auto','disable_parallel_tool_use':True},
+                )
+            event['response_id'] = response.id
+            event['model_returned'] = response.model
+            usage = getattr(response, 'usage', None)
+            if usage is not None:
+                event['usage'] = usage.model_dump(exclude_none=True)
+            if engine == 'openai':
+                for output in response.output:
+                    if getattr(output,'type',None) == 'message':
+                        if any(getattr(item,'type',None)=='refusal' for item in output.content):
+                            event['status']='refusal'; raise HarnessError('The model refused this request.')
+                if response.status != 'completed':
+                    event['status']='incomplete'; raise HarnessError('The model response was incomplete. No answer was displayed.')
+                raw_response = response.output_text
+            else:
+                if response.stop_reason == 'refusal':
+                    event['status']='refusal'; raise HarnessError('The model refused this request.')
+                if response.stop_reason == 'max_tokens':
+                    event['status']='incomplete'; raise HarnessError('The model response was incomplete. No answer was displayed.')
+                blocks=[b for b in response.content if b.type=='tool_use' and b.name=='emit_reply']
+                raw_response=json.dumps(blocks[0].input) if len(blocks)==1 else '{}'
+            try:
+                reply = validate_reply(raw_response, raw_input)
+            except OpeningScrubError:
+                event['status']='empty_after_scrub'
+                raise
+            except GateError as exc:
+                event['status'] = 'gate_rejected'
+                event['gate_reason'] = str(exc)
+                if attempt == 2:
+                    raise HarnessError('Both replies failed the output gate. No answer was displayed.') from exc
+                messages.append({
+                    'role': 'user',
+                    'content': (
+                        'Local validation rejected the previous reply: ' + str(exc) +
+                        ' Return a corrected reply for the original request. Preserve facts and '
+                        'meaning. Do not invent certainty. If meaning is unclear, ask one short '
+                        'question with intent observation and execution_payload null.'
+                    ),
+                })
+                continue
+            event['status'] = 'accepted'
+            event['intent'] = reply.intent
+            event['answer_chars'] = len(reply.direct_answer)
+            event['has_execution_payload'] = reply.execution_payload is not None
+            return reply
+        except (AuthenticationError, anthropic.AuthenticationError) as exc:
+            event['status'] = 'authentication_error'
+            raise HarnessError('The API key was rejected.') from exc
+        except (PermissionDeniedError, anthropic.PermissionDeniedError) as exc:
+            event['status'] = 'permission_error'
+            raise HarnessError('This API account cannot access the requested model.') from exc
+        except (RateLimitError, anthropic.RateLimitError) as exc:
+            event['status'] = 'quota_or_rate_limit'
+            raise HarnessError('The API reports a billing quota or rate limit. Check the API account.') from exc
+        except (APITimeoutError, anthropic.APITimeoutError) as exc:
+            event['status'] = 'timeout'
+            raise HarnessError('The API request timed out.') from exc
+        except (APIConnectionError, anthropic.APIConnectionError) as exc:
+            event['status'] = 'connection_error'
+            raise HarnessError('The API connection failed.') from exc
+        except (APIStatusError, anthropic.APIStatusError) as exc:
+            event['status'] = 'api_error'
+            event['http_status'] = exc.status_code
+            raise HarnessError(f'The API rejected this request (HTTP {exc.status_code}).') from exc
+        finally:
+            event['elapsed_ms'] = round((time.monotonic() - started) * 1000)
+            record_event(event, log_path)
+            if events is not None:
+                events.append(event)
+    raise HarnessError('No validated reply was produced.')
+
+
+def main(argv: list[str] | None = None) -> int:
+    from cli import main as run_cli
+    return run_cli(argv)
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
