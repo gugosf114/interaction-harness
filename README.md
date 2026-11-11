@@ -93,6 +93,8 @@ The same strict wire schema is used for OpenAI Structured Outputs and Anthropic'
 
 Only the validated direct answer and optional plain command print to stdout. A local regex scrubber removes canned opening prefixes such as “Sure,”, greetings, apologies ("Sorry," "I'm sorry,"), agreement ("You're right."), praise ("Good catch."), and fixed disclaimers while preserving factual text on the same line. An opener counts only when it stands alone before punctuation: "Certainly not.", "Sure signs of…", host names such as `www.hello.com`, and file names such as `hello.txt` stay content. The same words are rejected when they start a later sentence. It removes opening prompt echoes and handles stacked prefixes. “Probably,” “Maybe,” general qualifications, missing-data statements, and requests for logs remain valid content. This supersedes the earlier whole-line removal of no-data caveats, which could erase legitimate uncertainty. Exact prompt-echo checks use the actual request, and recall uses the recorded request. Execution payloads are never scrubbed.
 
+Unrequested reassurance is removed the same way, anywhere in the answer: sentences such as “It does not change any files.”, “It changes nothing.”, “These checks are read-only.” and “I did not change anything.”, and trailing clauses such as “without changing them”. The rest of the answer is kept as written. The removal is skipped when the operator's own request raised change, safety or secrets, because then the sentence is the answer. In `--loop` runs the check uses the original task, not the continuation message. An answer that is only reassurance is not displayed.
+
 Opening-line cleanup makes no extra API call. If every answer line is removed, stdout stays empty and a short stderr error is returned, with no retry. The remaining schema/body linter still checks terminal controls, unsupported execution claims, and other pre-existing errors; its existing bounded corrective retry applies only to those separate failures. Refusals and incomplete responses remain failures. The gate is deterministic for its rules; intent interpretation and prose still come from a model. An already-open chat loads this code on its next launch; `exit`, then the same shortcut with `-c`, resumes the most recent session.
 
 ## Execution
@@ -162,7 +164,7 @@ Each API call carries context in four places, in this order.
 
 ### What enforces what
 
-- **Local code enforces:** schema validation, the observation-has-no-command rule, opening-line cleanup, the filler linter, the completed-work check (a reply may report finished work only when an approved command that exited 0 directly precedes it), the control-character check, and the y/N execution prompt.
+- **Local code enforces:** schema validation, the observation-has-no-command rule, opening-line cleanup, the filler linter, removal of unrequested reassurance, the completed-work check (a reply may report finished work only when an approved command that exited 0 directly precedes it), the control-character check, and the y/N execution prompt.
 - **The prompt only requests:** tone, answer-first order, asking one question when the input is unclear, and contextual speech corrections. The model follows these most of the time, not every time.
 - **The API changes one thing:** no consumer chat app sits between the caller and the model, so the app's own system prompt is absent and the caller owns the whole request. The model's trained behavior is unchanged. It can still hedge and it can still refuse. A refusal is reported as a failure and is never displayed as an answer.
 - **Claude's tool call is not forced.** `tool_choice` is `auto`, so the model can answer in plain text. The local gate rejects that reply.
@@ -171,7 +173,7 @@ Each API call carries context in four places, in this order.
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance'
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes

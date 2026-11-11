@@ -159,7 +159,8 @@ def main(argv=None):
                     supported=bool(latest and successful_execution(latest.get('execution_result')) and past
                                    and past[-1]=={'role':'user','content':execution_observation(latest)})
                 reply=h.request_reply(current,engine=args.engine,model=model,effort=args.effort,timeout=args.timeout,
-                                      log_path=args.usage_log,events=events,history=past,execution_confirmed=supported)
+                                      log_path=args.usage_log,events=events,history=past,execution_confirmed=supported,
+                                      request_context=cleaned)
                 store.finish(row_id,reply,events)
                 exchange={'raw_input':current_raw,'normalized_input':current,'reply':reply.model_dump(),'engine':args.engine,'model':model}
                 if args.loop:exchange['loop_step']=step

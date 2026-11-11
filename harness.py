@@ -133,6 +133,62 @@ def claims_completion(answer: str) -> bool:
             if not NOT_A_REPORT.search(sentence[:claim.start()]):
                 return True
     return False
+# Unrequested reassurance: a sentence whose whole job is to say the step is safe.
+# "It does not change any files." / "It changes nothing." / "These checks are read-only." / "I did not change anything."
+# Removed in code, with no extra API call, unless the operator's own request raised the topic.
+_RE_SUBJECT = (r"(?:it|this|that|these|those|they|i|we|"
+               r"(?:the|this|these|those|both|all|each)\s+(?:\w+\s+){0,2}(?:commands?|checks?|steps?|scripts?|operations?|actions?))")
+_RE_OBJECT = (r"(?:\s+(?:any|the|your|these|those|its|their|either|other|existing))?(?:\s+of)?(?:\s+(?:the|your|these|those))?"
+              r"\s+(?:files?|anything|them|it|data|settings?|contents?|state|system|directory|folder|permissions?|"
+              r"repo(?:sitory)?|code|disk)\b")
+_RE_SECRET = r"\b(?:keys?|secrets?|credentials?|tokens?|passwords?)\b"
+_RE_NEG = r"(?:(?:does|do|did|will|would|should|can|could)(?:\s+not|n['’]t)|won['’]t|cannot|can['’]t|never)"
+_RE_TAIL = r"[^.!?\n]*"
+REASSURANCE_SENTENCE = re.compile(
+    r"(?:"
+    + _RE_SUBJECT + r"\s+(?:also\s+)?(?:"
+        + _RE_NEG + r"\s+(?:change|modify|alter|delete|remove|overwrite|touch|edit|write\s+to|harm|damage|affect)" + _RE_OBJECT + _RE_TAIL + r"|"
+        + _RE_NEG + r"\s+(?:show|print|reveal|expose|display|log|leak)\b[^.!?\n]*?" + _RE_SECRET + _RE_TAIL + r"|"
+        r"chang(?:es|ed|e)\s+nothing\b" + _RE_TAIL + r"|"
+        r"(?:is|are|was|were|stays?|remains?)\s+(?:all\s+|entirely\s+|strictly\s+|purely\s+|fully\s+)?(?:read[- ]only|non[- ]destructive|safe(?:\s+to\s+run)?)\b" + _RE_TAIL
+    + r")|"
+    r"(?:nothing|no\s+files?|no\s+data)\s+(?:is|are|was|were|has\s+been|have\s+been|will\s+be|gets?)\s+"
+    r"(?:changed|modified|deleted|altered|touched|written|removed|overwritten|harmed)\b" + _RE_TAIL
+    + r")[.!?:]?", re.IGNORECASE)
+REASSURANCE_CLAUSE = re.compile(
+    r",?\s+(?:(?:and|but)\s+(?:(?:it|this|they|these)\s+)?" + _RE_NEG
+    + r"\s+(?:change|modify|alter|delete|remove|overwrite|touch|edit)" + _RE_OBJECT + r"[^.!?\n,;]*|"
+    r"without\s+(?:changing|modifying|altering|touching|deleting|editing)" + _RE_OBJECT + r"[^.!?\n,;]*)", re.IGNORECASE)
+# The operator raised safety, change or secrets: then such a sentence is the answer, not decoration.
+SAFETY_ASKED = re.compile(
+    r"\b(?:chang\w*|modif\w*|alter\w*|delet\w*|remov\w*|overwrit\w*|touch\w*|edit\w*|writ\w*|read[- ]only|safe\w*|harm\w*|"
+    r"damag\w*|risk\w*|destruct\w*|danger\w*|keys?|secrets?|credentials?|tokens?|passwords?)\b", re.IGNORECASE)
+_LIST_MARK = re.compile(r"^(\s*(?:[-*•]|\d+[.)])\s+)")
+
+
+def strip_reassurance(text: str, asked: str | None = None) -> str:
+    """Drop unrequested safety reassurance; keep every other sentence exactly as written."""
+    if asked and SAFETY_ASKED.search(asked):
+        return text
+    out_lines = []
+    for line in text.split('\n'):
+        mark = _LIST_MARK.match(line)
+        head, body = (mark.group(1), line[mark.end():]) if mark else ('', line)
+        kept = []
+        for sentence in re.split(r"(?<=[.!?:])\s+", body):
+            core = sentence.strip()
+            if core and REASSURANCE_SENTENCE.fullmatch(core):
+                continue
+            kept.append(REASSURANCE_CLAUSE.sub('', sentence))
+        new_body = ' '.join(part for part in kept if part.strip())
+        if body.strip() and not new_body.strip():
+            continue  # the whole line was reassurance
+        out_lines.append(head + new_body if body.strip() else line)
+    cleaned = '\n'.join(out_lines)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
 CONTROLS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
 OPENING_ECHO = re.compile(
     r"^(?:"
@@ -233,7 +289,8 @@ def load_key(engine='openai') -> str:
     return value
 
 
-def validate_reply(raw: str, input_text: str | None = None, *, execution_confirmed: bool = False) -> HarnessReply:
+def validate_reply(raw: str, input_text: str | None = None, *, execution_confirmed: bool = False,
+                   request_context: str | None = None) -> HarnessReply:
     try:
         reply = HarnessReply.model_validate_json(raw, strict=True)
     except (ValidationError, ValueError) as exc:
@@ -249,6 +306,13 @@ def validate_reply(raw: str, input_text: str | None = None, *, execution_confirm
     filler = FILLER.search(answer)
     if filler:
         raise GateError('Reply contains blocked filler: ' + repr(filler.group(0).strip()[:100]) + '.')
+    # The phrases FILLER names are rejected above with feedback. Every other wording of
+    # unrequested reassurance is removed here, with no extra API call.
+    # request_context is the operator's original task when this turn's input is a loop continuation.
+    answer = strip_reassurance(answer, ' '.join(part for part in (input_text, request_context) if part))
+    if not answer:
+        raise OpeningScrubError('No substantive answer remains after reassurance cleanup.')
+    reply=reply.model_copy(update={'direct_answer':answer})
     # execution_confirmed means this reply directly follows a command that was approved and exited 0.
     if claims_completion(answer) and not execution_confirmed:
         raise GateError('Reply reports completed work, but no successful command result '
@@ -281,7 +345,7 @@ def request_reply(
     raw_input: str, *, client=None, model: str | None = None, engine: str = 'openai',
     effort: str = DEFAULT_EFFORT, timeout: float = 90,
     log_path: Path | None = None, events: list | None = None, history: list | None = None,
-    execution_confirmed: bool = False,
+    execution_confirmed: bool = False, request_context: str | None = None,
 ) -> HarnessReply:
     if len(raw_input) > MAX_INPUT_CHARS:
         raise HarnessError(f'Input exceeds {MAX_INPUT_CHARS} characters.')
@@ -349,7 +413,8 @@ def request_reply(
                 blocks=[b for b in response.content if b.type=='tool_use' and b.name=='emit_reply']
                 raw_response=json.dumps(blocks[0].input) if len(blocks)==1 else '{}'
             try:
-                reply = validate_reply(raw_response, raw_input, execution_confirmed=execution_confirmed)
+                reply = validate_reply(raw_response, raw_input, execution_confirmed=execution_confirmed,
+                                       request_context=request_context)
             except OpeningScrubError:
                 event['status']='empty_after_scrub'
                 raise
