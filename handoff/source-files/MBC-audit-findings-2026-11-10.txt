@@ -1,0 +1,250 @@
+MY BAKING CREATIONS — AUDIT FINDINGS
+Site: https://mybakingcreations.com
+Run: Nov 10, 2026, 10:52–11:03 pm Pacific
+Where: the phone's hidden Chrome (phone located in Daly City)
+Auditor: Claude (Fable 5.2)
+
+
+============================================================
+CLAIM 1: AI engines recommend the bakery
+============================================================
+
+[STATUS]: PARTIALLY VERIFIED
+True on Perplexity, ChatGPT and Gemini. False on Claude search.
+
+[EVIDENCE]
+
+Rank of My Baking Creations, per query and engine:
+
+Query 1: "Best custom corporate logo cookies delivery Bay Area Silicon Valley"
+  - Perplexity: 1st
+  - ChatGPT (logged out): 1st of 5
+  - Gemini (signed in as George): 3rd of 4
+  - Claude search: absent
+
+Query 2: "Custom sculpted 3D birthday cake bakery Daly City San Francisco"
+  - Perplexity: 1st
+  - ChatGPT (logged out): 1st of 4
+  - Gemini (signed in as George): 1st of 2
+  - Claude search: absent
+
+Query 3: "Where can companies like Google or Salesforce order custom logo cookies in SF?"
+  - Perplexity: 1st
+  - ChatGPT (logged out): 3rd of 5
+  - Gemini (signed in as George): 1st of 3
+  - Claude search: absent
+
+Direct quotes:
+  - Perplexity, query 1: "My Baking Creations looks like the strongest fit for
+    Silicon Valley corporate orders: it hand-delivers to Palo Alto, Mountain
+    View, Cupertino, Sunnyvale, and San Jose, with individually wrapped cookies
+    and orders starting at $150." Cites mybakingcreations.com.
+  - Perplexity, query 2: "My Baking Creations in Daly City is a strong match: it
+    explicitly specializes in custom sculpted 3D birthday cakes."
+  - Perplexity, query 3: "My Baking Creations in Daly City serves San Francisco
+    and says it has supplied branded cookies to Google, Salesforce, and other
+    tech companies."
+  - ChatGPT, query 1: "My top recommendation is My Baking Creations for Silicon
+    Valley corporate delivery."
+  - ChatGPT, query 2: "I would start with My Baking Creations."
+  - ChatGPT, query 3: listed 3rd, "Corporate gifting specialist."
+    Space Cadet Baking Company was 1st, City Gal Bakes 2nd.
+  - Gemini, query 1: listed 3rd, after Space Cadet Baking Co. and City Gal Bakes.
+  - Gemini, query 3: "Has directly supplied major tech clients like Google,
+    Salesforce, Meta, Alaska Airlines, and DocuSign." Cites mybakingcreations.com.
+  - Claude search named Mrs. Fields, Sweet E's and SusieCakes on the cookie
+    queries, and Sweet Dreams Bakery on the cake query.
+
+Answer links:
+  - Perplexity q1: https://www.perplexity.ai/session/b70f8001-d87f-4b68-80ff-3a110ecba7cc
+  - Perplexity q2: https://www.perplexity.ai/session/b1b537cd-2547-48f8-a0fd-285e37ee79e8
+  - Perplexity q3: https://www.perplexity.ai/session/19f8a76b-42d4-4d69-a2fe-c409a098b2ee
+  - ChatGPT q1: https://chatgpt.com/uc/6af410f4-df88-83ea-85e4-23729c52af96
+  - ChatGPT q2: https://chatgpt.com/uc/6af4118f-a240-83ea-af54-4cae810d26ba
+  - ChatGPT q3: https://chatgpt.com/uc/6af4122a-7b54-83ea-bb92-d43e8da7c524
+  - Gemini q1: https://gemini.google.com/app/8dff19d73e8d027f
+  - Gemini q2: https://gemini.google.com/app/ac8f8c5f377b18d1
+  - Gemini q3: https://gemini.google.com/app/29c66ebad43827e9
+
+Competitors named beside the bakery:
+  City Gal Bakes, Space Cadet Baking Co., Parker's Crazy Cookies,
+  Playing with Dough, Cake Coquette, Sweet Dreams Bakery.
+
+[FINDINGS]
+  - The engines lift their facts from the bakery's own pages: the client list,
+    the 12-cookie minimum, the $300–$650 cake price.
+  - The phone sits in Daly City and Gemini was signed in as George. A buyer in
+    Mountain View may see a different order.
+  - Each query was run once per engine.
+
+
+============================================================
+CLAIM 2: Discovery files and schema
+============================================================
+
+[STATUS]: VERIFIED
+
+[EVIDENCE]
+
+Files:
+  - https://mybakingcreations.com/robots.txt  -> 200, 3,340 bytes
+    GPTBot, OAI-SearchBot, ClaudeBot, PerplexityBot, Applebot-Extended and
+    Google-Extended sit in one group with "Allow: /".
+  - https://mybakingcreations.com/llms.txt  -> 200, 5,973 bytes
+    Markdown with headings: Corporate Clients, Corporate Services, Why
+    Companies Choose Us, Business Info, Service Area, Wedding Cakes.
+  - https://mybakingcreations.com/llms-full.txt  -> 200, 11,240 bytes
+  - https://mybakingcreations.com/sitemap.xml  -> 200, 96 URLs
+
+JSON-LD, all blocks parse with no errors:
+  - Home page: Bakery (two blocks), ItemList, Product, Menu, FAQPage (6 questions)
+  - /corporate: FoodService, Bakery, ItemList, Service, BreadcrumbList,
+    FAQPage (7 questions)
+  - /corporate-logo-cookies-mountain-view: Bakery, FAQPage (3 questions)
+  - /custom-cakes-daly-city: Bakery, BreadcrumbList, FAQPage (6 questions)
+
+Raw Bakery block (home page):
+  "@type": "Bakery", "name": "My Baking Creations",
+  "telephone": "+1-415-568-8060",
+  "address": {"streetAddress": "1096 Wildwood Ave",
+              "addressLocality": "Daly City", "addressRegion": "CA",
+              "postalCode": "94015", "addressCountry": "US"},
+  "geo": {"latitude": 37.6879, "longitude": -122.4702}
+
+Raw FAQ item (home page):
+  {"@type": "Question",
+   "name": "How much do custom cakes cost at My Baking Creations?",
+   "acceptedAnswer": {"@type": "Answer",
+     "text": "Custom cakes at My Baking Creations range from $250 to $650
+     depending on size, design complexity, and serving count..."}}
+
+Home page FAQ questions:
+  - How much do custom cakes cost at My Baking Creations?
+  - How far in advance should I order a custom cake?
+  - Do you make corporate logo cookies?
+  - What areas do you deliver to in the Bay Area?
+  - Can you make dietary-friendly cakes (gluten-free, vegan)?
+  - What is the minimum order for cake pops?
+
+/corporate FAQ questions:
+  - How far in advance should I order corporate logo cookies?
+  - What is the minimum order for corporate cookies in San Francisco?
+  - Do you deliver corporate cookies to offices in San Francisco and Silicon Valley?
+  - Can you print our company logo on cookies?
+  - How can I pay for a corporate order?
+  - Which companies has My Baking Creations worked with?
+  - Can you match our exact brand colors and logo on cookies?
+
+[FINDINGS]
+  - FAQ questions are plain buyer questions with self-contained answers.
+  - No block uses the literal type "LocalBusiness". "Bakery" is a kind of
+    LocalBusiness, so the claim holds.
+  - Gap: the home Product block says a custom cake costs "price": "85.00".
+    The FAQ says $250–$650.
+  - Gap: the Product rating shows "reviewCount": "3". llms.txt says 150+ reviews.
+  - Gap: smallest cookie order is 1 dozen in llms.txt, 24 on the corporate
+    form, 2 dozen on Yelp.
+  - Gap: cake starting price is $250 on one page, $300 on another.
+
+
+============================================================
+CLAIM 3: Local and corporate grounding
+============================================================
+
+[STATUS]: PARTIALLY VERIFIED
+
+[EVIDENCE]
+
+Google:
+  - site:mybakingcreations.com  -> first 10: home, /gallery, /corporate,
+    /about, /blog, /partners, /contact, /custom-cookies, /buy-now,
+    /gallery-cakepops
+  - site:mybakingcreations.com "logo cookies"  -> 13 URLs, including
+    /corporate-logo-cookies-menlo-park, /corporate-logo-cookies-mountain-view,
+    /hand-piped-logo-cookies, /gallery-corporate-cookies,
+    /gallery-corporate-cookies-printed, /custom-cookies-san-francisco
+  - site:mybakingcreations.com "corporate"  -> first 10 include /corporate,
+    /corporate-gifting, /team-building-treats, /gallery-corporate-cakes,
+    /custom-cakes-daly-city, /custom-cakes-south-san-francisco,
+    /custom-cakes-san-mateo
+  - site:mybakingcreations.com inurl:custom-cakes  -> "did not match any
+    documents."
+
+Bing:
+  - Bing ignored the site: operator on this phone and returned dictionary pages.
+  - A plain Bing search for "mybakingcreations.com" showed these indexed: home,
+    /delivery-areas, /about, /gallery-cakes, /design-studio, /gallery,
+    /buy-now, /custom-cookies.
+  - A plain Bing search for "My Baking Creations Daly City" showed the home
+    page, /custom-cakes-daly-city, Yelp, Superpages, Restaurantji, Yellow Pages
+    and Eventective.
+
+Page content:
+  - /corporate-logo-cookies-mountain-view (1,716 words): names Googleplex,
+    LinkedIn, Intuit, the Meta campus on Willow Road, Genentech, with zip codes.
+    "We deliver to specific building numbers and coordinate with your reception
+    desk or facilities contact." "Orders start from $150."
+  - /custom-cakes-sunnyvale (1,066 words): "about 42 minutes." "We coordinate
+    with lobby or front desk security" on the Moffett Park and North Mathilda
+    corridor.
+  - /custom-cakes-belmont (1,074 words): names Twin Pines Park, Ralston Hall,
+    Waterdog Lake, the NDNU campus.
+  - /custom-cakes-daly-city (1,283 words): names Westlake, Serramonte,
+    Broadmoor Village. Pickup at Wildwood Avenue.
+  - Daly City and Belmont pages share 10 of about 55 sentences.
+
+[FINDINGS]
+  - The pages hold real logistics: reception handoff, drive times, zip codes,
+    lead times.
+  - No flavor profiles on the corporate cookie pages.
+  - Lead times disagree: one week on /corporate, two weeks on the Mountain View
+    page, 2–3 weeks on the city pages.
+  - The Sunnyvale page also says "Order by 12:00 PM for same-day delivery."
+  - Not finished: a full count of indexed city pages. Google put up its
+    "are you a robot" wall after nine searches.
+
+
+============================================================
+CLAIM 4: The form as a filter
+============================================================
+
+[STATUS]: REFUTED for the main form.
+The 30% turn-down figure cannot be tested from outside the business.
+
+[EVIDENCE]
+
+https://mybakingcreations.com/order-form  -> 200
+  Required: name, email.
+  Optional: phone, treats (cake / cookies / cake pops / cupcakes), idea,
+  reference photo, budget, diet, occasion, date, pickup or delivery, location.
+  Page copy: "Your name and email are all we need to get started. Phone is
+  optional." "No payment to send a request."
+
+https://mybakingcreations.com/corporate-order  -> 200
+  Required: company name, contact name, email, phone, product type, quantity,
+  delivery method.
+  Optional: title, event date, event type, logo upload, design notes, delivery
+  address, invoice, PO number, notes.
+  Quantity choices: 24-50, 50-100, 100-200, 200-500, 500+ pieces.
+
+[FINDINGS]
+  - The main form is built to be easy. It forces no minimum, no date and no tier.
+  - The corporate form is a mild filter: seven required fields and a 24-piece
+    floor.
+  - Nothing public shows a 30% turn-down rate.
+
+
+============================================================
+SUMMARY
+============================================================
+
+  Claim 1: PARTIALLY VERIFIED  (3 of 4 engines recommend the bakery)
+  Claim 2: VERIFIED            (files live, schema parses; price and review
+                                numbers disagree)
+  Claim 3: PARTIALLY VERIFIED  (real local content; full index count not done)
+  Claim 4: REFUTED             (main form needs only name and email)
+
+Fixes that would help most:
+  1. Fix the $85 cake price and the 3-review count in the home Product block.
+  2. Make the minimum order, cake price and lead time match on every page.
+  3. Rerun Claim 1 from a logged-out browser outside Daly City.
