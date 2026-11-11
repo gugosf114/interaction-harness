@@ -30,6 +30,8 @@ class StripReassuranceTests(unittest.TestCase):
             'This reports key presence. It does not print the key values.': 'This reports key presence.',
             'This lists the files. The command is read-only.': 'This lists the files.',
             'This lists the files. It is safe to run.': 'This lists the files.',
+            'The next command prints README.txt and setup.sh. It only reads the files. It has not run yet.':
+                'The next command prints README.txt and setup.sh. It has not run yet.',
         }
         for text, expected in cases.items():
             with self.subTest(text=text):
@@ -55,6 +57,10 @@ class StripReassuranceTests(unittest.TestCase):
             'The mount is read-only, so the write fails with EROFS.',
             'chmod 640 gives the owner read and write access.',
             'No command has run yet, so there is no file listing yet.',
+            'This only shows the first 40 lines.',
+            'It only reads files that end in .log.',
+            'It has not run yet.',
+            'Setup was not run.',
         ):
             with self.subTest(text=text):
                 self.assertEqual(h.strip_reassurance(text, TASK), text)

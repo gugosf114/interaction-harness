@@ -150,6 +150,7 @@ REASSURANCE_SENTENCE = re.compile(
         + _RE_NEG + r"\s+(?:change|modify|alter|delete|remove|overwrite|touch|edit|write\s+to|harm|damage|affect)" + _RE_OBJECT + _RE_TAIL + r"|"
         + _RE_NEG + r"\s+(?:show|print|reveal|expose|display|log|leak)\b[^.!?\n]*?" + _RE_SECRET + _RE_TAIL + r"|"
         r"chang(?:es|ed|e)\s+nothing\b" + _RE_TAIL + r"|"
+        r"(?:only|just|merely|simply)\s+(?:reads?|inspects?|views?|looks?\s+at)(?:\s+(?:the|these|those|your|both))?\s+(?:files?|them|it)|"
         r"(?:is|are|was|were|stays?|remains?)\s+(?:all\s+|entirely\s+|strictly\s+|purely\s+|fully\s+)?(?:read[- ]only|non[- ]destructive|safe(?:\s+to\s+run)?)\b" + _RE_TAIL
     + r")|"
     r"(?:nothing|no\s+files?|no\s+data)\s+(?:is|are|was|were|has\s+been|have\s+been|will\s+be|gets?)\s+"
