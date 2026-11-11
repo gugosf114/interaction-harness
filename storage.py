@@ -14,10 +14,31 @@ NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z')
 METRIC_COLUMNS = ('input_tokens', 'output_tokens', 'cache_creation_tokens',
                   'cache_hit_requests', 'latency_ms')
 FEEDBACK_STREAM_LIMIT = 8000
+FEEDBACK_HEAD_CHARS = 2000  # The rest of the limit keeps the end, where errors and tracebacks usually are.
 
 
 def confirmed_execution(result):
+    """The command was approved and ran to an exit code. A failed run still counts; the loop can repair it."""
     return isinstance(result,dict) and result.get('approved') is True and type(result.get('exit_code')) is int
+
+
+def successful_execution(result):
+    """Approved, finished in time and exited 0: the only result that supports a completion claim."""
+    return confirmed_execution(result) and result['exit_code']==0 and result.get('timed_out') is not True
+
+
+def clip_stream(value):
+    """Fit one output stream into the feedback limit: keep the start and the end, mark the gap."""
+    if len(value)<=FEEDBACK_STREAM_LIMIT:return value
+    omitted=len(value)-FEEDBACK_STREAM_LIMIT
+    while True:
+        # The marker's own length depends on the count, so settle both together.
+        marker=f'\n[... {omitted} characters omitted here; the start and the end are kept ...]\n'
+        tail=FEEDBACK_STREAM_LIMIT-FEEDBACK_HEAD_CHARS-len(marker)
+        actual=len(value)-FEEDBACK_HEAD_CHARS-tail
+        if actual==omitted:break
+        omitted=actual
+    return value[:FEEDBACK_HEAD_CHARS]+marker+value[-tail:]
 
 
 def execution_observation(exchange):
@@ -27,7 +48,7 @@ def execution_observation(exchange):
     for key in ('stdout','stderr'):
         value=result.get(key,'')
         if isinstance(value,str) and len(value)>FEEDBACK_STREAM_LIMIT:
-            result[key]=value[:FEEDBACK_STREAM_LIMIT];clipped.append(key)
+            result[key]=clip_stream(value);clipped.append(key)
     result['feedback_truncated_fields']=clipped
     return json.dumps({'type':'execution_observation','source':'native_termux',
                        'command':exchange['reply']['execution_payload'],'result':result},ensure_ascii=False)
@@ -157,14 +178,13 @@ class Store:
             WHERE history_fts MATCH ? AND h.direct_answer IS NOT NULL
             ORDER BY bm25(history_fts), h.id DESC LIMIT ?''', (expression,limit))]
 
-    def has_execution_before(self, session_id, row_id):
-        for row in self.db.execute('''SELECT execution_result FROM history
-                WHERE session_id=? AND id<=? AND execution_result IS NOT NULL ORDER BY id DESC''',
-                (session_id,row_id)):
-            try: result=json.loads(row[0])
-            except (ValueError,TypeError):continue
-            if confirmed_execution(result):return True
-        return False
+    def follows_successful_execution(self, session_id, row_id):
+        """True when the turn directly before this one in its session ran a command that exited 0."""
+        row=self.db.execute('''SELECT execution_result FROM history
+                WHERE session_id=? AND id<? ORDER BY id DESC LIMIT 1''',(session_id,row_id)).fetchone()
+        if row is None or row[0] is None:return False
+        try:return successful_execution(json.loads(row[0]))
+        except (ValueError,TypeError):return False
 
     def select_session(self, name=None, continuing=False):
         if continuing:

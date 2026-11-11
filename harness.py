@@ -82,15 +82,24 @@ def api_schema():
     return schema
 
 
+# A canned opener is filler only when it stands alone: sentence punctuation and a break
+# follow it, or the line ends. "Certainly not." and "hello.txt" are content.
+_ALONE = r"(?=[!,.:;][*_]*(?:\s|\Z)|\s*(?:\n|\Z))"
 # This is a finite wording check, not a claim to recognize every possible hedge.
+# A sentence starts at the top, after end punctuation plus whitespace, or on a new line.
+# A dot inside a host name or a file name does not start one.
 FILLER = re.compile(
-    r"(?:\A|(?<=[.!?\n])\s*)(?:[*_#>]+\s*)*(?:"
-    r"(?:certainly|sure|absolutely|of course|no problem|great question|good question)\b|"
-    r"(?:hello|hi|hey)(?:\s+George)?[!,.:\s]|"
-    r"(?:I(?:['’]m| am) (?:happy|glad) to help|I(?:['’]d| would) be happy to)\b|"
-    r"(?:sorry|I apologize|my apologies|as an AI|as a language model|you(?:'|’)re right,? my mistake)\b|"
+    r"(?:\A|(?<=[.!?])\s+|(?<=\n)\s*)(?:[*_#>]+\s*)*(?:"
+    r"(?:certainly|sure(?: thing)?|absolutely|of course|no problem|my (?:mistake|bad))" + _ALONE + r"|"
+    r"(?:great question|good question|(?:good|nice|great) catch)\b|"
+    r"(?:hello|hi|hey)(?:\s+(?:George|there))?" + _ALONE + r"|"
+    r"(?:I(?:['’]m| am) (?:happy|glad) to help|(?:happy|glad) to help|I(?:['’]d| would) be happy to)\b|"
+    r"(?:sorry|I(?:['’]m| am)(?: (?:so|very|really|truly|deeply))? sorry|I apologize|my apologies|apologies|"
+    r"as an AI|as a language model|"
+    r"you(?:['’]re| are)(?: (?:absolutely|completely|totally|quite|entirely))? (?:right|correct))\b|"
     r"(?:please note|it(?:'s| is) worth noting)\b|"
-    r"(?:I hope this helps|hope this helps|let me know if|feel free to|I(?:'d| would) be happy to)\b|"
+    r"(?:I hope (?:this|that|it) (?:helps|clears things up|makes sense)|hope (?:this|that|it) helps|"
+    r"let me know if|feel free to|I(?:'d| would) be happy to)\b|"
     r"(?:here(?:'s| is) (?:the|your) (?:answer|response)|let me (?:explain|break this down)|"
     r"before we (?:begin|start)|for (?:your )?safety|use (?:this )?at your own risk|"
     r"this is not (?:legal|medical|financial) advice|always consult (?:a|an) professional|"
@@ -98,11 +107,32 @@ FILLER = re.compile(
     r"you (?:do not|don't) need to worry)\b"
     r")", re.IGNORECASE,
 )
-FALSE_EXECUTION = re.compile(
-    r"\A(?:done|completed|installed|deleted|fixed)[.!]|"
-    r"\bI(?:'ve| have)? (?:ran|executed|installed|deleted|audited|checked your|changed your)\b",
-    re.IGNORECASE,
-)
+# Reports of finished work: a one-word opening, or a first-person past action.
+# Third-person text ("the log shows the file was created") stays content, since log audits need it.
+_ADVERBS = r"(?: (?:just|already|also|now|successfully))*"
+_ACTIONS = r"ran|executed|created|installed|uninstalled|deleted|finished|completed|verified|audited|checked your|changed your"
+COMPLETION_OPENING = re.compile(
+    r"\A(?:all\s+)?(?:done|completed|finished|created|installed|deleted|fixed)[.!]", re.IGNORECASE)
+COMPLETION_CLAIM = re.compile(
+    r"\bI(?:(?:['’]ve| have)" + _ADVERBS + r" (?:run|" + _ACTIONS + r")|" + _ADVERBS + r" (?:" + _ACTIONS + r"))\b"
+    r"(?!\s+(?:no|nothing|none|zero)\b)", re.IGNORECASE)
+# Earlier in the same sentence, these words make it doubt, denial or a condition, not a report.
+NOT_A_REPORT = re.compile(
+    r"\b(?:no|not|never|cannot|can['’]t|couldn['’]t|didn['’]t|haven['’]t|hasn['’]t|unable|without|whether|if|"
+    r"unless|unknown|unclear|unsure|uncertain|unverified)\b", re.IGNORECASE)
+QUOTED = re.compile(r'"[^"\n]*"|“[^”\n]*”|`[^`\n]*`')
+SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+|\n+")
+
+
+def claims_completion(answer: str) -> bool:
+    """True when the answer reports finished work. Doubt, denial and quoted evidence are not reports."""
+    if COMPLETION_OPENING.search(answer):
+        return True
+    for sentence in SENTENCE_BREAK.split(QUOTED.sub(' ', answer)):
+        for claim in COMPLETION_CLAIM.finditer(sentence):
+            if not NOT_A_REPORT.search(sentence[:claim.start()]):
+                return True
+    return False
 CONTROLS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
 OPENING_ECHO = re.compile(
     r"^(?:"
@@ -113,14 +143,23 @@ OPENING_ECHO = re.compile(
 )
 # Remove only the canned opening, never the factual sentence after it.
 # Probability, missing evidence, and requirements to inspect logs are content.
+# The punctuation after an opener must end a word: "hello.txt" and "sure.cfg" are file names.
+_OPENER_END = r"(?:[!,.:;](?=[\s*_]|$)\s*|$)"
 OPENING_FILLER = re.compile(
     r"^(?:"
-    r"(?:certainly|sure|absolutely|of course|no problem|great question|good question)(?:[!,.:;]\s*|$)|"
-    r"(?:hello|hi|hey)(?:\s+George)?(?:[!,.:;]\s*|$)|"
-    r"(?:I(?:['’]m| am) (?:happy|glad) to help|I(?:['’]d| would) be happy to help)(?:[!,.:;]\s*|$)|"
-    r"(?:sorry|my apologies|I apologize(?: for (?:the )?(?:confusion|mistake))?|"
-    r"you(?:['’]re| are) right,? my mistake)(?:[!,.:;]\s*|$)|"
-    r"as an (?:AI(?: language model)?|language model)(?:[!,.:;]\s*|$)|"
+    r"(?:certainly|sure(?: thing)?|absolutely|of course|no problem|great question|good question|"
+    r"(?:good|nice|great) catch)" + _OPENER_END + r"|"
+    r"(?:hello|hi|hey)(?:\s+(?:George|there))?" + _OPENER_END + r"|"
+    r"(?:I(?:['’]m| am) (?:happy|glad) to help|(?:happy|glad) to help|"
+    r"I(?:['’]d| would) be happy to help)" + _OPENER_END + r"|"
+    r"(?:sorry|I(?:['’]m| am)(?: (?:so|very|really|truly|deeply))? sorry|my apologies|apologies|"
+    r"my (?:mistake|bad)|I apologize)"
+    r"(?: for (?:the |any |my )?(?:confusion|mistake|error|misunderstanding|inconvenience|delay))?"
+    r"(?:[!,.:;](?=[\s*_]|$)\s*(?:but\s+)?|\s+but\s+|$)|"
+    r"you(?:['’]re| are) right,? my mistake" + _OPENER_END + r"|"
+    r"you(?:['’]re| are)(?: (?:absolutely|completely|totally|quite|entirely))? (?:right|correct)"
+    r"(?:[!,.:;—–](?=[\s*_]|$)\s*|\s+that\s+|$)|"
+    r"as an (?:AI(?: language model)?|language model)" + _OPENER_END + r"|"
     r"it(?:\s+is|['’]s)\s+important\s+to\s+note\s+that(?:\s+|$)|"
     r"(?:please note|it(?:['’]s| is) worth noting)(?: that)?(?:[!,.:;]\s*|\s+|$)|"
     r"here(?:['’]s| is) (?:the|your) (?:answer|response)\s*:\s*|"
@@ -210,8 +249,10 @@ def validate_reply(raw: str, input_text: str | None = None, *, execution_confirm
     filler = FILLER.search(answer)
     if filler:
         raise GateError('Reply contains blocked filler: ' + repr(filler.group(0).strip()[:100]) + '.')
-    if FALSE_EXECUTION.search(answer) and not execution_confirmed:
-        raise GateError('Reply claims execution before a confirmed command result exists.')
+    # execution_confirmed means this reply directly follows a command that was approved and exited 0.
+    if claims_completion(answer) and not execution_confirmed:
+        raise GateError('Reply reports completed work, but no successful command result '
+                        '(approved, exit code 0) directly precedes it.')
     if reply.execution_payload is not None and '```' in reply.execution_payload:
         raise GateError('Execution payload must be plain command text, without Markdown fences.')
     return reply

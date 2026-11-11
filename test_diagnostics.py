@@ -59,6 +59,65 @@ class UncertaintyGateTests(unittest.TestCase):
             h.request_reply('Explain.',client=client,log_path=Path(tmp)/'usage.jsonl')
             self.assertEqual(len(client.calls),1)
 
+    def test_content_that_looks_like_filler_is_kept(self):
+        answers = [
+            'Certainly not. The mode is 600.',
+            'Sure signs of corruption are absent from the log.',
+            'Of course not; the key is never printed.',
+            'The host is www.hello.com and it answers on port 443.',
+            'hello.txt is missing from the folder.',
+            'The log is short.\nhello.txt is missing.',
+        ]
+        for answer in answers:
+            with self.subTest(answer=answer):
+                self.assertEqual(h.validate_reply(document(direct_answer=answer)).direct_answer, answer)
+
+    def test_apology_agreement_and_praise_openers_are_removed(self):
+        examples = {
+            "I'm sorry, I can't tell from this log.": "I can't tell from this log.",
+            'I am sorry, but the log is incomplete.': 'the log is incomplete.',
+            'I apologize, but the cause is unknown.': 'the cause is unknown.',
+            'Apologies, the log is incomplete.': 'the log is incomplete.',
+            "You're right. The port is 22.": 'The port is 22.',
+            'You are absolutely right, the port is 22.': 'the port is 22.',
+            "You're right that the port is 22.": 'the port is 22.',
+            'Good catch. The port is 22.': 'The port is 22.',
+            'Happy to help. The port is 22.': 'The port is 22.',
+        }
+        for raw, expected in examples.items():
+            with self.subTest(raw=raw):
+                self.assertEqual(h.validate_reply(document(direct_answer=raw)).direct_answer, expected)
+
+    def test_apology_agreement_and_praise_are_blocked_later_in_the_answer(self):
+        for answer in ["The port is 22. I'm sorry.", "The port is 22. You're right.",
+                       'The port is 22. Good catch.', 'The port is 22. I hope that clears things up.']:
+            with self.subTest(answer=answer), self.assertRaises(h.GateError):
+                h.validate_reply(document(direct_answer=answer))
+
+    def test_doubt_about_a_past_action_is_not_a_completion_claim(self):
+        answers = [
+            'There is no record that I ran that command.',
+            'I cannot confirm that I executed anything.',
+            'It is unknown whether I deleted the file or it never existed.',
+            'No evidence shows I installed the package.',
+            'I ran no commands.',
+            'The log line reads "I deleted the cache" at 10:02.',
+        ]
+        for answer in answers:
+            with self.subTest(answer=answer):
+                self.assertEqual(h.validate_reply(document(direct_answer=answer)).direct_answer, answer)
+
+    def test_completion_claims_need_a_successful_result(self):
+        claims = ['Done.', 'Finished.', 'All done.', 'I ran the command and it worked.',
+                  'I created the file and verified its contents.', 'I verified the file.',
+                  "I've run the audit.", 'I have already installed the package.']
+        for claim in claims:
+            with self.subTest(claim=claim):
+                with self.assertRaises(h.GateError):
+                    h.validate_reply(document(direct_answer=claim))
+                confirmed = h.validate_reply(document(direct_answer=claim), execution_confirmed=True)
+                self.assertEqual(confirmed.direct_answer, claim)
+
     def test_payload_and_prompt_echo_contract_unchanged(self):
         raw=document(intent='action_request',cleaned_input='Print maybe.',
                      direct_answer='Print maybe.\nSure, this prints literal text.',

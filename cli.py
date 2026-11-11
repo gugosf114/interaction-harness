@@ -8,7 +8,8 @@ import sys
 
 import harness as h
 from phonetics import normalize
-from storage import Store, history_messages, atomic_json, execution_observation, confirmed_execution
+from storage import (Store, history_messages, atomic_json, execution_observation,
+                     confirmed_execution, successful_execution)
 
 
 def native(request):
@@ -117,7 +118,7 @@ def main(argv=None):
                 raw={k:row[k] for k in ('intent','cleaned_input','direct_answer','execution_payload')}
                 # Recall uses the same gate; rejected legacy text is not displayed.
                 try: rendered.append(h.display_text(h.validate_reply(json.dumps(raw),row.get('normalized_input') or row.get('raw_input'),
-                            execution_confirmed=store.has_execution_before(row['session_id'],row['id']))))
+                            execution_confirmed=store.follows_successful_execution(row['session_id'],row['id']))))
                 except h.GateError: continue
             sys.stdout.write('\n'.join(rendered) if rendered else 'No saved match.\n')
             return 0
@@ -136,21 +137,29 @@ def main(argv=None):
             ceiling=args.max_turns if args.loop else 1
             for step in range(1,ceiling+1):
                 row_id=None;events=[];reply=None;execution=None
-                current=cleaned if step==1 else 'Continue the original task using the recorded execution observation. Return execution_payload null when finished.'
+                # The turn number rides in the continuation message, which is saved exactly as sent.
+                # Each request is then a byte-for-byte prefix of the next, so provider caches keep hitting.
+                current=cleaned if step==1 else ('Continue the original task using the recorded execution observation. '
+                    f'Return execution_payload null when finished. This is model turn {step} of {ceiling}.')
                 current_raw=raw if step==1 else current
                 row_id=store.begin(current_raw,current,args.engine,model,sid)
                 past=history_messages(session['turns'],args.history_chars)
                 if args.loop:
                     # Original task and latest actual result survive a small rolling window.
+                    # This first record must not change between turns: no counters, no clocks.
                     past.insert(0,{'role':'user','content':json.dumps({'client_mode':'agent_loop',
-                        'original_task':cleaned,'turn':step,'max_turns':ceiling},ensure_ascii=False)})
+                        'original_task':cleaned,'max_turns':ceiling},ensure_ascii=False)})
                     if last_exchange is not None:
                         observation={'role':'user','content':execution_observation(last_exchange)}
                         if observation not in past:past.append(observation)
-                executed=any(confirmed_execution(x.get('execution_result')) and
-                    {'role':'user','content':execution_observation(x)} in past for x in session['turns'])
+                    # Only the command this reply answers can back a completion claim, and only if it exited 0.
+                    supported=last_exchange is not None and successful_execution(last_exchange.get('execution_result'))
+                else:
+                    latest=session['turns'][-1] if session['turns'] else None
+                    supported=bool(latest and successful_execution(latest.get('execution_result')) and past
+                                   and past[-1]=={'role':'user','content':execution_observation(latest)})
                 reply=h.request_reply(current,engine=args.engine,model=model,effort=args.effort,timeout=args.timeout,
-                                      log_path=args.usage_log,events=events,history=past,execution_confirmed=executed)
+                                      log_path=args.usage_log,events=events,history=past,execution_confirmed=supported)
                 store.finish(row_id,reply,events)
                 exchange={'raw_input':current_raw,'normalized_input':current,'reply':reply.model_dump(),'engine':args.engine,'model':model}
                 if args.loop:exchange['loop_step']=step

@@ -3,6 +3,7 @@ import contextlib
 import io
 import json
 from pathlib import Path
+import re
 import sqlite3
 import tempfile
 import unittest
@@ -11,7 +12,7 @@ from unittest.mock import patch
 import cli
 import harness as h
 import native_tools
-from storage import Store, execution_observation, history_messages, FEEDBACK_STREAM_LIMIT
+from storage import Store, clip_stream, execution_observation, history_messages, FEEDBACK_STREAM_LIMIT
 from test_harness import document, FakeClient, response
 
 
@@ -171,6 +172,65 @@ class AgentLoopTests(unittest.TestCase):
         with patch.object(native_tools,'confirm',return_value=True) as ask,patch.object(native_tools,'run_bounded',return_value={'exit_code':0,'stdout':'','stderr':''}):
             self.call(['--loop','Task.'],[command(),command(),final()],native_tools.handle)
             self.assertEqual(ask.call_count,2)
+
+    def test_failed_or_timed_out_command_keeps_completion_claims_locked(self):
+        for outcome in (result(stderr='denied',code=1),result(code=124,timed_out=True)):
+            with self.subTest(outcome=outcome):
+                _,_,_,api,_=self.call(['--loop','Check.'],[command(),final('The check failed.')],[outcome])
+                self.assertEqual([c.kwargs['execution_confirmed'] for c in api.call_args_list],[False,False])
+
+    def test_claim_unlock_follows_only_the_latest_result(self):
+        _,_,_,api,_=self.call(['--loop','Task.'],[command(),command(),command(),final()],
+            [result('ok'),result(stderr='boom',code=2),result('ok')])
+        self.assertEqual([c.kwargs['execution_confirmed'] for c in api.call_args_list],[False,True,False,True])
+
+    def test_exec_claim_unlock_needs_the_directly_preceding_success(self):
+        self.call(['-x','--session','good','Run it.'],[command()],[result('ok')])
+        _,_,_,api,_=self.call(['--session','good','Did it work?'],[final()])
+        self.assertTrue(api.call_args.kwargs['execution_confirmed'])
+        _,_,_,api,_=self.call(['--session','good','And now?'],[final()])
+        self.assertFalse(api.call_args.kwargs['execution_confirmed'])
+        self.call(['-x','--session','bad','Run it.'],[command()],[result(stderr='no',code=3)])
+        _,_,_,api,_=self.call(['--session','bad','Did it work?'],[final()])
+        self.assertFalse(api.call_args.kwargs['execution_confirmed'])
+
+    def test_new_loop_task_starts_locked_after_an_older_success(self):
+        self.call(['-x','--session','mix','Run it.'],[command()],[result('ok')])
+        _,_,_,api,_=self.call(['--loop','--session','mix','New task.'],[command(),final()],[result('ok')])
+        self.assertEqual([c.kwargs['execution_confirmed'] for c in api.call_args_list],[False,True])
+
+    def test_recall_hides_execution_claim_after_failed_command(self):
+        self.call(['--loop','--session','weak','Check the file.'],[command(),final('Done. I checked your file.')],
+                  [result(stderr='denied',code=1)])
+        code,out,_,api,_=self.call(['--recall','Done'],[])
+        self.assertEqual(code,0);self.assertNotIn('I checked your file',out);api.assert_not_called()
+
+    def test_loop_requests_stay_byte_stable_prefixes(self):
+        _,_,_,api,_=self.call(['--loop','Create and read the test file.'],
+            [command('printf alpha > test.txt'),command('cat test.txt'),final()],[result(),result('alpha\n')])
+        sent=[c.kwargs['history']+[{'role':'user','content':c.args[0]}] for c in api.call_args_list]
+        for earlier,later in zip(sent,sent[1:]):
+            self.assertEqual(later[:len(earlier)],earlier)
+        self.assertEqual(json.loads(sent[0][0]['content']),
+            {'client_mode':'agent_loop','original_task':'Create and read the test file.','max_turns':5})
+        self.assertEqual(len({s[0]['content'] for s in sent}),1)
+        self.assertTrue(sent[1][-1]['content'].endswith('This is model turn 2 of 5.'))
+        self.assertTrue(sent[2][-1]['content'].endswith('This is model turn 3 of 5.'))
+
+    def test_long_output_keeps_start_and_end(self):
+        text='HEAD-MARK'+'x'*(FEEDBACK_STREAM_LIMIT*2)+'Traceback: the real error is on the last line'
+        exchange={'normalized_input':'Task.','reply':command().model_dump(),'execution_result':result(text,code=1)}
+        shown=json.loads(execution_observation(exchange))['result']['stdout']
+        self.assertEqual(len(shown),FEEDBACK_STREAM_LIMIT)
+        self.assertTrue(shown.startswith('HEAD-MARK'))
+        self.assertTrue(shown.endswith('the real error is on the last line'))
+        gap=re.search(r'\n\[\.\.\. (\d+) characters omitted here; the start and the end are kept \.\.\.\]\n',shown)
+        self.assertEqual(len(shown)-len(gap.group(0))+int(gap.group(1)),len(text))
+        for size in (FEEDBACK_STREAM_LIMIT,FEEDBACK_STREAM_LIMIT+1,FEEDBACK_STREAM_LIMIT+95,10**6):
+            with self.subTest(size=size):
+                clipped=clip_stream('y'*size)
+                self.assertEqual(len(clipped),FEEDBACK_STREAM_LIMIT)
+                self.assertEqual('omitted' in clipped,size>FEEDBACK_STREAM_LIMIT)
 
 
 if __name__=='__main__':unittest.main()
