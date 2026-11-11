@@ -151,6 +151,23 @@ This uses `termux-speech-to-text` and Android's speech recognizer through Termux
 
 `prefix_block.txt` is read-only and its SHA-256 digest is pinned in `harness.py`. A changed prefix stops before any API request. Version 3 retains ten examples and adds agent-loop observations and explicit auto-confirm semantics. The prefix stays byte-identical between requests until an intentional version change. OpenAI receives a stable cache key; Anthropic receives a cache breakpoint at the end of the frozen system prefix. In loop mode every request is a byte-for-byte prefix of the next: the first record carries no per-turn value, and each continuation message is stored exactly as sent. OpenAI's automatic cache can therefore reuse earlier turns as well as the prefix; the Anthropic breakpoint covers the frozen prefix only. Once the history window (`--turns`, `--history-chars`) is full it slides, and the front of the conversation changes again. The frozen V3 text still says the loop record names the current turn; the continuation message now does. Real provider usage records show cache reads and writes. `state/usage.jsonl` stores request metadata without prompt or answer text; the separately requested SQLite history stores the full turns.
 
+## Where context goes
+
+Each API call carries context in four places, in this order.
+
+1. **Frozen prefix.** `prefix_block.txt` is sent first on every call as the system prompt: the operator contract, the observation/action rules, the speech hints, and the worked examples. It is byte-identical between calls, so both providers can cache it. The usage log records the cache-read tokens each provider reports. The size of the cache discount depends on the provider and the model, and the first call pays to write the cache.
+2. **Reply schema.** The four-field schema travels in the request parameters: OpenAI Structured Outputs in strict mode, and the strict `emit_reply` tool on Anthropic. The schema fixes the fields and their types. It does not control the words inside `direct_answer`; a greeting or an apology is still a valid string. Removing filler is the job of the local scrubber and linter described under *Output gate*.
+3. **Rolling history.** Up to six prior exchanges, capped at 24,000 characters, follow the prefix. When a command ran, its result follows that exchange as a separate JSON data message typed `execution_observation`, holding the command, exit code, stdout and stderr. It is data for the model to read, not an instruction. Older turns leave the model's view. They stay in `state/history.db`, and `--recall` is a search the operator runs by hand. The model does not retrieve old turns by itself.
+4. **Current request.** The new input, after speech normalization, is the last message.
+
+### What enforces what
+
+- **Local code enforces:** schema validation, the observation-has-no-command rule, opening-line cleanup, the filler linter, the completed-work check (a reply may report finished work only when an approved command that exited 0 directly precedes it), the control-character check, and the y/N execution prompt.
+- **The prompt only requests:** tone, answer-first order, asking one question when the input is unclear, and contextual speech corrections. The model follows these most of the time, not every time.
+- **The API changes one thing:** no consumer chat app sits between the caller and the model, so the app's own system prompt is absent and the caller owns the whole request. The model's trained behavior is unchanged. It can still hedge and it can still refuse. A refusal is reported as a failure and is never displayed as an answer.
+- **Claude's tool call is not forced.** `tool_choice` is `auto`, so the model can answer in plain text. The local gate rejects that reply.
+- **Speed.** Both defaults run at high reasoning effort. A turn takes seconds with or without a cache hit.
+
 ## Verification
 
 ```sh
