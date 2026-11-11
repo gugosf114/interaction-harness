@@ -1,9 +1,11 @@
 usage: harness.py [-h] [--engine {openai,anthropic}] [--model MODEL]
-                  [--effort {low,medium,high,xhigh,max}] [--timeout TIMEOUT]
-                  [--usage-log USAGE_LOG] [--new | -c | --session NAME]
-                  [--turns TURNS] [--history-chars HISTORY_CHARS]
-                  [--no-normalize] [-x] [--exec-timeout EXEC_TIMEOUT]
-                  [--recall QUERY] [-l] [--listen-timeout LISTEN_TIMEOUT]
+                  [--effort {low,medium,high,xhigh,max}] [--chat]
+                  [--timeout TIMEOUT] [--usage-log USAGE_LOG] [--new | -c |
+                  --session NAME] [--turns TURNS]
+                  [--history-chars HISTORY_CHARS] [--no-normalize] [-x]
+                  [--exec-timeout EXEC_TIMEOUT] [--loop]
+                  [--max-turns MAX_TURNS] [-y] [--recall QUERY] [-l]
+                  [--listen-timeout LISTEN_TIMEOUT]
                   [text ...]
 
 Direct answers, bounded memory, optional confirmed Termux execution.
@@ -16,7 +18,10 @@ options:
   --engine {openai,anthropic}
   --model MODEL
   --effort {low,medium,high,xhigh,max}
-                        OpenAI reasoning effort.
+                        Reasoning effort on either engine (default: high).
+  --chat, --interactive
+                        Stay open for multiple turns; automatic on an
+                        interactive terminal with no input.
   --timeout TIMEOUT
   --usage-log USAGE_LOG
   --new                 Fresh isolated turn (default); its ID becomes
@@ -30,6 +35,13 @@ options:
   -x, --exec            Ask y/N before running the returned command in native
                         Termux.
   --exec-timeout EXEC_TIMEOUT
+  --loop                Execute approved commands and feed results back until
+                        completion or the turn ceiling; implies --exec.
+  --max-turns MAX_TURNS
+                        Maximum model turns per --loop task, including the
+                        final answer (1–50; default 5).
+  -y, --yes             Explicitly approve every command for this invocation;
+                        requires --exec or --loop.
   --recall QUERY        Search local history without an API call.
   -l, --listen          Use Android speech recognition through Termux:API.
   --listen-timeout LISTEN_TIMEOUT

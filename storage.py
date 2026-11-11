@@ -13,6 +13,24 @@ import uuid
 NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z')
 METRIC_COLUMNS = ('input_tokens', 'output_tokens', 'cache_creation_tokens',
                   'cache_hit_requests', 'latency_ms')
+FEEDBACK_STREAM_LIMIT = 8000
+
+
+def confirmed_execution(result):
+    return isinstance(result,dict) and result.get('approved') is True and type(result.get('exit_code')) is int
+
+
+def execution_observation(exchange):
+    """A separate data message; never extend the assistant's four-field object."""
+    result=dict(exchange['execution_result'])
+    clipped=[]
+    for key in ('stdout','stderr'):
+        value=result.get(key,'')
+        if isinstance(value,str) and len(value)>FEEDBACK_STREAM_LIMIT:
+            result[key]=value[:FEEDBACK_STREAM_LIMIT];clipped.append(key)
+    result['feedback_truncated_fields']=clipped
+    return json.dumps({'type':'execution_observation','source':'native_termux',
+                       'command':exchange['reply']['execution_payload'],'result':result},ensure_ascii=False)
 
 
 def request_metrics(events):
@@ -139,6 +157,15 @@ class Store:
             WHERE history_fts MATCH ? AND h.direct_answer IS NOT NULL
             ORDER BY bm25(history_fts), h.id DESC LIMIT ?''', (expression,limit))]
 
+    def has_execution_before(self, session_id, row_id):
+        for row in self.db.execute('''SELECT execution_result FROM history
+                WHERE session_id=? AND id<=? AND execution_result IS NOT NULL ORDER BY id DESC''',
+                (session_id,row_id)):
+            try: result=json.loads(row[0])
+            except (ValueError,TypeError):continue
+            if confirmed_execution(result):return True
+        return False
+
     def select_session(self, name=None, continuing=False):
         if continuing:
             try: name = json.loads((self.root/'active-session.json').read_text())['id']
@@ -176,13 +203,12 @@ def history_messages(exchanges, max_chars=24000):
     selected, used = [], 0
     for exchange in reversed(exchanges):
         record = dict(exchange['reply'])
-        result = exchange.get('execution_result')
-        if result:
-            record['execution_record'] = {k:(v[:2000] if isinstance(v,str) else v) for k,v in result.items()}
         pair = [
             {'role':'user','content':exchange['normalized_input']},
             {'role':'assistant','content':json.dumps(record,ensure_ascii=False)},
         ]
+        if exchange.get('execution_result') is not None:
+            pair.append({'role':'user','content':execution_observation(exchange)})
         size = sum(len(p['content']) for p in pair)
         if used + size > max_chars: break
         selected.insert(0,pair); used += size

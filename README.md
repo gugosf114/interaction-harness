@@ -108,9 +108,26 @@ The answer and proposed command appear first. Then the native Termux launcher as
 [Run command? (y/N)]:
 ```
 
-Only `y` (case-insensitive) executes. Enter or `n` declines. Every execution needs this prompt; there is no unattended yes flag. Without `-x`, only text is printed. An observation never triggers execution. Approval reads `/dev/tty`, so piped dictation cannot be mistaken for approval. If no interactive terminal exists, execution is refused.
+By default only `y` (case-insensitive) executes. Enter or `n` declines. Every command gets its own prompt. Explicit `-y` / `--yes` skips the prompt for this invocation; it requires `--exec` or `--loop`. Without execution mode, only text is printed. An observation never triggers execution. Interactive approval reads `/dev/tty`, so piped input cannot become approval. Without a terminal, execution requires explicit `-y`.
 
-Approved commands run with native Termux Bash and noninteractive stdin. stdout and stderr remain separate. The command's exit code is returned; timeout is 124. The default timeout is 120 seconds and each output stream is limited to 1 MiB of displayed capture. Confirmation and execution results are stored with the turn. Later session history includes bounded actual execution evidence, not a claim that an unapproved command ran.
+Approved commands run with native Termux Bash and noninteractive stdin. stdout and stderr remain separate. The command's exit code is returned; timeout is 124. The default timeout is 120 seconds and each output stream is limited to 1 MiB of displayed capture. Confirmation and execution results are stored with the turn. Later session history includes a separate execution observation with the command, approval, stdout, stderr, and exit status. The assistant reply remains exactly four fields. Statements about completed execution pass the execution-claim check only when actual approved execution evidence is present; the other display checks still apply.
+
+## Multi-turn agent execution
+
+```sh
+g1 --loop "Create a temporary file, then read it back."
+george --loop --max-turns 8 "Inspect this log and verify the fix."
+g1 --loop -y "Create a temporary file, then read it back."
+george --chat --loop --session maintenance
+```
+
+`--loop` implies execution mode. The client requests one four-field reply, displays it through the existing gate, asks for command approval, runs the approved payload in native Termux, and records stdout, stderr, and exit status. It then sends that result back as a separate `execution_observation` data message and asks for the next step. Command output is data, not a new instruction or source of approval. Only the CLI `-y` flag enables automatic confirmation; the model cannot set it through its four-field reply.
+
+The default ceiling is five model turns, including the final answer. `--max-turns N` accepts 1-50. A command on the last permitted turn can run after approval, then the loop stops with exit code 3 and a `loop_limit` record. A null execution payload finishes the loop. A declined command stops immediately without another model call. API or gate failures also stop the loop. Nonzero command results and timeouts are returned to the model so it can diagnose or repair the step within the original request. On normal completion, the last executed command's exit status is returned; a later successful command clears an earlier failure. A task that issues no commands returns 0. Existing bounded format-correction retries remain inside each model turn.
+
+Each model turn has its own SQLite row and usage metrics. Approved results are saved with that turn. The original goal and latest execution observation remain available even with `--turns 1` or `--history-chars 0`. These required loop inputs are additional to the optional older-history budget. At most 8,000 characters from each output stream are included in model feedback, with explicit truncation fields; the complete captured output remains in the local record. The ordinary native capture limit still applies.
+
+`--chat --loop` starts a fresh bounded agent run for each typed message while retaining the chosen session. `-y` applies to that whole invocation. A recalled answer is never executed. Without `--loop`, `--exec` still performs just one command and returns.
 
 ## Local history and recall
 
@@ -132,13 +149,15 @@ This uses `termux-speech-to-text` and Android's speech recognizer through Termux
 
 ## Frozen prefix and caching
 
-`prefix_block.txt` is read-only and its SHA-256 digest is pinned in `harness.py`. A changed prefix stops before any API request. Version 2 retains ten examples and adds session/execution semantics. OpenAI receives a stable cache key; Anthropic receives a cache breakpoint at the end of the frozen system prefix. Real provider usage records show cache reads and writes. `state/usage.jsonl` stores request metadata without prompt or answer text; the separately requested SQLite history stores the full turns.
+`prefix_block.txt` is read-only and its SHA-256 digest is pinned in `harness.py`. A changed prefix stops before any API request. Version 3 retains ten examples and adds agent-loop observations and explicit auto-confirm semantics. The prefix stays byte-identical between requests until an intentional version change. OpenAI receives a stable cache key; Anthropic receives a cache breakpoint at the end of the frozen system prefix. Real provider usage records show cache reads and writes. `state/usage.jsonl` stores request metadata without prompt or answer text; the separately requested SQLite history stores the full turns.
 
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop'
 python ~/interaction-harness/test_native_terminal.py
+python ~/interaction-harness/verify_loop.py --engine openai
+python ~/interaction-harness/verify_loop.py --engine anthropic --yes
 python ~/interaction-harness/verify_smoke.py --engine openai
 python ~/interaction-harness/verify_smoke.py --engine anthropic
 ~/interaction-harness/verify-live --engine openai
@@ -147,11 +166,13 @@ python ~/interaction-harness/verify_repl.py --engine openai
 python ~/interaction-harness/verify_repl.py --engine anthropic
 ```
 
+`verify_loop.py` verifies a real temporary-file create/read task through three model turns. Its confirmation-mode test approves only the two exact test commands; `--yes` tests explicit auto-confirm. It checks the file contents, captured read output, final null payload, session records, and unchanged four-field schema. Reports remain under `state/loop-checks/`.
+
 `verify_smoke.py` runs two real one-off calls through the installed Bash alias (`g1` or `george`) using the requested echo text. It checks the exact four-field session reply, answer-only display, provider cache counters, and matching SQLite metrics. The second identical request probes cache reuse; a zero cache read is recorded as a miss, not fabricated as a hit. Reports and isolated SQLite databases are stored under `state/diagnostics/`. This layout uses `harness.py` plus `cli.py`; `python -m harness.cli` is not a supported entry point.
 
 Each full `verify-live` engine run makes eight small queries (at most one corrective retry per query), then verifies local recall and history. The first two calls check actual cache reuse; later calls check named memory and continuation. Test history lives under the run's own private directory and does not take over the operator's active session. `verification.json` links the latest results. The live REPL checks open real terminal sessions through the Bash aliases, verify both requested models and high effort, test session memory and exit, and check one-off mode. Native execution checks are recorded separately. The spoken dictation check was explicitly skipped by the operator; the hook remains available. `requirements.lock` pins installed dependencies.
 
-Exit codes: 0 for success, recall with no match, or a declined execution; 2 for invalid input, credentials, gate, API, bridge, or dictation failure; 130 for interruption. Approved command exit codes are propagated (signals use 128 + signal number; timeouts use 124).
+Exit codes: 0 for success, recall with no match, or a declined execution; 2 for invalid input, credentials, gate, API, bridge, or dictation failure; 3 for the agent turn ceiling; 130 for interruption. Approved command exit codes are propagated (signals use 128 + signal number; timeouts use 124).
 
 `HARNESS_STATE_DIR` selects an isolated state directory for automation/tests; saved credentials remain in this installation's `state` directory. `state/`, `.venv/`, backups, and logs are excluded by `.gitignore`. The local Git baseline contains code, configuration, schemas, the frozen prefix, documentation, and tests. Credentials, personal history, environments, backups, and generated reports are excluded. A baseline commit does not publish the repository.
 

@@ -8,7 +8,7 @@ import sys
 
 import harness as h
 from phonetics import normalize
-from storage import Store, history_messages, atomic_json
+from storage import Store, history_messages, atomic_json, execution_observation, confirmed_execution
 
 
 def native(request):
@@ -43,6 +43,8 @@ def run_chat(args, model):
              '--exec-timeout',str(args.exec_timeout)]
     if args.no_normalize: options.append('--no-normalize')
     if args.execute: options.append('--exec')
+    if args.loop: options.extend(['--loop','--max-turns',str(args.max_turns)])
+    if args.yes: options.append('--yes')
     last_status=0
     if args.text: last_status=main([*options,'--',' '.join(args.text)])
     while True:
@@ -82,6 +84,9 @@ def main(argv=None):
     parser.add_argument('--no-normalize',action='store_true',help='Send exact typed input without phonetic substitutions.')
     parser.add_argument('-x','--exec',dest='execute',action='store_true',help='Ask y/N before running the returned command in native Termux.')
     parser.add_argument('--exec-timeout',type=int,default=120)
+    parser.add_argument('--loop',action='store_true',help='Execute approved commands and feed results back until completion or the turn ceiling; implies --exec.')
+    parser.add_argument('--max-turns',type=int,default=5,help='Maximum model turns per --loop task, including the final answer (1–50; default 5).')
+    parser.add_argument('-y','--yes',action='store_true',help='Explicitly approve every command for this invocation; requires --exec or --loop.')
     parser.add_argument('--recall',metavar='QUERY',help='Search local history without an API call.')
     parser.add_argument('-l','--listen',action='store_true',help='Use Android speech recognition through Termux:API.')
     parser.add_argument('--listen-timeout',type=int,default=90)
@@ -92,6 +97,9 @@ def main(argv=None):
     if not 1<=args.turns<=50: parser.error('--turns must be between 1 and 50.')
     if not 0<=args.history_chars<=200000: parser.error('--history-chars must be between 0 and 200000.')
     if not 1<=args.exec_timeout<=600: parser.error('--exec-timeout must be between 1 and 600.')
+    if not 1<=args.max_turns<=50: parser.error('--max-turns must be between 1 and 50.')
+    if args.yes and not (args.execute or args.loop):parser.error('--yes requires --exec or --loop.')
+    if args.loop:args.execute=True
     if not 1<=args.listen_timeout<=180: parser.error('--listen-timeout must be between 1 and 180.')
     if args.listen and args.text: parser.error('Use --listen or typed text, not both.')
     if args.chat and (args.listen or args.recall is not None): parser.error('--chat uses typed input; use --listen or --recall separately.')
@@ -108,7 +116,8 @@ def main(argv=None):
             for row in matches:
                 raw={k:row[k] for k in ('intent','cleaned_input','direct_answer','execution_payload')}
                 # Recall uses the same gate; rejected legacy text is not displayed.
-                try: rendered.append(h.display_text(h.validate_reply(json.dumps(raw),row.get('normalized_input') or row.get('raw_input'))))
+                try: rendered.append(h.display_text(h.validate_reply(json.dumps(raw),row.get('normalized_input') or row.get('raw_input'),
+                            execution_confirmed=store.has_execution_before(row['session_id'],row['id']))))
                 except h.GateError: continue
             sys.stdout.write('\n'.join(rendered) if rendered else 'No saved match.\n')
             return 0
@@ -119,28 +128,56 @@ def main(argv=None):
         else: parser.error('Supply quoted text, pipe text on stdin, or use --listen.')
         cleaned=raw if args.no_normalize else normalize(raw)
         sid=store.select_session(args.session,args.continuing)
-        row_id=store.begin(raw,cleaned,args.engine,model,sid)
-        if len(raw)>h.MAX_INPUT_CHARS: raise h.HarnessError(f'Input exceeds {h.MAX_INPUT_CHARS} characters.')
+        if len(raw)>h.MAX_INPUT_CHARS:
+            row_id=store.begin(raw,cleaned,args.engine,model,sid)
+            raise h.HarnessError(f'Input exceeds {h.MAX_INPUT_CHARS} characters.')
+        last_exit=0;last_exchange=None
         with store.session(sid,args.turns) as session:
-            past=history_messages(session['turns'],args.history_chars)
-            reply=h.request_reply(cleaned,engine=args.engine,model=model,effort=args.effort,timeout=args.timeout,
-                                  log_path=args.usage_log,events=events,history=past)
-            store.finish(row_id,reply,events)
-            exchange={'raw_input':raw,'normalized_input':cleaned,'reply':reply.model_dump(),'engine':args.engine,'model':model}
-            store.save_session(session,exchange,args.turns)
-            sys.stdout.write(h.display_text(reply)); sys.stdout.flush()
-            if args.execute and reply.execution_payload:
-                execution=native({'op':'exec','command':reply.execution_payload,'timeout':args.exec_timeout})
+            ceiling=args.max_turns if args.loop else 1
+            for step in range(1,ceiling+1):
+                row_id=None;events=[];reply=None;execution=None
+                current=cleaned if step==1 else 'Continue the original task using the recorded execution observation. Return execution_payload null when finished.'
+                current_raw=raw if step==1 else current
+                row_id=store.begin(current_raw,current,args.engine,model,sid)
+                past=history_messages(session['turns'],args.history_chars)
+                if args.loop:
+                    # Original task and latest actual result survive a small rolling window.
+                    past.insert(0,{'role':'user','content':json.dumps({'client_mode':'agent_loop',
+                        'original_task':cleaned,'turn':step,'max_turns':ceiling},ensure_ascii=False)})
+                    if last_exchange is not None:
+                        observation={'role':'user','content':execution_observation(last_exchange)}
+                        if observation not in past:past.append(observation)
+                executed=any(confirmed_execution(x.get('execution_result')) and
+                    {'role':'user','content':execution_observation(x)} in past for x in session['turns'])
+                reply=h.request_reply(current,engine=args.engine,model=model,effort=args.effort,timeout=args.timeout,
+                                      log_path=args.usage_log,events=events,history=past,execution_confirmed=executed)
+                store.finish(row_id,reply,events)
+                exchange={'raw_input':current_raw,'normalized_input':current,'reply':reply.model_dump(),'engine':args.engine,'model':model}
+                if args.loop:exchange['loop_step']=step
+                store.save_session(session,exchange,args.turns)
+                sys.stdout.write(h.display_text(reply));sys.stdout.flush()
+                if not (args.execute and reply.execution_payload):return last_exit
+                request={'op':'exec','command':reply.execution_payload,'timeout':args.exec_timeout}
+                if args.yes:request['auto_confirm']=True
+                execution=native(request)
                 store.finish(row_id,reply,events,execution=execution)
-                session['turns'][-1]['execution_result']=execution
+                exchange['execution_result']=execution
                 atomic_json(store.sessions/(sid+'.json'),session)
-                if execution.get('stdout'): sys.stdout.write(execution['stdout'])
-                if execution.get('stderr'): sys.stderr.write(execution['stderr'])
-                if execution.get('timed_out'): print('Command timed out.',file=sys.stderr)
-                if execution.get('truncated'): print('Command output was truncated at the capture limit.',file=sys.stderr)
+                if execution.get('stdout'):sys.stdout.write(execution['stdout']);sys.stdout.flush()
+                if execution.get('stderr'):sys.stderr.write(execution['stderr']);sys.stderr.flush()
+                if execution.get('timed_out'):print('Command timed out.',file=sys.stderr)
+                if execution.get('truncated'):print('Command output was truncated at the capture limit.',file=sys.stderr)
                 code=int(execution.get('exit_code',0))
-                return min(255,code if code>=0 else 128-code)
-        return 0
+                last_exit=min(255,code if code>=0 else 128-code)
+                if not args.loop:return last_exit
+                if not confirmed_execution(execution):
+                    print('Command declined; agent loop stopped.',file=sys.stderr);return last_exit
+                last_exchange=exchange
+                if step==ceiling:
+                    message=f'Agent loop reached the {ceiling}-turn limit.'
+                    store.finish(row_id,reply,events,execution=execution,status='loop_limit',error=message)
+                    print(message,file=sys.stderr);return 3
+        return last_exit
     except KeyboardInterrupt:
         if store and row_id: store.finish(row_id,reply,events,error='Stopped.',execution=execution,status='interrupted')
         print('Stopped.',file=sys.stderr); return 130

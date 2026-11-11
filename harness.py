@@ -28,7 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 import anthropic
 
 ROOT = Path(__file__).resolve().parent
-PREFIX_SHA256 = '14bc2141eec7833c616e42db1398fd19f51bf33a3d1e253874d14bd9dd7b4965'
+PREFIX_SHA256 = '73d3ce09d43431650591b9ff9c9eb7e5fe3def714e0a49eebdfd7c8fd2fd2854'
 DEFAULT_MODEL = 'gpt-6.1-sol'
 ANTHROPIC_MODEL = 'claude-opus-5-5'
 DEFAULT_EFFORT = 'high'
@@ -194,7 +194,7 @@ def load_key(engine='openai') -> str:
     return value
 
 
-def validate_reply(raw: str, input_text: str | None = None) -> HarnessReply:
+def validate_reply(raw: str, input_text: str | None = None, *, execution_confirmed: bool = False) -> HarnessReply:
     try:
         reply = HarnessReply.model_validate_json(raw, strict=True)
     except (ValidationError, ValueError) as exc:
@@ -210,7 +210,7 @@ def validate_reply(raw: str, input_text: str | None = None) -> HarnessReply:
     filler = FILLER.search(answer)
     if filler:
         raise GateError('Reply contains blocked filler: ' + repr(filler.group(0).strip()[:100]) + '.')
-    if FALSE_EXECUTION.search(answer):
+    if FALSE_EXECUTION.search(answer) and not execution_confirmed:
         raise GateError('Reply claims execution before a confirmed command result exists.')
     if reply.execution_payload is not None and '```' in reply.execution_payload:
         raise GateError('Execution payload must be plain command text, without Markdown fences.')
@@ -240,6 +240,7 @@ def request_reply(
     raw_input: str, *, client=None, model: str | None = None, engine: str = 'openai',
     effort: str = DEFAULT_EFFORT, timeout: float = 90,
     log_path: Path | None = None, events: list | None = None, history: list | None = None,
+    execution_confirmed: bool = False,
 ) -> HarnessReply:
     if len(raw_input) > MAX_INPUT_CHARS:
         raise HarnessError(f'Input exceeds {MAX_INPUT_CHARS} characters.')
@@ -307,7 +308,7 @@ def request_reply(
                 blocks=[b for b in response.content if b.type=='tool_use' and b.name=='emit_reply']
                 raw_response=json.dumps(blocks[0].input) if len(blocks)==1 else '{}'
             try:
-                reply = validate_reply(raw_response, raw_input)
+                reply = validate_reply(raw_response, raw_input, execution_confirmed=execution_confirmed)
             except OpeningScrubError:
                 event['status']='empty_after_scrub'
                 raise
