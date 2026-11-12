@@ -7,6 +7,7 @@ import socket
 import sys
 
 import harness as h
+import advisor
 import senses_cli
 from execution_images import prepare_execution
 from lookup_gate import turn_metadata
@@ -71,6 +72,8 @@ def run_chat(args, model):
             raw=raw.rstrip('\r\n')
             if raw.strip().lower() in {'exit','quit'}: return last_status
             if not raw.strip(): continue
+            # Only a line the operator types reaches the advisor. It answers him and does not make the working model speak.
+            if advisor.is_trigger(raw):last_status=main([*options,*advisor.chat_arguments(raw,args)]);continue
             try:attachment_flags,raw=senses_cli.chat_input(raw)
             except ValueError as exc:print(str(exc),file=sys.stderr);last_status=2;continue
             last_status=main([*options,*attachment_flags,'--',raw])
@@ -104,9 +107,11 @@ def main(argv=None):
     parser.add_argument('-l','--listen',action='store_true',help='Use Android speech recognition through Termux:API.')
     parser.add_argument('--listen-timeout',type=int,default=90)
     senses_cli.add_flags(parser)
+    advisor.add_flags(parser)
     parser.add_argument('text',nargs='*',help='Quoted input, or pipe text on stdin.')
     args=parser.parse_args(argv)
     senses_cli.validate_args(parser,args)
+    advisor.validate_args(parser,args)
     if args.engine not in {'openai','anthropic'}: parser.error('DEFAULT_ENGINE must be openai or anthropic.')
     if not 1<=args.timeout<=3600: parser.error('--timeout must be between 1 and 3600 seconds.')
     if not 1<=args.turns<=1000000: parser.error('--turns must be between 1 and 1000000.')
@@ -121,6 +126,7 @@ def main(argv=None):
     if args.chat and (args.listen or args.recall is not None): parser.error('--chat uses typed input; use --listen or --recall separately.')
     if args.recall is not None and (args.text or args.listen or args.execute): parser.error('--recall searches history without input or execution.')
     model=args.model or os.environ.get('OPENAI_MODEL' if args.engine=='openai' else 'ANTHROPIC_MODEL') or (h.DEFAULT_MODEL if args.engine=='openai' else h.ANTHROPIC_MODEL)
+    if args.advisor is not None:return advisor.run(args,model)
     if args.chat or (not args.text and not args.listen and args.recall is None and sys.stdin.isatty()):
         return run_chat(args,model)
     store=None; row_id=None; events=[]; reply=None; execution=None
@@ -178,8 +184,9 @@ def main(argv=None):
                     supported=last_exchange is not None and successful_execution(last_exchange.get('execution_result'))
                 else:
                     latest=session['turns'][-1] if session['turns'] else None
-                    supported=bool(latest and successful_execution(latest.get('execution_result')) and past
-                                   and past[-1]==execution_message(latest))
+                    notes=len(latest.get('advisor_notes') or []) if latest else 0  # advice sits after the command result
+                    supported=bool(latest and successful_execution(latest.get('execution_result')) and len(past)>notes
+                                   and past[-1-notes]==execution_message(latest))
                 reply=h.request_reply(current,engine=args.engine,model=model,effort=args.effort,timeout=args.timeout,
                                       log_path=args.usage_log,events=events,history=past,execution_confirmed=supported,
                                       request_context=cleaned,web=not args.no_web,web_max=args.web_max,attachments=turn_attachments)

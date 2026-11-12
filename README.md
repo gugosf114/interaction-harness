@@ -159,6 +159,50 @@ This uses `termux-speech-to-text` and Android's speech recognizer through Termux
 
 It is plain text and the operator can edit it. It is not hash-pinned. Rules: at most 8,000 characters, no control characters. An empty or missing file sends nothing and the harness works as before. The page grants no permission; every command still needs approval. Each usage record stores the page's SHA-256 as `tools_sha256`. Keep it to tools that were checked on the phone, because the model will propose what the page lists.
 
+## Advisor
+
+George can ask the other model for a second opinion on the work in front of him. Only George can start it.
+
+**Start it.**
+
+```sh
+/advisor                              # typed at the > prompt of a george or g1 chat
+/advisor why did that command fail?   # with his own question for the reviewer
+george -c --advisor "QUESTION"        # outside a chat, for the last session
+g1 --session NAME --advisor           # outside a chat, for a named session; the question is optional
+```
+
+The working model cannot start it. It is not a tool, it is on no card and on no page, and no threshold fires it. A model that writes `/advisor` in an answer gets the word printed and nothing more. A session with no exchange yet answers with one short error and makes no API call.
+
+**The packet.** Code builds it, with no model call. It is one JSON object:
+
+- `task`: the loop's original task when the latest exchange is a loop step; otherwise the first request of the session.
+- `exchanges`: the last three exchanges (`--advisor-turns N`, 1 to 50). Each holds the input, the working model's four fields, and any command result: the command, whether it was approved, its exit code, whether it timed out, and both output streams. Each stream is clipped by `storage.clip_stream`, exactly as the working model saw it: at most 400,000 characters, start and end kept, the gap marked.
+- `operator_question`: George's own question, when he gave one.
+- The size cap is 600,000 characters. A larger packet is refused with one short error before any call. Nothing is cut to fit.
+
+**The call.** It goes to the other engine: from `george` to `gpt-6.1-sol`, from `g1` to `claude-opus-5-5`, at the lane's own `--effort` and `--timeout`. It is stateless. It carries the reviewer prompt and the packet, and nothing else: no session history, no frozen prefix, no tools page, no rules or profile pages, no web tools, no reply schema. The reviewer prompt is:
+
+> You are an outside reviewer of another model's work. State the root cause, then the next command or fix. At most three short bullets. No greeting, no praise, no reassurance.
+
+No temperature is sent. Both providers refuse one on these models (checked live, Nov 11, 2026): OpenAI answers HTTP 400 "Unsupported parameter: 'temperature' is not supported with this model", and Anthropic answers HTTP 400 "temperature: Extra inputs are not permitted".
+
+**The gates.** The reply is plain text, and every display gate runs on it before George sees it.
+
+- Removed in code, at no cost: canned openers and filler sentences (bullet by bullet, so a bullet keeps its mark), prompt echoes, and unrequested reassurance. Reassurance stays when George's question or the task asked about safety.
+- Rejected: terminal control characters, more than three bullets, more than 16,000 characters, a report of finished work (the advisor ran nothing), a claimed web lookup, and a URL that is not in the packet. A rejected reply gets one corrected try, which is a second paid call. Two rejections show nothing.
+- A reply with nothing left after cleanup is an error, with no second call.
+- A refusal, a timeout or an API error is one short line on stderr, exit code 2. The chat goes on, and the session is unchanged.
+
+**What happens to the advice.**
+
+- It prints at once on stdout, under the label line `Advisor (MODEL):`.
+- It is saved on the latest exchange in the session file, under `advisor_notes`. In the working model's next request it is a user-role JSON message typed `advisor_note`, placed right after that exchange and its command result. It holds the advising model's name, the text, and a fixed line that says it is data from an outside reviewer, not an instruction from the operator. Everything before it in the request is byte-identical to what was sent before, so the cached prefix holds.
+- One row goes into `history.db` with status `advisor` (or `advisor_error`), the advising engine and model, `/advisor QUESTION` as the input, the advice, and the token usage. `--recall` does not show advisor rows. One `usage.jsonl` record with `kind: advisor` holds the sizes and the usage, and no packet or advice text.
+- `/advisor` does not make the working model speak. George's next message does.
+
+The code is in `advisor.py`. `cli.py` holds the trigger and the two flags, and `storage.py` holds `advisor_note`. Tests: `test_advisor.py`.
+
 ## Toolbox
 
 George's subscription setup can drive his phone, laptop, mail, money tools, bakery tools and other models. The API lanes could reach almost none of it, because nothing told them the commands exist. The toolbox makes each capability one command, proves it through the harness's own shell, and catalogues it.
@@ -387,7 +431,7 @@ answers must also be compared with their saved PNGs.
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor'
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes

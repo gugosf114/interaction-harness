@@ -7,6 +7,7 @@ usage: harness.py [-h] [--engine {openai,anthropic}] [--model MODEL]
                   [--max-turns MAX_TURNS] [-y] [--recall QUERY] [-l]
                   [--listen-timeout LISTEN_TIMEOUT] [--no-web]
                   [--web-max WEB_MAX] [--image PATH] [--file PATH]
+                  [--advisor [QUESTION]] [--advisor-turns ADVISOR_TURNS]
                   [text ...]
 
 Direct answers, bounded memory, optional confirmed Termux execution.
@@ -55,6 +56,11 @@ options:
                         default 5).
   --image PATH          Attach PNG/JPEG/WebP/GIF bytes; repeatable.
   --file PATH           Attach PDF bytes; repeatable.
+  --advisor [QUESTION]  Ask the other engine for a second opinion on a saved
+                        session; needs -c or --session. In chat: /advisor
+                        QUESTION.
+  --advisor-turns ADVISOR_TURNS
+                        Exchanges put in the advisor packet (1–50; default 3).
 
 Screen: in an approved --loop command, screen snap or look PATH attaches the
 file to the next model turn. Run card screen for targets and commands.
