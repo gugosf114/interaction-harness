@@ -45,9 +45,8 @@ class KeeperLockRegression(unittest.TestCase):
             except ProcessLookupError:pass
 
     def watchers(self):
-        wanted=('HARNESS_STATE_DIR='+str(self.state)).encode()+b'\0'
-        return [int(p.name) for p in Path('/proc').iterdir() if p.name.isdigit()
-                and b'keeper.sh\0watch' in read(p/'cmdline') and wanted in read(p/'environ')]
+        from keeper_test_processes import watchers
+        return watchers(self.state)
 
     def start(self):
         p=subprocess.Popen(['sh',str(KEEPER),'watch'],env=self.env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -99,6 +98,13 @@ class KeeperLockRegression(unittest.TestCase):
         new=self.start();self.assertEqual(new.wait(timeout=5),0)
         self.assertIsNone(legacy.poll());self.assertEqual(pidfile.read_text(),str(legacy.pid)+'\n')
         self.assertIsNone(self.pid('daemon.pid'))
+
+
+class KeeperProcessCounting(unittest.TestCase):
+    def test_helpers_are_excluded_but_two_independent_watchers_remain_two(self):
+        from keeper_test_processes import independent_pids
+        self.assertEqual(independent_pids([{'pid':1,'ppid':0},{'pid':2,'ppid':1},{'pid':3,'ppid':2}]),[1])
+        self.assertEqual(independent_pids([{'pid':1,'ppid':0},{'pid':2,'ppid':0}]),[1,2])
 
 
 if __name__=='__main__':unittest.main()
