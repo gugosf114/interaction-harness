@@ -19,13 +19,20 @@ The Debian side
   proot-distro login debian -- COMMAND
   It takes a few seconds to start. gcloud is installed there.
 
-Mail, read only
+Mail: read
 - A mailbox reader lives on the Debian side:
   proot-distro login debian -- python3 /root/.gmail/bmail.py test
   proot-distro login debian -- python3 /root/.gmail/bmail.py unread 5
   proot-distro login debian -- python3 /root/.gmail/bmail.py list 5 "GMAIL QUERY"
   proot-distro login debian -- python3 /root/.gmail/bmail.py thread THREAD_ID
   list and thread print one JSON object per line: id, threadId, from, to, subject, date, text.
+
+Mail: send a reply
+- This sends a real email at once, from the operator's Berkeley address, as a reply inside an existing thread. There is no draft step.
+  proot-distro login debian -- python3 /root/.gmail/bsend.py MESSAGE_ID BODY_FILE
+  MESSAGE_ID is the id of the message being answered. BODY_FILE is a text file on the Debian side that holds the reply body.
+  To, Subject and threading are taken from that message. It prints one JSON object: sent_id, threadId, to, subject.
+- Send only when the operator asked for that reply to be sent.
 
 Phone
 - termux-notification, termux-clipboard-get, termux-open-url, adb.
