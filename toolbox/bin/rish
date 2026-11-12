@@ -1,5 +1,34 @@
 #!/data/data/com.termux/files/usr/bin/sh
 # rish -c 'COMMAND' : run a command on the phone through Shizuku, at shell rights, with no adb.
 # Shizuku is the second door into the phone: it keeps working when adb's port has dropped.
+#
+# The launcher behind this (~/rish) hands a command's output to stdout or stderr at random, loses
+# what the command wrote to stderr, and always exits 0. So for a -c call the phone side writes its
+# output and its exit code into the folder /sdcard/.rish, and this command prints that output on
+# stdout and exits with that code. The first call after a quiet spell can answer "Server is not
+# running" while the helper is alive, so a call that never started is tried up to three times.
+# Any other form (no -c) goes to the launcher unchanged.
 [ $# -ge 1 ] || { echo "usage: rish -c 'COMMAND'" >&2; exit 2; }
-exec /system/bin/sh /data/data/com.termux/files/home/rish "$@"
+real=${RISH_LAUNCHER:-/data/data/com.termux/files/home/rish}
+box=${RISH_BOX:-/sdcard/.rish}
+shell=/system/bin/sh; [ -x "$shell" ] || shell=sh
+if [ "$1" != "-c" ] || [ $# -ne 2 ] || ! mkdir -p "$box" 2>/dev/null; then
+  exec "$shell" "$real" "$@"
+fi
+tag=$box/$$.$(date +%s)
+trap 'rm -f "$tag.out" "$tag.rc"' EXIT
+quoted=$(printf '%s' "$2" | sed "s/'/'\\\\''/g")
+try=1
+while :; do
+  said=$("$shell" "$real" -c "sh -c '$quoted' > $tag.out 2>&1; echo \$? > $tag.rc" </dev/null 2>&1)
+  [ -s "$tag.rc" ] && break
+  if [ ! -e "$tag.out" ] && [ "$try" -lt 3 ]; then
+    try=$((try + 1)); sleep 1; continue
+  fi
+  [ -e "$tag.out" ] && cat "$tag.out"
+  if [ -n "$said" ]; then printf '%s\n' "$said" >&2; else echo "rish: Shizuku gave no answer" >&2; fi
+  exit 1
+done
+cat "$tag.out"
+code=$(tr -dc '0-9' < "$tag.rc")
+exit "${code:-1}"

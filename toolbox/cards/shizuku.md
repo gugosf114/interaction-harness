@@ -8,9 +8,10 @@ Run a command through it (Termux side)
   rish -c 'getprop ro.build.version.release'         -> 17
   rish -c 'id'                                       -> uid=2000(shell) ...
   rish -c 'input tap 540 1200'                       This taps George's visible screen at once.
-  rish -c 'settings get global airplane_mode_on' 2>&1
-  rish prints some answers on stderr. Add 2>&1 when you read one.
-  The files behind it are ~/rish and ~/rish_shizuku.dex.
+  rish -c 'settings get global airplane_mode_on'
+  Everything the command prints comes out on stdout. The exit code is the command's own.
+  The files behind it are ~/rish and ~/rish_shizuku.dex. The rish on the path wraps them and
+  passes each answer through the folder /sdcard/.rish.
 
 George's helper script (Debian side)
   deb bash /root/agent-bridge/scripts/shizuku.sh status        "backend : LIVE (uid 2000)"
@@ -32,5 +33,6 @@ Bring it back
   Log: ~/.agent-bridge/heal.log
 
 Known failure
-  "Server is not running": the helper died. It dies whenever Android restarts adb's own service.
-  Run the keeper line above, wait a few seconds, and try again.
+  "Server is not running": the first call after a quiet spell can say this while the helper is alive,
+  so rish tries three times by itself. When it still says so, the helper died. It dies whenever
+  Android restarts adb's own service. Run the keeper line above, wait a few seconds, and try again.

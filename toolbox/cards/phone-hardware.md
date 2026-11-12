@@ -44,4 +44,4 @@ More
 
 Known failure
   A command that hangs with no output means the Termux:API app lacks that permission.
-  `rish -c 'dumpsys package com.termux.api' 2>&1 | grep -A30 'runtime permissions'` shows what is granted.
+  `rish -c 'dumpsys package com.termux.api' | grep -A30 'runtime permissions'` shows what is granted.

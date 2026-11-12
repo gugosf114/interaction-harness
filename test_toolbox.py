@@ -126,6 +126,30 @@ class CommandTests(unittest.TestCase):
             names.extend(sorted(set(re.findall(r'mcp (android_[a-z_]+)', text))))
         self.assertEqual(len(set(names)), 55)
 
+    def rish_with_fake_launcher(self, launcher_text, command):
+        with tempfile.TemporaryDirectory() as folder:
+            launcher = Path(folder, 'launcher'); launcher.write_text(launcher_text, encoding='utf-8')
+            box = Path(folder, 'box')
+            env = {**os.environ, 'RISH_LAUNCHER': str(launcher), 'RISH_BOX': str(box), 'COUNT': str(Path(folder, 'count'))}
+            done = subprocess.run(['sh', str(BOX / 'bin' / 'rish'), '-c', command], capture_output=True, text=True, env=env, timeout=60)
+            return done, Path(folder, 'count').read_text().strip(), sorted(path.name for path in box.iterdir())
+
+    def test_rish_prints_the_answer_in_order_with_the_real_exit_code_after_a_first_refusal(self):
+        # The launcher refuses once, then runs the text it was given and exits 0 whatever happened.
+        launcher = ('count=$(cat "$COUNT" 2>/dev/null || echo 0); count=$((count + 1)); echo $count > "$COUNT"\n'
+                    '[ "$count" -lt 2 ] && { echo "Server is not running"; exit 1; }\n'
+                    'eval "$2"\nexit 0\n')
+        done, calls, left = self.rish_with_fake_launcher(launcher, "echo \"it's out\"; echo err >&2; exit 7")
+        self.assertEqual((done.returncode, done.stdout, done.stderr), (7, "it's out\nerr\n", ''))
+        self.assertEqual((calls, left), ('2', []))
+
+    def test_rish_gives_up_after_three_refusals_and_says_what_the_launcher_said(self):
+        launcher = ('count=$(cat "$COUNT" 2>/dev/null || echo 0); echo $((count + 1)) > "$COUNT"\n'
+                    'echo "Server is not running"; exit 1\n')
+        done, calls, left = self.rish_with_fake_launcher(launcher, 'echo never')
+        self.assertEqual((done.returncode, done.stdout, done.stderr), (1, '', 'Server is not running\n'))
+        self.assertEqual((calls, left), ('3', []))
+
     def test_no_key_value_is_stored_for_the_mcp_server(self):
         text = (BOX / 'bin' / 'mcp').read_text(encoding='utf-8')
         self.assertNotIn('Bearer agent', text)
