@@ -11,7 +11,7 @@ python ~/interaction-harness/harness.py "Read this observation."
 printf '%s\n' 'Explain this permission mode.' | ~/interaction-harness/harness
 ```
 
-The default is OpenAI (`gpt-6.1-sol`). Anthropic defaults to the latest Opus tier verified during setup, `claude-opus-5-5`. `--model MODEL` selects a model on the chosen engine. Both require support for their strict-output and cache parameters. Both engines default to `high` effort. OpenAI receives `reasoning.effort`; Anthropic receives adaptive thinking plus `output_config.effort`. `--effort low|medium|high|xhigh|max` overrides the level. The output budget is 128,000 tokens, thinking included. That is the highest value both providers accepted in a live call.
+The default is OpenAI (`gpt-6.1-sol`). Anthropic defaults to the latest Opus tier verified during setup, `claude-opus-5-5`. `--model MODEL` selects a model on the chosen engine. Both require support for their strict-output and cache parameters. Both engines default to `max` effort. OpenAI receives `reasoning.effort`; Anthropic receives adaptive thinking plus `output_config.effort`. `--effort low|medium|high|xhigh|max` overrides the level. The output budget is 128,000 tokens, thinking included. That is the highest value both providers accepted in a live call.
 
 ```sh
 export DEFAULT_ENGINE=anthropic
@@ -83,7 +83,7 @@ The preprocessor applies these explicit mappings before the API call:
 
 The default and `--new` start an isolated session with no prior exchanges. After a successful turn it becomes the most recent active session, so `-c` / `--continue` can pick it up. `--session NAME` creates or reopens a named session. Names accept 1–64 letters, digits, underscores, and hyphens. The three session-selection flags are mutually exclusive.
 
-Files live at `state/sessions/<id>.json`. Only the latest six complete user/assistant exchanges remain by default; `--turns N` changes that window (1–50). The API receives at most 24,000 characters of prior history, keeping whole exchanges; `--history-chars N` changes that cap. The current input limit is 1,000,000 characters. Oversized input is rejected before it can become a truncated instruction.
+Files live at `state/sessions/<id>.json`. By default the session keeps every exchange (up to 100,000); `--turns N` sets a smaller window (1–1,000,000). The API receives at most 2,400,000 characters of prior history on Anthropic and 650,000 on OpenAI, keeping whole exchanges; `--history-chars N` changes that cap (up to 4,000,000). The two defaults were sized to each model's window, measured in live calls on 2026-11-11. The current input limit is 1,000,000 characters. Oversized input is rejected before it can become a truncated instruction.
 
 The exact frozen prefix and shared schema always come first. History and the new request follow them. Session writes are atomic and each session is locked during a turn, including any execution confirmation. Failed API calls are logged but do not add an assistant exchange or replace the most recent successful session.
 

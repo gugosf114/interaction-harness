@@ -14,8 +14,8 @@ from lookup_gate import turn_metadata
 NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z')
 METRIC_COLUMNS = ('input_tokens', 'output_tokens', 'cache_creation_tokens',
                   'cache_hit_requests', 'latency_ms')
-FEEDBACK_STREAM_LIMIT = 8000
-FEEDBACK_HEAD_CHARS = 2000  # The rest of the limit keeps the end, where errors and tracebacks usually are.
+FEEDBACK_STREAM_LIMIT = 400000
+FEEDBACK_HEAD_CHARS = 100000  # The rest of the limit keeps the end, where errors and tracebacks usually are.
 
 
 def confirmed_execution(result):

@@ -14,6 +14,11 @@ from storage import (Store, history_messages, atomic_json, execution_observation
                      confirmed_execution, successful_execution)
 
 
+# History budget per engine, in characters. Measured live on 2026-11-11: claude-opus-5-5 accepts
+# 1,000,000 input tokens; gpt-6.1-sol accepted 380,000 and refused 950,000. Each budget leaves room
+# for the 128,000-token answer and the system pages, at about 3 characters per token.
+HISTORY_CHARS_DEFAULT = {'anthropic': 2400000, 'openai': 650000}
+
 def native(request):
     fd = os.environ.get('HARNESS_BRIDGE_FD')
     if fd is None: raise h.HarnessError('Use the Termux harness launcher for --exec or --listen.')
@@ -79,19 +84,19 @@ def main(argv=None):
     parser.add_argument('--model',default=None)
     parser.add_argument('--effort',choices=['low','medium','high','xhigh','max'],default=h.DEFAULT_EFFORT,help='Reasoning effort on either engine (default: high).')
     parser.add_argument('--chat','--interactive',dest='chat',action='store_true',help='Stay open for multiple turns; automatic on an interactive terminal with no input.')
-    parser.add_argument('--timeout',type=float,default=90)
+    parser.add_argument('--timeout',type=float,default=1800)
     parser.add_argument('--usage-log',type=Path,default=h.STATE/'usage.jsonl')
     group=parser.add_mutually_exclusive_group()
     group.add_argument('--new',action='store_true',help='Fresh isolated turn (default); its ID becomes available to --continue.')
     group.add_argument('-c','--continue',dest='continuing',action='store_true')
     group.add_argument('--session',metavar='NAME')
-    parser.add_argument('--turns',type=int,default=6,help='Exchanges kept in the rolling session (1–50).')
-    parser.add_argument('--history-chars',type=int,default=24000,help='Maximum prior-history characters sent to the model.')
+    parser.add_argument('--turns',type=int,default=100000,help='Exchanges kept in the session (1–1000000). The character budget is the real limit.')
+    parser.add_argument('--history-chars',type=int,default=None,help='Maximum prior-history characters sent to the model (0–4000000). Default: 2400000 on anthropic, 650000 on openai, sized to each model window measured live on 2026-11-11.')
     parser.add_argument('--no-normalize',action='store_true',help='Send exact typed input without phonetic substitutions.')
     parser.add_argument('-x','--exec',dest='execute',action='store_true',help='Ask y/N before running the returned command in native Termux.')
-    parser.add_argument('--exec-timeout',type=int,default=120)
+    parser.add_argument('--exec-timeout',type=int,default=3600)
     parser.add_argument('--loop',action='store_true',help='Execute approved commands and feed results back until completion or the turn ceiling; implies --exec.')
-    parser.add_argument('--max-turns',type=int,default=5,help='Maximum model turns per --loop task, including the final answer (1–50; default 5).')
+    parser.add_argument('--max-turns',type=int,default=200,help='Maximum model turns per --loop task, including the final answer (1–1000; default 200).')
     parser.add_argument('-y','--yes',action='store_true',help='Explicitly approve every command for this invocation; requires --exec or --loop.')
     parser.add_argument('--recall',metavar='QUERY',help='Search local history without an API call.')
     parser.add_argument('-l','--listen',action='store_true',help='Use Android speech recognition through Termux:API.')
@@ -101,11 +106,12 @@ def main(argv=None):
     args=parser.parse_args(argv)
     senses_cli.validate_args(parser,args)
     if args.engine not in {'openai','anthropic'}: parser.error('DEFAULT_ENGINE must be openai or anthropic.')
-    if not 1<=args.timeout<=300: parser.error('--timeout must be between 1 and 300 seconds.')
-    if not 1<=args.turns<=50: parser.error('--turns must be between 1 and 50.')
-    if not 0<=args.history_chars<=200000: parser.error('--history-chars must be between 0 and 200000.')
-    if not 1<=args.exec_timeout<=600: parser.error('--exec-timeout must be between 1 and 600.')
-    if not 1<=args.max_turns<=50: parser.error('--max-turns must be between 1 and 50.')
+    if not 1<=args.timeout<=3600: parser.error('--timeout must be between 1 and 3600 seconds.')
+    if not 1<=args.turns<=1000000: parser.error('--turns must be between 1 and 1000000.')
+    if args.history_chars is None: args.history_chars=HISTORY_CHARS_DEFAULT.get(args.engine,650000)
+    if not 0<=args.history_chars<=4000000: parser.error('--history-chars must be between 0 and 4000000.')
+    if not 1<=args.exec_timeout<=86400: parser.error('--exec-timeout must be between 1 and 86400.')
+    if not 1<=args.max_turns<=1000: parser.error('--max-turns must be between 1 and 1000.')
     if args.yes and not (args.execute or args.loop):parser.error('--yes requires --exec or --loop.')
     if args.loop:args.execute=True
     if not 1<=args.listen_timeout<=180: parser.error('--listen-timeout must be between 1 and 180.')

@@ -75,7 +75,7 @@ class AgentLoopTests(unittest.TestCase):
         self.assertIn('declined',err);self.assertFalse(json.loads(self.rows()[0]['execution_result'])['approved'])
 
     def test_default_ceiling_stops_after_five_turns(self):
-        code,_,err,api,native=self.call(['--loop','Repeat.'],[command() for _ in range(5)],[result() for _ in range(5)])
+        code,_,err,api,native=self.call(['--loop','--max-turns','5','Repeat.'],[command() for _ in range(5)],[result() for _ in range(5)])
         self.assertEqual(code,3);self.assertEqual(api.call_count,5);self.assertEqual(native.call_count,5)
         self.assertIn('5-turn limit',err);self.assertEqual(self.rows()[-1]['status'],'loop_limit')
 
@@ -116,7 +116,7 @@ class AgentLoopTests(unittest.TestCase):
         self.assertEqual(exc.exception.code,2)
 
     def test_invalid_ceiling_is_rejected(self):
-        for value in ('0','51'):
+        for value in ('0','1001'):
             with self.subTest(value=value),contextlib.redirect_stderr(io.StringIO()),self.assertRaises(SystemExit):
                 h.main(['--loop','--max-turns',value,'Task.'])
 
@@ -145,7 +145,7 @@ class AgentLoopTests(unittest.TestCase):
     def test_history_keeps_four_field_assistant_and_labels_truncation(self):
         exchange={'normalized_input':'Task.','reply':command().model_dump(),
                   'execution_result':result('x'*(FEEDBACK_STREAM_LIMIT+100),'error')}
-        history=history_messages([exchange],50000)
+        history=history_messages([exchange],FEEDBACK_STREAM_LIMIT*4)
         self.assertEqual(set(json.loads(history[1]['content'])),set(command().model_dump()))
         observation=json.loads(history[2]['content'])
         self.assertEqual(len(observation['result']['stdout']),FEEDBACK_STREAM_LIMIT)
@@ -212,10 +212,10 @@ class AgentLoopTests(unittest.TestCase):
         for earlier,later in zip(sent,sent[1:]):
             self.assertEqual(later[:len(earlier)],earlier)
         self.assertEqual(json.loads(sent[0][0]['content']),
-            {'client_mode':'agent_loop','original_task':'Create and read the test file.','max_turns':5})
+            {'client_mode':'agent_loop','original_task':'Create and read the test file.','max_turns':200})
         self.assertEqual(len({s[0]['content'] for s in sent}),1)
-        self.assertTrue(sent[1][-1]['content'].endswith('This is model turn 2 of 5.'))
-        self.assertTrue(sent[2][-1]['content'].endswith('This is model turn 3 of 5.'))
+        self.assertTrue(sent[1][-1]['content'].endswith('This is model turn 2 of 200.'))
+        self.assertTrue(sent[2][-1]['content'].endswith('This is model turn 3 of 200.'))
 
     def test_long_output_keeps_start_and_end(self):
         text='HEAD-MARK'+'x'*(FEEDBACK_STREAM_LIMIT*2)+'Traceback: the real error is on the last line'

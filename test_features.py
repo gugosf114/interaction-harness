@@ -82,7 +82,7 @@ class Features(unittest.TestCase):
         self.assertEqual(api.call_args.kwargs['history'][0]['content'],'first')
 
     def test_session_keeps_six_exchanges_database_keeps_all(self):
-        for i in range(8): self.call(['--session','rolling',f'turn {i}'])
+        for i in range(8): self.call(['--session','rolling','--turns','6',f'turn {i}'])
         data=json.loads((self.state/'sessions/rolling.json').read_text())
         self.assertEqual(len(data['turns']),6)
         self.assertEqual(data['turns'][0]['raw_input'],'turn 2')
@@ -158,7 +158,7 @@ class Features(unittest.TestCase):
         self.assertEqual(client.calls[0]['tool_choice'],{'type':'auto','disable_parallel_tool_use':True})
         self.assertEqual(client.calls[0]['model'],'claude-opus-5-5')
         self.assertEqual(client.calls[0]['thinking'],{'type':'adaptive'})
-        self.assertEqual(client.calls[0]['output_config'],{'effort':'high'})
+        self.assertEqual(client.calls[0]['output_config'],{'effort':h.DEFAULT_EFFORT})
         self.assertEqual(client.calls[0]['max_tokens'],h.MAX_OUTPUT_TOKENS)
 
     def test_anthropic_auto_choice_plain_text_is_regated(self):

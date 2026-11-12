@@ -100,13 +100,13 @@ class ChatTests(unittest.TestCase):
         _,_,_,api=self.call(['--chat','--engine','anthropic'],'one\ntwo\nquit\n')
         for call in api.call_args_list:
             self.assertEqual(call.kwargs['model'],'claude-opus-5-5')
-            self.assertEqual(call.kwargs['effort'],'high')
+            self.assertEqual(call.kwargs['effort'],h.DEFAULT_EFFORT)
 
     def test_sol_request_sends_high_reasoning(self):
         client=FakeClient([response()])
         h.request_reply('Explain the mode.',client=client,log_path=self.root/'usage')
         self.assertEqual(client.calls[0]['model'],'gpt-6.1-sol')
-        self.assertEqual(client.calls[0]['reasoning'],{'effort':'high'})
+        self.assertEqual(client.calls[0]['reasoning'],{'effort':h.DEFAULT_EFFORT})
         self.assertEqual(client.calls[0]['max_output_tokens'],h.MAX_OUTPUT_TOKENS)
 
 
