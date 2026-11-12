@@ -1,0 +1,435 @@
+#!/data/data/com.termux/files/usr/bin/python
+"""skill : George's skill packs (folders with a SKILL.md), for the API lanes.
+
+  skill list [GROUP]      every skill: name and one-line purpose (GROUP: see skill groups)
+  skill show NAME [PART]  the lane notes, then the skill's own instructions, in parts of 7,000 characters
+  skill files NAME        the skill's scripts and reference files, with full paths and how to run each
+  skill find WORDS        the skills that match the words, best first
+  skill groups            where the skills live and how many each place holds
+
+Paths are Debian-side paths (/root/...). Both sides see /data/data/com.termux/files/home and /sdcard the same way.
+"""
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+ROOTFS = os.environ.get('SKILL_ROOTFS', '/data/data/com.termux/files/usr/var/lib/proot-distro/containers/debian/rootfs')
+HOME = '/data/data/com.termux/files/home'
+PART = 7000
+# (group, folder, prefix for skills that sit outside a plugin). Order decides which copy wins a name.
+DEFAULT_ROOTS = [
+    ('claude', '/root/.claude/skills', ''),
+    ('claude', '/root/.skills-kept', ''),
+    ('claude-plugin', '/root/.claude/plugins/synced', ''),
+    ('claude-plugin', '/root/.claude/plugins/cache', ''),
+    ('codex', HOME + '/.codex/skills', 'codex:'),
+    ('codex-plugin', HOME + '/.codex/plugins/cache', ''),
+    ('project', HOME + '/plugins/george-shipping-studio', ''),
+    ('project', '/root/wim-android/onboarding-plugin', ''),
+    ('project', '/root/agent-bridge/tools/session-toolkit/job-apply', ''),
+    ('project', HOME + '/llama.cpp/skills', 'llama.cpp:'),
+    ('project', HOME + '/work/codex-termux-0.153.4-build/.codex/skills', 'codex-source:'),
+    ('marketplace', '/root/.claude/plugins/marketplaces', ''),
+    ('marketplace', HOME + '/.grok/marketplace-cache', ''),
+    ('grok', HOME + '/.grok/bundled/skills', 'grok:'),
+    ('agy', '/root/.gemini/antigravity-cli/builtin/skills', 'agy:'),
+    ('library', '/usr/local/lib/python3.13/dist-packages/modal/skills', 'modal:'),
+    ('library', '/usr/local/lib/python3.13/dist-packages/playwright/driver/package/lib/tools/skills', 'playwright:'),
+    ('library', '/root/.mobilerun-venv/lib/python3.13/site-packages/fastapi/.agents/skills', 'fastapi:'),
+    ('library', '/root/.mobilerun-venv/lib/python3.13/site-packages/pydantic_ai/.agents/skills', 'pydantic-ai:'),
+    ('library', '/root/.mobilerun-venv/lib/python3.13/site-packages/phoenix/server/agents/prompts/skills', 'phoenix:'),
+    ('library', '/root/wimline/nvenv/lib/python3.13/site-packages/typer/.agents/skills', 'typer:'),
+]
+GROUP_WORDS = {
+    'claude': "George's Claude Code skills (installed)",
+    'claude-plugin': "skills of the plugins installed in George's Claude Code",
+    'codex': "George's Codex skills",
+    'codex-plugin': "skills of the plugins installed in George's Codex",
+    'marketplace': 'skills of plugins in the downloaded plugin catalogs (on disk, not installed)',
+    'grok': "skills that ship with the grok program",
+    'agy': "skills that ship with Google's Antigravity CLI",
+    'library': 'skills that ship inside installed Python packages (modal, playwright, fastapi, pydantic-ai, phoenix, typer)',
+    'project': "skills inside George's own project folders",
+}
+SKIP_DIRS = {'node_modules', '.git', '__pycache__', '.venv', 'venv'}
+SYNONYMS = {'excel': 'xlsx spreadsheet', 'spreadsheets': 'xlsx spreadsheet', 'sheet': 'xlsx spreadsheet',
+            'word': 'docx', 'powerpoint': 'pptx', 'slides': 'pptx slide deck', 'deck': 'pptx slide',
+            'review': 'review', 'research': 'research', 'chart': 'chart visualization', 'scrape': 'scrape scraping'}
+
+
+def real(path):
+    """The place of a Debian-side path as this process sees it."""
+    if path.startswith(HOME) or path.startswith('/sdcard') or path.startswith('/storage') or not ROOTFS:
+        return Path(path)
+    return Path(ROOTFS + path)
+
+
+def roots():
+    custom = os.environ.get('SKILL_ROOTS')
+    if not custom:
+        return DEFAULT_ROOTS
+    out = []
+    for item in custom.split(';'):
+        group, folder, *prefix = item.split('|')
+        out.append((group, folder, prefix[0] if prefix else ''))
+    return out
+
+
+def frontmatter(text):
+    """name, description and allowed-tools from the YAML block at the top. Handles quotes and | > blocks."""
+    meta = {}
+    if not text.startswith('---'):
+        return meta
+    end = text.find('\n---', 3)
+    if end < 0:
+        return meta
+    lines = text[3:end].splitlines()
+    i = 0
+    while i < len(lines):
+        m = re.match(r'^([A-Za-z_-]+):\s*(.*)$', lines[i])
+        i += 1
+        if not m:
+            continue
+        key, value = m.group(1), m.group(2).strip()
+        if value in ('|', '>', '|-', '>-', '>+', '|+') or value == '':
+            block = []
+            while i < len(lines) and (lines[i].startswith((' ', '\t')) or not lines[i].strip()):
+                block.append(lines[i].strip())
+                i += 1
+            value = ' '.join(part for part in block if part)
+        elif len(value) >= 2 and value[0] == value[-1] and value[0] in '"\'':
+            value = value[1:-1].replace('\\"', '"')
+        meta[key.lower()] = value
+    return meta
+
+
+def plugin_name(start, stop):
+    """The name of the plugin that holds folder `start`, looking upward no higher than `stop`."""
+    here = start
+    while True:
+        for candidate in (here / '.claude-plugin' / 'plugin.json', here / '.codex-plugin' / 'plugin.json', here / 'plugin.json'):
+            if candidate.is_file():
+                try:
+                    return json.loads(candidate.read_text(encoding='utf-8')).get('name') or here.name
+                except (ValueError, OSError):
+                    return here.name
+        if here == stop or here.parent == here:
+            break
+        here = here.parent
+    # A plugin folder without plugin.json: PLUGIN/skills/SKILL_FOLDER or PLUGIN/commands/FILE.
+    if start.parent.name in ('skills', 'commands') and start.parent != stop and start.parent.parent != stop.parent:
+        return start.parent.parent.name
+    if start.name == 'commands' and start != stop:
+        return start.parent.name
+    return None
+
+
+def debian_path(found, root_real, root):
+    return root + str(found)[len(str(root_real)):]
+
+
+def purpose(description):
+    text = ' '.join(description.split())
+    cut = re.split(r'(?<=[.!?])\s', text, maxsplit=1)[0]
+    return cut if len(cut) <= 140 else cut[:137].rstrip() + '...'
+
+
+def scan():
+    skills, seen = [], set()
+    for group, root, prefix in roots():
+        top = real(root)
+        if not top.is_dir():
+            continue
+        found = []
+        for folder, dirs, files in os.walk(top):
+            dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS)
+            if 'SKILL.md' in files:
+                found.append((Path(folder), Path(folder) / 'SKILL.md', 'skill'))
+            if Path(folder).name == 'commands' and group in ('claude-plugin', 'codex-plugin', 'project'):
+                found.extend((Path(folder), Path(folder) / f, 'command') for f in sorted(files) if f.endswith('.md'))
+        for folder, file, kind in found:
+            try:
+                text = file.read_text(encoding='utf-8', errors='replace')
+            except OSError:
+                continue
+            meta = frontmatter(text)
+            short = folder.name if kind == 'skill' else file.stem
+            plugin = plugin_name(folder.parent if kind == 'command' else folder, top)
+            name = f'{plugin}:{short}' if plugin else prefix + short
+            if name in seen:
+                continue
+            seen.add(name)
+            plugin_dir = None
+            if plugin:
+                probe = folder
+                while probe != top and not any((probe / m).exists() for m in ('.claude-plugin', '.codex-plugin', 'plugin.json')):
+                    probe = probe.parent
+                plugin_dir = debian_path(probe, top, root)
+            skills.append({'name': name, 'short': short, 'alias': meta.get('name', ''), 'group': group, 'kind': kind,
+                           'description': meta.get('description', ''), 'allowed': meta.get('allowed-tools', ''),
+                           'file': debian_path(file, top, root), 'folder': debian_path(folder, top, root),
+                           'plugin_dir': plugin_dir, 'real_file': file, 'real_folder': folder, 'text': text})
+    return skills
+
+
+def pick(skills, name):
+    exact = [s for s in skills if s['name'] == name]
+    if exact:
+        return exact[0], None
+    loose = [s for s in skills if name in (s['short'], s['alias']) or s['name'].endswith(':' + name)]
+    if len(loose) == 1:
+        return loose[0], None
+    if loose:
+        return None, f'{len(loose)} skills are named {name}: ' + ', '.join(s['name'] for s in loose) + '. Use the full name.'
+    return None, f'No skill named {name}. Run: skill find WORDS'
+
+
+# ---- lane notes: what each skill leans on, in the lanes' own tools ----------------------------------------
+INSTALLED = [  # checked on 2026-11-11 on the Debian side of this phone
+    (r'\bopenpyxl\b', 'openpyxl'), (r'\bpandas\b', 'pandas'), (r'\bmarkitdown\b', 'markitdown'),
+    (r'python-docx|\bfrom docx import|\bimport docx\b', 'python-docx'), (r'python-pptx|\bfrom pptx\b', 'python-pptx'),
+    (r'\bpypdf\b', 'pypdf'), (r'\bpdfplumber\b', 'pdfplumber'), (r'\breportlab\b', 'reportlab'),
+    (r'\bmatplotlib\b', 'matplotlib'), (r'\bseaborn\b', None), (r'\bplotly\b', None), (r'\bPillow\b|\bPIL\b', 'Pillow'),
+    (r'\bpdf2image\b', 'pdf2image'), (r'\bpytesseract\b|\btesseract\b', 'tesseract and pytesseract'),
+    (r'\bpypdfium2\b', 'pypdfium2'), (r'\blxml\b', 'lxml'), (r'\bdefusedxml\b', 'defusedxml'),
+    (r'\bsoffice\b|LibreOffice', 'LibreOffice 25.2 (soffice)'), (r'\bpandoc\b', 'pandoc 3.1'),
+    (r'\bpdftoppm\b|Poppler|\bpdftotext\b', 'Poppler (pdftoppm, pdftotext, pdfimages)'), (r'\bqpdf\b', 'qpdf'),
+    (r'\bweasyprint\b', 'weasyprint'), (r'\bffmpeg\b', 'ffmpeg'),
+    (r"require\('docx'\)|docx-js|`docx` \(npm|npm install docx", 'docx (npm)'), (r'pptxgenjs', 'pptxgenjs (npm)'),
+    (r'react-icons', 'react, react-dom, react-icons (npm)'), (r'\bsharp\b', 'sharp (npm)'),
+    (r'\bbdata\b|brightdata CLI|Bright Data CLI', 'the Bright Data program bdata (card cloud)'),
+    (r'\buvx?\b', 'uv and uvx'), (r'\bplaywright\b', 'playwright 1.65 (no browser downloaded yet; card programs)'),
+]
+MISSING = [
+    (r'\bpdftk\b', 'pdftk is not installed; qpdf does the same jobs.'),
+    (r'\bpdflatex\b|\bxelatex\b|\bLaTeX\b', 'LaTeX is not installed.'),
+    (r'\bseaborn\b', 'seaborn is not installed (pip3 install --break-system-packages seaborn on the Debian side adds it).'),
+    (r'\bplotly\b', 'plotly is not installed (pip3 install --break-system-packages plotly on the Debian side adds it).'),
+    (r'\bwkhtmltopdf\b', 'wkhtmltopdf is not installed; weasyprint makes a PDF from HTML.'),
+]
+CONNECTORS = [
+    (r'mcp__claude_ai_Gmail|\bGmail (MCP|connector)', 'Gmail connector: use card mail instead.'),
+    (r'Google Drive|mcp__claude_ai_Google_Drive', 'Google Drive: the lanes have no Drive connector.'),
+    (r'Google Calendar|mcp__claude_ai_Google_Calendar', 'Google Calendar: the lanes have no Calendar connector.'),
+    (r'mcp__plugin_brightdata|Bright Data MCP', 'Bright Data MCP: the lanes use the bdata program instead (deb bdata --help).'),
+    (r'adobe_mandatory_init|Adobe connector|mcp__plugin_adobe', 'Adobe tools (adobe_mandatory_init, pdf_export and the rest) are the Adobe connector. The lanes do not have it.'),
+    (r'claude-in-chrome|Claude_Browser|computer-use|computer_use', 'Browser and computer control: use card phone-browser (the signed-in Chrome, page-text) and card screen.'),
+    (r'remote-devices', 'remote-devices tools: the lanes reach devices with card devices and card phone.'),
+    (r'\bSlack\b|\bNotion\b|\bAtlassian\b|\bJira\b|\bConfluence\b|\bAsana\b|\bLinear\b|\bFigma\b|\bCanva\b|\bHubSpot\b|\bSalesforce\b|\bSnowflake\b|\bBigQuery\b|\bDatabricks\b|\bAmplitude\b|\bIntercom\b|\bGuru\b|\bEgnyte\b|\bDocuSign\b',
+     'Named business services (Slack, Notion, Jira, Figma, Snowflake and the like): the lanes have no connector for them.'),
+]
+
+
+def lane_notes(skill):
+    text = skill['text'] + ' ' + skill['allowed']
+    notes = []
+    has_files = any(p.is_file() and p.name != 'SKILL.md' for p in skill['real_folder'].rglob('*')) if skill['kind'] == 'skill' else False
+    if has_files:
+        notes.append(f"The skill's folder is {skill['folder']}. A path in the text such as scripts/x.py means "
+                     f"{skill['folder']}/scripts/x.py. List them: skill files {skill['name']}")
+    if skill['plugin_dir'] and ('CLAUDE_PLUGIN_ROOT' in text or 'plugin root' in text.lower()):
+        notes.append(f"CLAUDE_PLUGIN_ROOT is {skill['plugin_dir']}.")
+    if not has_files and re.search(r'CLAUDE_SKILL_DIR|this skill.s (base )?directory|skill.s directory|relative to this skill', text):
+        notes.append(f"The skill's directory is {skill['folder']}.")
+    if re.search(r'\bpython3?\b|\bnode\b|\bnpm\b|\bpip\b|\bbash\b|\bBash\b|```(bash|sh|python|javascript|js)', text):
+        notes.append("Commands in the text run in your execution_payload. Python, node, soffice, pandoc and the skill's "
+                     "own scripts live on the Debian side: put deb in front, and use full paths, because a cd does not "
+                     "carry to the next command. One job in one line: deb bash -c 'cd /sdcard/Download && python3 make.py'. "
+                     "Write the script file first (card files), then run it. Put files George should get in /sdcard/Download.")
+    if re.search(r'\bRead\b', text):
+        notes.append("'Read' a text file: deb sed -n '1,120p' PATH. 'Read' an image or a PDF to look at it: look PATH, "
+                     "and the picture arrives in your next turn.")
+    if re.search(r'\bWrite\b|\bEdit\b|\bMultiEdit\b', text):
+        notes.append("'Write' a new file: the set -C heredoc on card files. 'Edit': edit-exact FILE 'OLD' 'NEW'.")
+    if re.search(r'WebSearch|WebFetch|web search|search the web|web_search|web_fetch|fetch the (page|url)', text, re.I):
+        notes.append('Web search and page reading are your own provider tools in this client: search and read pages '
+                     'directly. A page that needs George signed in: page-text URL (card phone-browser).')
+    if re.search(r'\bAgent tool\b|\bTask tool\b|subagent|sub-agent|\bAgent\(|fan-out|in parallel|parallel agents|spawn', text, re.I):
+        notes.append('Subagents: the lanes have none. Do each part yourself, one after another, in the loop. '
+                     'One question to a second model: card models.')
+    if 'AskUserQuestion' in text or re.search(r'\bask the user\b', text, re.I):
+        notes.append('Asking George: there is no question tool. Ask in direct_answer with no command, only when the '
+                     'job cannot go on without his answer.')
+    if re.search(r'TodoWrite|TaskCreate|todo list', text, re.I):
+        notes.append('There is no to-do tool: keep the step list in your answer.')
+    if re.search(r'\bSkill tool\b|invoke the [`"]?[a-z-]+[`"]? skill|load the [`"]?[a-z:-]+[`"]? skill|/[a-z-]+:[a-z-]+', text):
+        notes.append('Another skill named in the text: skill show NAME prints it.')
+    if re.search(r'\bArtifact\b|artifact type|Docs connector|docs skill|slides skill', text):
+        notes.append('This client has no Artifact tool, no Docs connector, no slide artifact type and no slides skill. '
+                     'Where the text prefers one of those, use the skill\'s file route. A web page goes to '
+                     '/sdcard/Download/NAME.html.')
+    if '~~' in text:
+        notes.append('Words such as ~~CRM or ~~chat name kinds of connectors. The lanes have none: work from files on '
+                     'the phone, from the web, or from what George pastes.')
+    if re.search(r'\bgh (pr|issue|api|repo)\b|GitHub', text):
+        notes.append('gh and git are signed in as gugosf114 on the Termux side: card github.')
+    for pattern, line in CONNECTORS:
+        if re.search(pattern, text):
+            notes.append(line)
+    have = []
+    for pattern, label in INSTALLED:
+        if label and re.search(pattern, text) and label not in have:
+            have.append(label)
+    if have:
+        notes.append('Installed on the Debian side (checked 2026-11-11), so the skill\'s "preinstalled" holds: '
+                     + ', '.join(have) + '. Node finds the npm packages from any folder.')
+    for pattern, line in MISSING:
+        if re.search(pattern, text):
+            notes.append('Not on the lanes: ' + line)
+    if skill['group'] == 'marketplace':
+        notes.append("This plugin is in a downloaded catalog and is not installed in George's Claude Code. Its "
+                     "instructions still read the same.")
+    return notes
+
+
+# ---- the verbs ---------------------------------------------------------------------------------------------
+def cmd_list(skills, args):
+    if len(args) > 1:
+        return usage()
+    chosen = [s for s in skills if not args or s['group'] == args[0]]
+    if args and not chosen:
+        print(f'No group named {args[0]}. Groups: ' + ', '.join(GROUP_WORDS), file=sys.stderr)
+        return 1
+    print(f'{len(chosen)} skills. Print one with: skill show NAME')
+    for s in chosen:
+        print(f"{s['name']:<44} {purpose(s['description']) or '(no description)'}")
+    return 0
+
+
+def cmd_groups(skills, args):
+    if args:
+        return usage()
+    print(f'{len(skills)} skills in all.')
+    for group, words in GROUP_WORDS.items():
+        count = sum(1 for s in skills if s['group'] == group)
+        if count:
+            print(f'{group:<14} {count:>3}  {words}')
+    for group, root, _ in roots():
+        print(f'  {group:<14} {root}{"" if real(root).is_dir() else "  (missing)"}')
+    return 0
+
+
+def cmd_show(skills, args):
+    if len(args) not in (1, 2) or (len(args) == 2 and not args[1].isdigit()):
+        return usage()
+    skill, error = pick(skills, args[0])
+    if not skill:
+        print(error, file=sys.stderr)
+        return 1
+    notes = lane_notes(skill)
+    head = [f"SKILL {skill['name']} ({skill['group']}, {skill['kind']})", f"File: {skill['file']}", '',
+            'LANE NOTES (read these first: they turn the skill\'s tool names into this client\'s commands)']
+    head += ['- ' + n for n in notes] or ['- none']
+    whole = '\n'.join(head) + '\n\nTHE SKILL\n' + skill['text'].rstrip('\n') + '\n'
+    parts = [whole[i:i + PART] for i in range(0, len(whole), PART)] or ['']
+    number = int(args[1]) if len(args) == 2 else 1
+    if not 1 <= number <= len(parts):
+        print(f"{skill['name']} has {len(parts)} part(s).", file=sys.stderr)
+        return 1
+    if len(parts) > 1:
+        print(f"[part {number} of {len(parts)}" + (f"; next: skill show {skill['name']} {number + 1}]" if number < len(parts) else ']'))
+    sys.stdout.write(parts[number - 1])
+    if not parts[number - 1].endswith('\n'):
+        sys.stdout.write('\n')
+    if number < len(parts):
+        print(f"[continues: skill show {skill['name']} {number + 1}]")
+    return 0
+
+
+RUN = {'.py': 'deb python3', '.js': 'deb node', '.cjs': 'deb node', '.mjs': 'deb node', '.sh': 'deb bash', '.ts': 'deb npx tsx'}
+
+
+def cmd_files(skills, args):
+    if len(args) != 1:
+        return usage()
+    skill, error = pick(skills, args[0])
+    if not skill:
+        print(error, file=sys.stderr)
+        return 1
+    if skill['kind'] != 'skill':
+        print(f"{skill['name']} is a single command file: {skill['file']}")
+        return 0
+    base = skill['real_folder']
+    files = sorted(p for p in base.rglob('*') if p.is_file() and not any(part in SKIP_DIRS for part in p.relative_to(base).parts))
+    files = [p for p in files if p.name != '__init__.py' and not p.name.upper().startswith('LICENSE') and p != base / 'SKILL.md']
+    groups, single = {}, []
+    for p in files:
+        rel = p.relative_to(base)
+        library = next((q for q in rel.parents if q != Path('.') and q.parts[:1] != ('.',) and
+                        ('schemas' in q.parts or (base / q / '__init__.py').is_file() and len(q.parts) > 1)), None)
+        if library is not None:
+            top = Path(*library.parts[:library.parts.index('schemas') + 1]) if 'schemas' in library.parts else library
+            groups.setdefault(top, []).append(p)
+        else:
+            single.append(p)
+    print(f"Folder: {skill['folder']}")
+    if not files:
+        print('  (only SKILL.md)')
+        return 0
+    print(f"Run a script: deb python3 {skill['folder']}/PATH (.js: deb node, .sh: deb bash). "
+          f"Read a file: deb sed -n '1,120p' {skill['folder']}/PATH")
+    for p in single:
+        how = 'run' if p.suffix in RUN else 'read'
+        print(f'  {how:<4} {p.relative_to(base)}  ({p.stat().st_size} bytes)')
+    for top, items in groups.items():
+        kinds = {}
+        for p in items:
+            kinds[p.suffix or '(none)'] = kinds.get(p.suffix or '(none)', 0) + 1
+        print(f'  lib  {top}/  ({len(items)} files the scripts use: ' + ', '.join(f'{k} {v}' for k, v in sorted(kinds.items())) + ')')
+    return 0
+
+
+def words_of(query):
+    out = []
+    for w in re.findall(r'[a-z0-9+.-]+', query.lower()):
+        if len(w) < 3 and w not in ('ai', 'ui', 'ux', 'qa'):
+            continue
+        out.append(w[:-1] if len(w) > 4 and w.endswith('s') else w)
+        out.extend(SYNONYMS.get(w, '').split())
+    return list(dict.fromkeys(out))
+
+
+def cmd_find(skills, args):
+    if not args:
+        return usage()
+    words = words_of(' '.join(args))
+    if not words:
+        return usage()
+    scored = []
+    for s in skills:
+        name, desc, body = s['name'].lower(), s['description'].lower(), s['text'].lower()
+        score = 0
+        for w in words:
+            score += 6 * (w in name) + 3 * (w in desc) + min(body.count(w), 5) * 0.2
+        if s['group'] == 'claude':
+            score *= 1.3
+        elif s['group'] == 'claude-plugin':
+            score *= 1.15
+        if score >= 1:
+            scored.append((score, s))
+    scored.sort(key=lambda item: -item[0])
+    if not scored:
+        print('No skill matches: ' + ' '.join(args), file=sys.stderr)
+        return 1
+    for _, s in scored[:10]:
+        print(f"{s['name']:<44} {purpose(s['description']) or '(no description)'}")
+    print('Print one with: skill show NAME')
+    return 0
+
+
+def usage():
+    print(__doc__.strip().split('\n\n')[1], file=sys.stderr)
+    return 2
+
+
+def main(argv):
+    verbs = {'list': cmd_list, 'show': cmd_show, 'files': cmd_files, 'find': cmd_find, 'groups': cmd_groups}
+    if len(argv) < 2 or argv[1] not in verbs:
+        return usage()
+    return verbs[argv[1]](scan(), argv[2:])
+
+
+if __name__ == '__main__':
+    raise SystemExit(main(sys.argv))

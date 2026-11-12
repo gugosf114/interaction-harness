@@ -20,7 +20,10 @@ trap 'rm -f "$tag.out" "$tag.rc"' EXIT
 quoted=$(printf '%s' "$2" | sed "s/'/'\\\\''/g")
 try=1
 while :; do
-  said=$("$shell" "$real" -c "sh -c '$quoted' > $tag.out 2>&1; echo \$? > $tag.rc" </dev/null 2>&1)
+  # The output goes to /data/local/tmp first: Android refuses a file in /sdcard as the output of `cmd SERVICE`
+  # (pm, settings, cmd wifi and the rest answer "Failed transaction"). Then it is copied into the box.
+  lt=${RISH_PHONE_TMP:-/data/local/tmp}/rish.${tag##*/}
+  said=$("$shell" "$real" -c "sh -c '$quoted' > $lt 2>&1 </dev/null; r=\$?; cat $lt > $tag.out; rm -f $lt; echo \$r > $tag.rc" </dev/null 2>&1)
   [ -s "$tag.rc" ] && break
   if [ ! -e "$tag.out" ] && [ "$try" -lt 3 ]; then
     try=$((try + 1)); sleep 1; continue

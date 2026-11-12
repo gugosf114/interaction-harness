@@ -1,0 +1,553 @@
+#!/data/data/com.termux/files/usr/bin/python
+"""app : the installed apps on George's Pixel 11, through adb or through Shizuku.
+
+  app list [WORDS] [--all]          apps with version name and code (--all adds the system apps)
+  app info PACKAGE                  version, on or off, installer, install and update times, file path
+  app install FILE_OR_URL           installs an APK (replaces an older copy); prints package and version
+  app update FILE_OR_URL            the same, only for an app that is already installed
+  app uninstall PACKAGE
+  app disable PACKAGE | app enable PACKAGE
+  app stop PACKAGE                  force-stops it
+  app clear PACKAGE                 deletes all of the app's data
+  app open PACKAGE [--display ID | --hidden NAME]
+  app perms PACKAGE                 every permission it asks for, granted or not
+  app grant PACKAGE PERMISSION | app revoke PACKAGE PERMISSION      (CAMERA means android.permission.CAMERA)
+  app default KIND [PACKAGE]        who opens a kind of link, or make PACKAGE the one
+                                    KIND: browser, dialer, sms, home, assistant, or a domain such as example.com
+  app default DOMAIN PACKAGE off    stop PACKAGE opening that domain's links
+  app front                         the app in front on each screen
+
+Door: --via adb | --via shizuku. Without it: adb at 127.0.0.1:5555, and Shizuku when adb does not answer.
+"""
+import os
+import re
+import shlex
+import subprocess
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+PREFIX = '/data/data/com.termux/files/usr'
+ADB_TARGET = os.environ.get('APP_ADB_TARGET', '127.0.0.1:5555')
+STAGE = Path(os.environ.get('APP_STAGE', '/sdcard/Download/.app-install'))
+RISH = os.environ.get('APP_RISH', '/data/data/com.termux/files/home/rish')
+PACKAGE = re.compile(r'^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$')
+PERMISSION = re.compile(r'^[A-Za-z0-9_.]+$')
+DOMAIN = re.compile(r'^(?=.{1,253}$)(\*\.)?([A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,63}$')
+ROLES = {'browser': 'android.app.role.BROWSER', 'web': 'android.app.role.BROWSER', 'dialer': 'android.app.role.DIALER',
+         'tel': 'android.app.role.DIALER', 'phone': 'android.app.role.DIALER', 'sms': 'android.app.role.SMS',
+         'home': 'android.app.role.HOME', 'launcher': 'android.app.role.HOME', 'assistant': 'android.app.role.ASSISTANT',
+         'call-screening': 'android.app.role.CALL_SCREENING', 'wallet': 'android.app.role.WALLET', 'notes': 'android.app.role.NOTES'}
+TIMEOUT = 180
+# Android's verified domain states (DomainVerificationState): a link to such a domain opens in the app.
+VERIFIED = ('verified', 'approved', 'migrated', 'restored', 'system_configured')
+# Permissions that Android keeps as app-ops: permission name -> app-op name.
+SPECIAL_OPS = {'WRITE_SETTINGS': 'WRITE_SETTINGS', 'MANAGE_EXTERNAL_STORAGE': 'MANAGE_EXTERNAL_STORAGE',
+               'SYSTEM_ALERT_WINDOW': 'SYSTEM_ALERT_WINDOW', 'PACKAGE_USAGE_STATS': 'GET_USAGE_STATS',
+               'REQUEST_INSTALL_PACKAGES': 'REQUEST_INSTALL_PACKAGES', 'SCHEDULE_EXACT_ALARM': 'SCHEDULE_EXACT_ALARM',
+               'MANAGE_MEDIA': 'MANAGE_MEDIA', 'ACCESS_NOTIFICATION_POLICY': 'ACCESS_NOTIFICATION_POLICY'}
+
+
+class Fail(Exception):
+    def __init__(self, message, code=1):
+        super().__init__(message)
+        self.code = code
+
+
+# ---- the two doors ---------------------------------------------------------------------------------------
+def run_adb(command, timeout=TIMEOUT):
+    return subprocess.run([PREFIX + '/bin/adb', '-s', ADB_TARGET, 'shell', command], capture_output=True, text=True,
+                          timeout=timeout, stdin=subprocess.DEVNULL)
+
+
+class Done:
+    def __init__(self, returncode, stdout, stderr):
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+
+def run_shizuku(command, timeout=TIMEOUT):
+    """Run COMMAND at shell rights through Shizuku's rish.
+
+    Two facts measured on 2026-11-11 (Android 17, Shizuku's rish): `cmd SERVICE` fails with "Failed transaction"
+    when its output is rish's pipe or a file in /sdcard, and rish splits a long output between its stdout and
+    stderr in pieces. So the command writes into /data/local/tmp, the files are copied into the shared Downloads
+    folder, and this process reads them there."""
+    STAGE.mkdir(parents=True, exist_ok=True)
+    tag = STAGE / f'.rish-{os.getpid()}-{time.time_ns()}'
+    out, err, rc = (Path(f'{tag}.{end}') for end in ('out', 'err', 'rc'))
+    local = f'/data/local/tmp/app-{tag.name}'
+    wrapped = (f'( {command} ) >{local}.out 2>{local}.err </dev/null; r=$?; cat {local}.out >{q(str(out))}; '
+               f'cat {local}.err >{q(str(err))}; rm -f {local}.out {local}.err; echo $r >{q(str(rc))}')
+    try:
+        door = subprocess.run(['/system/bin/sh', RISH, '-c', wrapped], capture_output=True, text=True, timeout=timeout,
+                              stdin=subprocess.DEVNULL)
+        if not rc.is_file():
+            return Done(door.returncode or 1, '', door.stdout + door.stderr)
+        code = int(rc.read_text().strip() or 1)
+        return Done(code, out.read_text(errors='replace'), err.read_text(errors='replace'))
+    finally:
+        for path in (out, err, rc):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+
+
+def adb_alive():
+    try:
+        done = subprocess.run([PREFIX + '/bin/adb', '-s', ADB_TARGET, 'get-state'], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return done.returncode == 0 and done.stdout.strip() == 'device'
+
+
+class Phone:
+    """One door into the phone. The door is picked at the first call, so wrong arguments never touch the phone."""
+    def __init__(self, via):
+        self._via = via
+
+    @property
+    def via(self):
+        if self._via is None:
+            self._via = 'adb' if adb_alive() else 'shizuku'
+        return self._via
+
+    def sh(self, command, check=True, timeout=TIMEOUT):
+        runner = run_adb if self.via == 'adb' else run_shizuku
+        try:
+            done = runner(command, timeout)
+        except subprocess.TimeoutExpired:
+            raise Fail(f'app: the phone did not answer within {timeout} s ({self.via}).', 124)
+        except OSError as exc:
+            raise Fail(f'app: {self.via} could not start: {exc}', 1)
+        text = done.stdout + done.stderr
+        if self.via == 'shizuku' and 'Server is not running' in text:
+            raise Fail('app: Shizuku answers "Server is not running" (card shizuku has the restart).', 1)
+        if check and (done.returncode != 0 or re.search(r'^(Failure|Error|Exception|java\.lang\.|Unknown package)', text, re.M)):
+            raise Fail(f'app ({self.via}): ' + (text.strip() or f'exit {done.returncode}'), done.returncode or 1)
+        return done.stdout
+
+
+def q(text):
+    return shlex.quote(text)
+
+
+def need_package(name):
+    if not PACKAGE.match(name):
+        raise Fail(f'app: {name!r} is not a package name such as com.termux.api.', 2)
+    return name
+
+
+def installed(phone, package):
+    out = phone.sh('pm list packages ' + q(package), check=False)
+    return f'package:{package}' in out.split()
+
+
+def need_installed(phone, package):
+    if not installed(phone, need_package(package)):
+        raise Fail(f'app: {package} is not installed.', 1)
+
+
+# ---- reading package facts ----------------------------------------------------------------------------------
+def dump_blocks(text):
+    """{package: block text} from `dumpsys package packages`."""
+    blocks, name, lines = {}, None, []
+    for line in text.splitlines():
+        m = re.match(r'^  Package \[([^\]]+)\]', line)
+        if m:
+            if name:
+                blocks.setdefault(name, '\n'.join(lines))
+            name, lines = m.group(1), [line]
+        elif name:
+            if line and not line.startswith(' '):
+                blocks.setdefault(name, '\n'.join(lines))
+                name, lines = None, []
+            else:
+                lines.append(line)
+    if name:
+        blocks.setdefault(name, '\n'.join(lines))
+    return blocks
+
+
+def field(block, key):
+    m = re.search(r'\b' + re.escape(key) + r'=(\S+)', block)
+    return m.group(1) if m else ''
+
+
+def cmd_list(phone, args):
+    show_all = '--all' in args
+    words = [a.lower() for a in args if a != '--all']
+    third = set(line.split(':', 1)[1].strip() for line in phone.sh('pm list packages -3').splitlines() if ':' in line)
+    blocks = dump_blocks(phone.sh('dumpsys package packages'))
+    rows = []
+    for name in sorted(blocks):
+        if not show_all and name not in third:
+            continue
+        if words and not all(w in name.lower() for w in words):
+            continue
+        b = blocks[name]
+        rows.append((name, field(b, 'versionName') or '?', field(b, 'versionCode') or '?'))
+    kind = 'apps' if show_all else 'apps George installed'
+    print(f'{len(rows)} {kind} ({phone.via}). package  version  (code)')
+    for name, version, code in rows:
+        print(f'{name}  {version}  ({code})')
+    return 0
+
+
+def cmd_info(phone, args):
+    if len(args) != 1:
+        raise Fail(usage_text(), 2)
+    package = need_package(args[0])
+    out = phone.sh('dumpsys package ' + q(package))
+    block = dump_blocks(out).get(package)
+    if not block:
+        raise Fail(f'app: {package} is not installed.', 1)
+    state = phone.sh('pm list packages -d ' + q(package), check=False)
+    enabled = 'off (disabled)' if f'package:{package}' in state.split() else 'on'
+    print(f'{package} ({phone.via})')
+    print(f"  version   {field(block, 'versionName')} (code {field(block, 'versionCode')}), "
+          f"target SDK {field(block, 'targetSdk')}")
+    print(f'  state     {enabled}')
+    installer = field(block, 'installerPackageName')
+    print(f"  installer {installer if installer not in ('', 'null') else 'none'}")
+    print(f"  installed {re.search(r'firstInstallTime=(.+)', block).group(1).strip() if 'firstInstallTime=' in block else '?'}")
+    print(f"  updated   {re.search(r'lastUpdateTime=(.+)', block).group(1).strip() if 'lastUpdateTime=' in block else '?'}")
+    print(f"  path      {field(block, 'codePath')}")
+    return 0
+
+
+def parse_permissions(out):
+    """(requested names, {name: (kind, granted)}) from `dumpsys package PACKAGE`."""
+    requested, states, section = [], {}, None
+    for line in out.splitlines():
+        s = line.strip()
+        if s.endswith(':') and not s.startswith(('android.', 'com.')):
+            section = {'requested permissions:': 'requested', 'install permissions:': 'install',
+                       'runtime permissions:': 'runtime'}.get(s)
+            continue
+        if not s:
+            continue
+        m = re.match(r'^([A-Za-z0-9_.]+): granted=(true|false)', s)
+        if m and section in ('install', 'runtime'):
+            states[m.group(1)] = (section, m.group(2) == 'true')
+        elif section == 'requested' and re.match(r'^[A-Za-z0-9_.]+(: restricted=\S+)?$', s):
+            requested.append(s.split(':')[0])
+        elif not m:
+            section = None
+    return requested, states
+
+
+def permission_rows(phone, package):
+    out = phone.sh('dumpsys package ' + q(package))
+    if f'Package [{package}]' not in out:
+        raise Fail(f'app: {package} is not installed.', 1)
+    return parse_permissions(out)
+
+
+def cmd_perms(phone, args):
+    if len(args) != 1:
+        raise Fail(usage_text(), 2)
+    package = need_package(args[0])
+    requested, states = permission_rows(phone, package)
+    ops = dict(re.findall(r'^([A-Z_]+): (allow|deny|ignore|default|foreground)', phone.sh('appops get ' + q(package), check=False), re.M))
+    for name in requested:
+        op = SPECIAL_OPS.get(name.rsplit('.', 1)[-1])
+        if name not in states and op in ops:
+            states[name] = ('special', ops[op] == 'allow')
+    names = list(dict.fromkeys(requested + sorted(states)))
+    granted = sum(1 for n in names if states.get(n, ('', False))[1])
+    print(f'{package} ({phone.via}): {len(names)} permissions, {granted} granted. name  kind  granted')
+    for n in names:
+        kind, ok = states.get(n, ('not granted', False))
+        kind = 'requested' if kind == 'not granted' else kind
+        print(f"{n}  {kind}  {'yes' if ok else 'no'}")
+    return 0
+
+
+def full_permission(name):
+    if not PERMISSION.match(name):
+        raise Fail(f'app: {name!r} is not a permission name.', 2)
+    return name if '.' in name else 'android.permission.' + name
+
+
+def cmd_grant(phone, args, verb):
+    if len(args) != 2:
+        raise Fail(usage_text(), 2)
+    package, permission = need_package(args[0]), full_permission(args[1])
+    need_installed(phone, package)
+    phone.sh(f'pm {verb} {q(package)} {q(permission)}')
+    _, states = permission_rows(phone, package)
+    now = states.get(permission, ('', False))[1]
+    print(f"{package} {permission}: granted={'true' if now else 'false'} ({phone.via})")
+    return 0 if now == (verb == 'grant') else 1
+
+
+# ---- installing ---------------------------------------------------------------------------------------------
+def apk_facts(path):
+    """Package name and version of an APK, read by apkinfo on the Debian side."""
+    done = subprocess.run([PREFIX + '/bin/proot-distro', 'login', 'debian', '--', 'apkinfo', str(path)],
+                          capture_output=True, text=True, timeout=120)
+    facts = dict(re.findall(r'^(Package|Version name|Version code): (.+)$', done.stdout, re.M))
+    if 'Package' not in facts:
+        raise Fail(f'app: {path} is not a readable APK (apkinfo: {done.stderr.strip()[-200:] or done.stdout.strip()[-200:]}).', 1)
+    return facts['Package'].strip(), facts.get('Version name', '?').strip(), facts.get('Version code', '?').strip()
+
+
+def stage(source):
+    """Put the APK where both doors can read it. Returns (path, made_here)."""
+    STAGE.mkdir(parents=True, exist_ok=True)
+    if re.match(r'^https?://', source):
+        target = STAGE / (re.sub(r'[^A-Za-z0-9._-]', '_', source.rstrip('/').rsplit('/', 1)[-1])[:80] or 'download.apk')
+        if target.suffix != '.apk':
+            target = target.with_name(target.name + '.apk')
+        try:
+            request = urllib.request.Request(source, headers={'User-Agent': 'app-installer/1.0'})
+            with urllib.request.urlopen(request, timeout=120) as answer, open(target, 'wb') as out:
+                while chunk := answer.read(1 << 16):
+                    out.write(chunk)
+        except Exception as exc:  # noqa: BLE001 - every download failure is reported the same way
+            target.unlink(missing_ok=True)
+            raise Fail(f'app: the download failed: {exc}', 1)
+        return target, True
+    path = Path(source).expanduser()
+    if not path.is_file():
+        raise Fail(f'app: no file at {source}.', 2)
+    if str(path.resolve()).startswith(('/sdcard/', '/storage/emulated/0/')):
+        return path, False
+    target = STAGE / path.name
+    target.write_bytes(path.read_bytes())
+    return target, True
+
+
+def version_of(phone, package):
+    block = dump_blocks(phone.sh('dumpsys package ' + q(package), check=False)).get(package, '')
+    return field(block, 'versionName'), field(block, 'versionCode')
+
+
+def cmd_install(phone, args, update):
+    if len(args) != 1:
+        raise Fail(usage_text(), 2)
+    path, made = stage(args[0])
+    try:
+        package, version, code = apk_facts(path)
+        before = installed(phone, package)
+        if update and not before:
+            raise Fail(f'app: {package} is not installed, so there is nothing to update. Use: app install', 1)
+        old = version_of(phone, package) if before else None
+        if phone.via == 'adb':
+            done = subprocess.run([PREFIX + '/bin/adb', '-s', ADB_TARGET, 'install', '-r', str(path)],
+                                  capture_output=True, text=True, timeout=600)
+            text = (done.stdout + done.stderr).strip()
+            if done.returncode != 0 or 'Success' not in text:
+                raise Fail(f'app (adb): {text}', done.returncode or 1)
+        else:
+            # Through rish, Android cannot take the file straight from /sdcard (the same "Failed transaction").
+            # A copy in /data/local/tmp installs.
+            local = f'/data/local/tmp/app-install-{os.getpid()}.apk'
+            text = phone.sh(f'cp {q(str(path))} {local} && pm install -r {local}; r=$?; rm -f {local}; exit $r',
+                            timeout=600).strip()
+            if 'Success' not in text:
+                raise Fail(f'app (shizuku): {text}', 1)
+        now = version_of(phone, package)
+        if old:
+            print(f'updated {package}: {old[0]} ({old[1]}) -> {now[0]} ({now[1]}) ({phone.via})')
+        else:
+            print(f'installed {package} {now[0]} ({now[1]}) ({phone.via})')
+        return 0
+    finally:
+        if made:
+            path.unlink(missing_ok=True)
+
+
+def simple(phone, args, command, done_word):
+    if len(args) != 1:
+        raise Fail(usage_text(), 2)
+    package = need_package(args[0])
+    need_installed(phone, package)
+    out = phone.sh(command.format(q(package))).strip()
+    print(f'{done_word} {package} ({phone.via})' + (f': {out}' if out and out not in ('Success',) else ''))
+    return 0
+
+
+def cmd_uninstall(phone, args):
+    code = simple(phone, args, 'pm uninstall {}', 'uninstalled')
+    if installed(phone, args[0]):
+        raise Fail(f'app: {args[0]} is still installed after the uninstall.', 1)
+    return code
+
+
+def cmd_enable(phone, args, on):
+    code = simple(phone, args, 'pm enable {}' if on else 'pm disable-user --user 0 {}', 'enabled' if on else 'disabled')
+    disabled = f'package:{args[0]}' in phone.sh('pm list packages -d ' + q(args[0]), check=False).split()
+    if disabled == on:
+        raise Fail(f'app: {args[0]} did not change state.', 1)
+    return code
+
+
+# ---- opening, defaults, front ---------------------------------------------------------------------------------
+def launcher_activity(phone, package):
+    out = phone.sh('cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER '
+                   + q(package), check=False)
+    lines = [line.strip() for line in out.splitlines() if '/' in line]
+    if not lines:
+        raise Fail(f'app: {package} has no screen to open.', 1)
+    return lines[-1]
+
+
+def hidden_display(name):
+    done = subprocess.run([PREFIX + '/bin/proot-distro', 'login', 'debian', '--', 'bash',
+                           '/root/hidden-operator/scripts/hidden_display.sh', 'list'], capture_output=True, text=True, timeout=60)
+    for line in done.stdout.splitlines():
+        m = re.match(r'^\s*(\S+)\s+id=(\d+)\s+(\S+)', line)
+        if m and m.group(1) == name and m.group(2) != '0' and m.group(3) == 'UP':
+            return m.group(2)
+    raise Fail(f'app: no hidden screen named {name} (deb bash /root/hidden-operator/scripts/hidden_display.sh list).', 1)
+
+
+def cmd_open(phone, args):
+    if len(args) not in (1, 3) or (len(args) == 3 and args[1] not in ('--display', '--hidden')):
+        raise Fail(usage_text(), 2)
+    package = need_package(args[0])
+    need_installed(phone, package)
+    activity = launcher_activity(phone, package)
+    display = None
+    if len(args) == 3:
+        display = hidden_display(args[2]) if args[1] == '--hidden' else args[2]
+        if not display.isdigit():
+            raise Fail('app: --display needs a number.', 2)
+    extra = f' --display {display}' if display else ''
+    out = phone.sh(f'am start -W{extra} -n {q(activity)}').strip()
+    status = re.search(r'^Status: (\S+)', out, re.M)
+    where = f'screen {display}' if display else "George's visible screen"
+    print(f"opened {activity} on {where} ({phone.via})" + (f', status {status.group(1)}' if status else ''))
+    return 0
+
+
+def role_holders(phone, role):
+    out = phone.sh('cmd role get-role-holders --user 0 ' + q(role), check=False)
+    return [line.strip() for line in out.splitlines() if PACKAGE.match(line.strip())]
+
+
+def cmd_default(phone, args):
+    if len(args) not in (1, 2, 3):
+        raise Fail(usage_text(), 2)
+    kind = args[0].lower()
+    if kind in ROLES or kind.startswith('android.app.role.'):
+        if len(args) == 3:
+            raise Fail(usage_text(), 2)
+        role = ROLES.get(kind, args[0])
+        if len(args) == 2:
+            package = need_package(args[1])
+            need_installed(phone, package)
+            phone.sh(f'cmd role add-role-holder --user 0 {q(role)} {q(package)}')
+        holders = role_holders(phone, role)
+        print(f"{role}: {', '.join(holders) or 'no app'} ({phone.via})")
+        return 0 if len(args) == 1 or args[1] in holders else 1
+    domain = re.sub(r'^https?://', '', kind).split('/')[0]
+    if not DOMAIN.match(domain):
+        raise Fail(f'app: {args[0]!r} is not a kind (browser, dialer, sms, home, assistant) or a domain.', 2)
+    turn = 'on'
+    if len(args) == 3:
+        turn = args[2]
+        if turn not in ('on', 'off'):
+            raise Fail(usage_text(), 2)
+    if len(args) >= 2:
+        package = need_package(args[1])
+        need_installed(phone, package)
+        phone.sh(f"pm set-app-links-user-selection --user 0 --package {q(package)} {'true' if turn == 'on' else 'false'} {q(domain)}")
+    out = phone.sh('cmd package query-activities --brief --user 0 -a android.intent.action.VIEW '
+                   f'-c android.intent.category.BROWSABLE -d {q("https://" + domain + "/")}', check=False)
+    candidates = list(dict.fromkeys(line.strip().split('/')[0] for line in out.splitlines()
+                                    if '/' in line and PACKAGE.match(line.strip().split('/')[0])))
+    print(f'https://{domain}/ ({phone.via}): {len(candidates)} app(s) can open it')
+    chosen = None
+    for package in candidates:
+        state, selected = link_state(phone, package, domain)
+        if state is None:
+            print(f'  {package}  (a browser or a general handler)')
+            continue
+        opens = selected or state in VERIFIED
+        print(f"  {package}  domain {state}, user choice {'on' if selected else 'off'}, "
+              f"opens these links itself: {'yes' if opens else 'no'}")
+        if len(args) >= 2 and package == args[1]:
+            chosen = selected
+    if len(args) == 1:
+        return 0
+    if chosen is None:
+        print(f'{args[1]} does not declare {domain} as one of its links.', file=sys.stderr)
+        return 1
+    return 0 if chosen == (turn == 'on') else 1
+
+
+def link_state(phone, package, domain):
+    """(verification state, chosen by the user) of PACKAGE for DOMAIN; (None, False) when it does not declare it."""
+    out = phone.sh(f'pm get-app-links --user 0 {q(package)}', check=False)
+    m = re.search(r'^\s+' + re.escape(domain) + r': (\S+)$', out, re.M)
+    if not m:
+        return None, False
+    enabled = re.search(r'Enabled:\n((?:\s{10}\S+\n?)+)', out)
+    return m.group(1), bool(enabled and domain in enabled.group(1).split())
+
+
+def cmd_front(phone, args):
+    if args:
+        raise Fail(usage_text(), 2)
+    out = phone.sh('dumpsys activity activities')
+    display, found = None, []
+    for line in out.splitlines():
+        m = re.match(r'^Display #(\d+)', line)
+        if m:
+            display = m.group(1)
+        m = re.search(r'topResumedActivity=ActivityRecord\{\S+ \S+ (\S+)', line)
+        if m and display is not None:
+            found.append((display, m.group(1)))
+    if not found:
+        print(f'No app is in front (the screen may be off) ({phone.via}).')
+        return 0
+    for display, activity in found:
+        where = "George's visible screen" if display == '0' else f'screen {display}'
+        print(f'{where}: {activity.split("/")[0]}  ({activity}) ({phone.via})')
+    return 0
+
+
+def usage_text():
+    return __doc__.strip().split('\n\n', 1)[1]
+
+
+def main(argv):
+    args = argv[1:]
+    via = None
+    if '--via' in args:
+        i = args.index('--via')
+        if i + 1 >= len(args) or args[i + 1] not in ('adb', 'shizuku'):
+            print('app: --via adb | --via shizuku', file=sys.stderr)
+            return 2
+        via = args[i + 1]
+        del args[i:i + 2]
+    if not args:
+        print(usage_text(), file=sys.stderr)
+        return 2
+    verb, rest = args[0], args[1:]
+    verbs = {
+        'list': cmd_list, 'info': cmd_info, 'perms': cmd_perms, 'open': cmd_open, 'default': cmd_default, 'front': cmd_front,
+        'install': lambda p, a: cmd_install(p, a, False), 'update': lambda p, a: cmd_install(p, a, True),
+        'uninstall': cmd_uninstall, 'enable': lambda p, a: cmd_enable(p, a, True), 'disable': lambda p, a: cmd_enable(p, a, False),
+        'stop': lambda p, a: simple(p, a, 'am force-stop {}', 'stopped'),
+        'clear': lambda p, a: simple(p, a, 'pm clear {}', 'cleared the data of'),
+        'grant': lambda p, a: cmd_grant(p, a, 'grant'), 'revoke': lambda p, a: cmd_grant(p, a, 'revoke'),
+    }
+    if verb not in verbs:
+        print(usage_text(), file=sys.stderr)
+        return 2
+    try:
+        if verb in ('install', 'update') and len(rest) != 1:
+            raise Fail(usage_text(), 2)
+        return verbs[verb](Phone(via), rest)
+    except Fail as exc:
+        print(str(exc), file=sys.stderr)
+        return exc.code
+
+
+if __name__ == '__main__':
+    raise SystemExit(main(sys.argv))

@@ -56,6 +56,8 @@ The families
 - usage: tokens and calls today, this week and this month on george's and g1's API accounts. Print: card usage
 - lessons: keep George's correction for good: a fact line on every later call, or a filter rule in the gate. Print: card lessons
 - self: change this harness's own code: working copy, test, land on main, update the live folder. Print: card self
+- skills: George's skill packs for kinds of jobs: Word, Excel, PowerPoint, PDF, research, code review, legal, data, design and more. Before a job that matches one, print it with skill show NAME and follow it. Print: card skills
+- apps: list, install, update, uninstall, disable, enable, stop, clear and open apps; read, grant and revoke permissions; default apps for links; the app in front. Print: card apps
 
 Built in, no command needed
 - Web search and reading a public web page are done by the provider's own tools in this client.

@@ -298,6 +298,18 @@ sh ~/interaction-harness/toolbox/install.sh
 
 **Live proof (Nov 11, 2026).** Six questions on each engine, through the real launcher with `--loop -y` and an isolated state folder: a screenshot with its path and size, the Berkeley unread count and newest subject, the bakery site's sessions for seven days, the laptop's hostname, an exact edit of a file, and a one-page PDF in Downloads. Twelve of twelve exited 0 with the right command, and each answer matched a direct check. Every run printed the family's card first, then ran the command from it. With the index in place the second call still read the cache: 13,939 tokens on Claude, 10,810 of 11,584 on GPT-6.1 Sol.
 
+## Skills and apps
+
+**Skills.** George's setup holds 256 skill packs on this phone: folders with a `SKILL.md` that say how to do one kind of job, sometimes with scripts and reference files. They come from his Claude Code (17), its installed plugins (82, including plugin commands), his Codex (9) and its plugins (39), his own projects (19), the downloaded plugin catalogs (44), grok (22), Antigravity (9) and Python packages (15). The list of folders is `DEFAULT_ROOTS` in `toolbox/bin/skill`; when one name appears in two places, the first folder in that list wins. Claude Code's own reference files for its claude-api skill lived only under `/tmp/claude-0/bundled-skills`, which is wiped; they were copied to `/root/.skills-kept/claude-api` with a short reading guide. Claude Code's built-in commands such as `/code-review` and `/security-review` live inside the program and are not files.
+
+`skill find WORDS`, `skill show NAME [PART]`, `skill files NAME`, `skill list [GROUP]` and `skill groups` run on the Termux side and read the Debian folders through the proot root. `skill show` prints lane notes before the skill's own text: what the skill's tool names (Read, Write, WebSearch, subagents, MCP connectors, Artifacts) mean in this client, where its folder is, which of its programs are installed and which are missing. A skill longer than 7,000 characters comes in parts. The index line tells the model to print a matching skill and follow it.
+
+To make the document skills work as written, these were installed on the Debian side on Nov 11, 2026: LibreOffice 25.2 (writer, calc, impress, no GUI), pandoc, poppler-utils, qpdf, fonts-liberation; with pip `--break-system-packages`: openpyxl, python-docx, python-pptx, pandas, markitdown, pdfplumber, matplotlib, pdf2image, pytesseract, pypdfium2; with npm `-g`: docx, pptxgenjs, react, react-dom, react-icons, sharp. `/node_modules` links to `/usr/local/lib/node_modules`, so a script in any folder finds them.
+
+**Apps.** `app` lists, installs (from a file or a link), updates, uninstalls, disables, enables, force-stops, clears and opens apps, reads, grants and revokes permissions, reads and sets the default app for a role or a domain, and names the app in front on each screen. It uses adb at `127.0.0.1:5555`, or Shizuku when adb does not answer; `--via adb|shizuku` picks one. Through Shizuku, Android refuses rish's pipe and any `/sdcard` file as the output of `pm` and the other `cmd` services ("Failed transaction"), so `app` writes to `/data/local/tmp` and reads a copy from `/sdcard/Download/.app-install`. The same cause broke `toolbox/bin/rish` for every `cmd`, `pm` and `settings` call; it now writes to `/data/local/tmp` first too.
+
+Tests: `test_skills_apps.py`.
+
 ## Rules and profile pages
 
 `george` and `g1` used to start every call knowing nothing about the operator. Each call now carries the operator's own pages, read from the files he already keeps. Git holds the mechanism only. The text of the pages never enters the repository.
@@ -983,7 +995,7 @@ Tests: `test_extra_lanes.py` (every lane, every knob, and `both`, all with fakes
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool test_agentd test_agentd_doors test_lane_mods test_gate_rules test_judge test_google_accounts test_tools_default_on test_first_page test_stamp test_live_findings test_extra_lanes test_lessons test_corrections test_self_update test_habit_checks'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool test_agentd test_agentd_doors test_lane_mods test_gate_rules test_judge test_google_accounts test_tools_default_on test_first_page test_stamp test_live_findings test_extra_lanes test_lessons test_corrections test_self_update test_habit_checks test_skills_apps'
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes
