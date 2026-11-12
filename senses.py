@@ -137,7 +137,8 @@ class TurnSenses:
                 if remaining:params['max_tool_calls']=remaining
                 else:params['tool_choice']='none'
             check_request_size(params,self.engine)
-            response=client.responses.create(**params);self.observe(response)
+            from openai_transport import complete_response
+            response=complete_response(client.responses,**params);self.observe(response)
         else:
             params=dict(model=model,max_tokens=max_output_tokens,thinking={'type':'adaptive'},output_config={'effort':effort},
                 cache_control={'type':'ephemeral'},

@@ -17,8 +17,9 @@ def main():
         print('Unknown harness entry point.', file=sys.stderr)
         return 2
     read_fd, write_fd = os.pipe()
-    values = {name: os.environ[name] for name in ('OPENAI_API_KEY','ANTHROPIC_API_KEY','DEFAULT_ENGINE','OPENAI_MODEL','ANTHROPIC_MODEL','HARNESS_STATE_DIR','GEMINI_API_KEY','GEMINI_MODEL','OPENROUTER_API_KEY','OPENROUTER_BASE_URL','OPENROUTER_MODEL','GLM_OPENAI_URL','GLM_MODEL','VERTEX_MODEL') if os.environ.get(name)}
+    values = {name: os.environ[name] for name in ('OPENAI_API_KEY','ANTHROPIC_API_KEY','DEFAULT_ENGINE','OPENAI_MODEL','ANTHROPIC_MODEL','HARNESS_STATE_DIR','NO_COLOR','GEMINI_API_KEY','GEMINI_MODEL','OPENROUTER_API_KEY','OPENROUTER_BASE_URL','OPENROUTER_MODEL','GLM_OPENAI_URL','GLM_MODEL','VERTEX_MODEL') if os.environ.get(name)}
     values['HARNESS_CALLER_CWD']=os.getcwd()
+    if 'NO_COLOR' in os.environ: values['NO_COLOR']=os.environ['NO_COLOR']
     parent_socket, child_socket = socket.socketpair()
     command = ['proot-distro', 'login', 'debian', '--', str(ROOT / '.venv/bin/python'),
                '-B', str(ROOT / 'bootstrap.py'), str(read_fd), str(child_socket.fileno()), *sys.argv[1:]]
@@ -36,11 +37,19 @@ def main():
             json.dump(values, stream)
         with parent_socket, parent_socket.makefile('rwb') as stream:
             while True:
-                line=stream.readline(1048576)
+                # The terminal also delivers SIGINT to the Debian chat. Let it
+                # stop its turn; keep its native bridge alive for the next turn.
+                previous = signal.signal(signal.SIGINT, lambda *_: None)
+                try: line=stream.readline(1048576)
+                finally: signal.signal(signal.SIGINT, previous)
                 if not line: break
                 try: result=handle(json.loads(line))
+                except KeyboardInterrupt:
+                    result={'interrupted':True,'approved':True,'exit_code':130,'stdout':'','stderr':''}
                 except (OSError,ValueError,TypeError): result={'error':'The native Termux operation failed.'}
-                stream.write(json.dumps(result).encode()+b'\n'); stream.flush()
+                previous = signal.signal(signal.SIGINT, lambda *_: None)
+                try: stream.write(json.dumps(result).encode()+b'\n'); stream.flush()
+                finally: signal.signal(signal.SIGINT, previous)
         return child.wait()
     except KeyboardInterrupt:
         child.send_signal(signal.SIGINT)

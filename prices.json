@@ -1,0 +1,101 @@
+{
+  "about": "Prices and context windows used by the chat status line and /cost. Edit freely. A model with no entry, or a usage shape with no price here, shows no money.",
+  "checked": "2026-11-12",
+  "models": {
+    "claude-opus-5-5": {
+      "engine": "anthropic",
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "window_tokens": 1000000,
+      "window_source": "measured in a live call on 2026-11-11",
+      "usd_per_million_tokens": {
+        "input": 4.0,
+        "cache_write_5m": 5.0,
+        "cache_write_1h": 8.0,
+        "cache_read": 0.2,
+        "output": 20.0
+      },
+      "usd_per_web_search": 0.01,
+      "fast": {
+        "usd_per_million_tokens": {
+          "input": 8.0,
+          "cache_write_5m": 10.0,
+          "cache_write_1h": 16.0,
+          "cache_read": 0.4,
+          "output": 40.0
+        }
+      },
+      "verified": true
+    },
+    "gpt-6.1-sol": {
+      "engine": "openai",
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "window_tokens": 1050000,
+      "window_source": "https://developers.openai.com/api/docs/models/gpt-6.1-sol",
+      "usd_per_million_tokens": {
+        "input": 2.0,
+        "cache_write_30m": 2.5,
+        "cache_write_12h": 5.0,
+        "cache_read": 0.1,
+        "output": 10.0
+      },
+      "usd_per_web_search": 0.01,
+      "long_context": {
+        "above_input_tokens": 272000,
+        "usd_per_million_tokens": {
+          "input": 4.0,
+          "cache_write_30m": 5.0,
+          "cache_write_12h": 10.0,
+          "cache_read": 0.2,
+          "output": 15.0
+        }
+      },
+      "verified": true,
+      "max_input_tokens": 922000,
+      "max_output_tokens": 128000
+    },
+    "gpt-6-luna": {
+      "engine": "openai",
+      "verified": true,
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "usd_per_million_tokens": {
+        "input": 0.1,
+        "output": 0.5,
+        "cache_read": 0.01,
+        "cache_write_30m": 0.125,
+        "cache_write_12h": 0.25
+      },
+      "long_context": {
+        "above_input_tokens": 272000,
+        "usd_per_million_tokens": {
+          "input": 0.2,
+          "output": 0.75,
+          "cache_read": 0.02,
+          "cache_write_30m": 0.25,
+          "cache_write_12h": 0.5
+        }
+      }
+    },
+    "claude-haiku-5-5": {
+      "engine": "anthropic",
+      "verified": true,
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "usd_per_million_tokens": {
+        "input": 0.1,
+        "output": 0.5,
+        "cache_read": 0.01,
+        "cache_write_5m": 0.125,
+        "cache_write_1h": 0.2
+      },
+      "long_context": {
+        "above_input_tokens": 100000,
+        "usd_per_million_tokens": {
+          "input": 0.5,
+          "output": 2.5,
+          "cache_read": 0.05,
+          "cache_write_5m": 0.625,
+          "cache_write_1h": 1
+        }
+      }
+    }
+  }
+}

@@ -17,6 +17,8 @@ import api_tools_cli
 import lane_mods
 import extra_lanes
 import knobs as knobs_mod
+import chat_screen
+from chat_progress import phase
 
 ALL_ENGINES = ['openai', 'anthropic', *extra_lanes.LANES.keys()]
 from execution_images import prepare_execution
@@ -32,15 +34,15 @@ from storage import (Store, history_messages, atomic_json,
 HISTORY_CHARS_DEFAULT = {'anthropic': 2400000, 'openai': 650000}
 
 def native(request):
+    if request.get('op') == 'exec': phase('Running a command', request.get('command', ''))
     fd = os.environ.get('HARNESS_BRIDGE_FD')
     if fd is None: raise h.HarnessError('Use the Termux harness launcher for --exec or --listen.')
     try:
         with socket.socket(fileno=os.dup(int(fd))) as sock:
             with sock.makefile('rwb') as stream:
-                stream.write(json.dumps(request).encode()+b'\n'); stream.flush()
-                line = stream.readline(16777216)
-                if not line: raise h.HarnessError('The Termux command bridge closed.')
-                result = json.loads(line)
+                from chat_bridge import exchange
+                result = exchange(stream, request)
+                if result is None: raise h.HarnessError('The Termux command bridge closed.')
     except (OSError, ValueError) as exc:
         raise h.HarnessError('The Termux command bridge failed.') from exc
     if result.get('error'): raise h.HarnessError(result['error'])
@@ -48,77 +50,11 @@ def native(request):
 
 
 def run_chat(args, model):
-    """Pin one session for the whole loop; each turn still uses the standard gate."""
-    try:
-        store=Store(h.STATE)
-        try: sid=store.select_session(args.session,args.continuing)
-        finally: store.close()
-    except (ValueError,OSError) as exc:
-        print(str(exc),file=sys.stderr); return 2
-    except Exception as exc:
-        print(f'Unexpected client error ({type(exc).__name__}).',file=sys.stderr); return 2
-    options=['--engine',args.engine,'--model',model,'--effort',args.effort,
-             '--timeout',str(args.timeout),'--usage-log',str(args.usage_log),
-             '--session',sid,'--turns',str(args.turns),'--history-chars',str(args.history_chars),
-             '--exec-timeout',str(args.exec_timeout)]
-    if args.no_normalize: options.append('--no-normalize')
-    if args.execute: options.append('--exec')
-    if args.loop: options.extend(['--loop','--max-turns',str(args.max_turns)])
-    if args.yes: options.append('--yes')
-    options.extend(senses_cli.common_options(args))
-    options.extend(recall_cli.common_options(args))
-    options.extend(knobs_mod.from_args(args).cli_options())
-    last_status=0
-    lane_mods.session_start()
-    loop_options=options if args.loop else [*options,'--loop','--max-turns',str(args.max_turns)]
-    if args.text: last_status=main([*options,*api_tools_cli.options(args),*senses_cli.attachment_options(args),'--',' '.join(args.text)])
-    while True:
-        try:
-            # Prompts stay off stdout so redirected output remains answer-only.
-            print('> ',end='',file=sys.stderr,flush=True)
-            raw=sys.stdin.readline(h.MAX_INPUT_CHARS+2)
-            if raw=='': return last_status
-            if len(raw)>h.MAX_INPUT_CHARS and not raw.endswith('\n'):
-                # Drain the rest of an oversized line so its tail cannot become a new request.
-                while raw and not raw.endswith('\n'): raw=sys.stdin.readline(h.MAX_INPUT_CHARS+2)
-                print(f'Input exceeds {h.MAX_INPUT_CHARS} characters.',file=sys.stderr)
-                last_status=2; continue
-            raw=raw.rstrip('\r\n')
-            if raw.strip().lower() in {'exit','quit'}: return last_status
-            if not raw.strip(): continue
-            # George's mod commands (lane_mods.py): /on /off /mods /where /up /voice /usage /autopilot, and v to talk.
-            handled,spoken=lane_mods.chat_line(raw,sid,lambda text:main([*loop_options,*api_tools_cli.options(args),'--',text]),native)
-            if handled:continue
-            if spoken:raw=spoken
-            handled=recall_cli.chat_command(raw,options,args)  # /on recall, /off recall, /fork, /rewind
-            if handled is None:handled=reply_judge.chat_switch(raw,h.STATE)  # /on judge, /off judge
-            if handled is not None:last_status=handled;continue
-            # Only a line the operator types reaches the advisor. It answers him and does not make the working model speak.
-            if advisor.is_trigger(raw):last_status=main([*options,*advisor.chat_arguments(raw,args)]);continue
-            # /on stamp and /off stamp belong to the rules stamp, not to the API tool switches below.
-            if stamp.is_switch(raw):last_status=stamp.run_switch(raw,h.STATE);continue
-            try:
-                if api_tools_cli.chat_command(raw,args,h.STATE,model):continue
-            except ValueError as exc:print(str(exc),file=sys.stderr);last_status=2;continue
-            if raw.strip()=='/both' or raw.startswith('/both '):
-                question=raw[len('/both'):].strip()
-                if not question:print('Usage: /both QUESTION',file=sys.stderr);last_status=2;continue
-                bopts=['--engine',args.engine,'--effort',args.effort,'--timeout',str(args.timeout),
-                       '--usage-log',str(args.usage_log),'--session',sid,'--turns',str(args.turns),
-                       '--history-chars',str(args.history_chars),'--both']
-                if args.no_normalize:bopts.append('--no-normalize')
-                bopts.extend(senses_cli.common_options(args))
-                bopts.extend(knobs_mod.from_args(args).cli_options())
-                last_status=main([*bopts,'--',question]);continue
-            try:attachment_flags,raw=senses_cli.chat_input(raw)
-            except ValueError as exc:print(str(exc),file=sys.stderr);last_status=2;continue
-            last_status=main([*options,*api_tools_cli.options(args),*attachment_flags,'--',raw])
-            if last_status==130: return 130
-        except KeyboardInterrupt:
-            print('',file=sys.stderr); return 130
+    import chat_screen
+    return chat_screen.run_chat(args, model, sys.modules[__name__])
 
 
-def main(argv=None):
+def main(argv=None, *, literal=False):
     parser=argparse.ArgumentParser(description='Direct answers, bounded memory, optional confirmed Termux execution.')
     parser.epilog='Screen: in an approved --loop command, screen snap or look PATH attaches the file to the next model turn. Run card screen for targets and commands.'
     parser.epilog+=' Stamp: /off stamp and /on stamp switch the operator_rules_stamp record that follows the request on every call. Type either one in a chat or as the whole question.'
@@ -126,6 +62,7 @@ def main(argv=None):
     parser.add_argument('--model',default=None)
     parser.add_argument('--effort',choices=['low','medium','high','xhigh','max'],default=h.DEFAULT_EFFORT,help='Reasoning effort on either engine (default: high).')
     parser.add_argument('--chat','--interactive',dest='chat',action='store_true',help='Stay open for multiple turns; automatic on an interactive terminal with no input.')
+    parser.add_argument('--plain',action='store_true',help='Turn off chat colors (also NO_COLOR).')
     parser.add_argument('--timeout',type=float,default=1800)
     parser.add_argument('--usage-log',type=Path,default=h.STATE/'usage.jsonl')
     group=parser.add_mutually_exclusive_group()
@@ -159,6 +96,7 @@ def main(argv=None):
     if args.engine not in set(ALL_ENGINES): parser.error('DEFAULT_ENGINE must be one of: '+', '.join(ALL_ENGINES)+'.')
     if not 1<=args.timeout<=3600: parser.error('--timeout must be between 1 and 3600 seconds.')
     if not 1<=args.turns<=1000000: parser.error('--turns must be between 1 and 1000000.')
+    args._history_chars_default = args.history_chars is None
     if args.history_chars is None: args.history_chars=HISTORY_CHARS_DEFAULT.get(args.engine,650000)
     if not 0<=args.history_chars<=4000000: parser.error('--history-chars must be between 0 and 4000000.')
     if not 1<=args.exec_timeout<=86400: parser.error('--exec-timeout must be between 1 and 86400.')
@@ -192,8 +130,8 @@ def main(argv=None):
     switched=reply_judge.typed(args)  # /on judge, /off judge typed as the whole question
     if switched is not None:return switched
     # /on stamp and /off stamp as the whole question: flip the switch, no model call.
-    if args.text and stamp.is_switch(' '.join(args.text)):return stamp.run_switch(' '.join(args.text),h.STATE)
-    corrected=corrections.typed(args,model)  # /wrong WORDS saves the correction case and becomes a loop task for this lane
+    if not literal and args.text and stamp.is_switch(' '.join(args.text)):return stamp.run_switch(' '.join(args.text),h.STATE)
+    corrected=None if literal else corrections.typed(args,model)  # /wrong WORDS saves the correction case and becomes a loop task for this lane
     if corrected is not None:return corrected
     store=None; row_id=None; events=[]; reply=None; execution=None;second=reply_judge.Second()
     try:
@@ -232,6 +170,7 @@ def main(argv=None):
                 row_id=None;events=[];reply=None;execution=None
                 # The turn number rides in the continuation message, which is saved exactly as sent.
                 # Each request is then a byte-for-byte prefix of the next, so provider caches keep hitting.
+                chat_screen.begin_turn()
                 current=cleaned if step==1 else ('Continue the original task using the recorded execution observation. '
                     f'Return execution_payload null when finished. This is model turn {step} of {ceiling}.')
                 current_raw=raw if step==1 else current
@@ -271,6 +210,7 @@ def main(argv=None):
                                       knobs=knobs_mod.from_args(args))
                 store.finish(row_id,reply,events)
                 exchange={'raw_input':current_raw,'normalized_input':current,'reply':reply.model_dump(),'engine':args.engine,'model':model}
+                if literal and step==1: exchange['literal_input']=True
                 if args.loop and step==1:exchange['loop_context']=loop_context['content']
                 metadata=turn_metadata(events);exchange.update(metadata)
                 second.record(store,row_id,exchange)
@@ -278,9 +218,10 @@ def main(argv=None):
                 if recalled:exchange['recall_notes']=recalled
                 if args.loop:exchange['loop_step']=step
                 store.save_session(session,exchange,args.turns)
-                sys.stdout.write(h.display_text(reply,metadata['sources']));sys.stdout.flush()
+                sys.stdout.write(chat_screen.display_reply(reply,metadata['sources']));sys.stdout.flush()
                 if not (args.loop and reply.execution_payload):  # the turn's final answer: proof marks, thread tree, voice
                     lane_mods.turn_end(args,session,cleaned,reply,past,lambda:atomic_json(store.sessions/(sid+'.json'),session))
+                chat_screen.after_reply(args,session,events)
                 if not (args.execute and reply.execution_payload):return last_exit
                 request={'op':'exec','command':reply.execution_payload,'timeout':args.exec_timeout}
                 if args.yes:request['auto_confirm']=True
@@ -292,8 +233,8 @@ def main(argv=None):
                 store.finish(row_id,reply,events,execution=execution)
                 exchange['execution_result']=execution
                 atomic_json(store.sessions/(sid+'.json'),session)
-                if execution.get('stdout'):sys.stdout.write(execution['stdout']);sys.stdout.flush()
-                if execution.get('stderr'):sys.stderr.write(execution['stderr']);sys.stderr.flush()
+                if execution.get('stdout'):sys.stdout.write(chat_screen.command_output(execution['stdout']));sys.stdout.flush()
+                if execution.get('stderr'):sys.stderr.write(chat_screen.command_output(execution['stderr'],error=True));sys.stderr.flush()
                 if execution.get('timed_out'):print('Command timed out.',file=sys.stderr)
                 if execution.get('truncated'):print('Command output was truncated at the capture limit.',file=sys.stderr)
                 code=int(execution.get('exit_code',0))
@@ -309,15 +250,15 @@ def main(argv=None):
         return last_exit
     except KeyboardInterrupt:
         if store and row_id: store.finish(row_id,reply,events,error='Stopped.',execution=execution,status='interrupted')
-        print('Stopped.',file=sys.stderr); return 130
+        chat_screen.error('Stopped.'); return 130
     except (h.HarnessError,ValueError) as exc:
         if store and row_id: store.finish(row_id,reply,events,error=str(exc),execution=execution)
-        print(str(exc),file=sys.stderr); return 2
+        chat_screen.error(str(exc)); return 2
     except Exception as exc:
         message=f'Unexpected client error ({type(exc).__name__}).'
         if store and row_id:
             try: store.finish(row_id,reply,events,error=message,execution=execution)
             except Exception: pass
-        print(message,file=sys.stderr); return 2
+        chat_screen.error(message); return 2
     finally:
         if store: store.close()

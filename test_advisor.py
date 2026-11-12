@@ -134,7 +134,8 @@ class TriggerTests(AdvisorCase):
         self.assertEqual(len(client.calls), 2)
         self.assertIsNone(self.packet(client.calls[0])['operator_question'])
         self.assertEqual(self.packet(client.calls[1])['operator_question'], 'why did it fail?')
-        self.assertEqual(out.getvalue(), reply().direct_answer + '\n' + ('Advisor (claude-opus-5-5):\n' + ADVICE + '\n') * 2)
+        self.assertEqual(out.getvalue(), reply().direct_answer + '\n' + (ADVICE + '\n') * 2)
+        self.assertEqual(err.getvalue().count('Advisor (claude-opus-5-5):'), 2)
 
     def test_chat_passes_a_question_that_starts_with_a_dash(self):
         client = FakeAdvisor(claude_reply())

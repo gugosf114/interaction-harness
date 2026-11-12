@@ -291,7 +291,8 @@ def run(args, working_model):
             advice = request_advice(packet, engine=engine, model=model, effort=args.effort, timeout=args.timeout,
                                     asked=' '.join(part for part in (question, task) if part),
                                     log_path=args.usage_log, events=events)
-            sys.stdout.write(LABEL.format(model=model) + '\n' + advice + '\n')
+            import chat_screen
+            sys.stdout.write(chat_screen.display_advice(LABEL.format(model=model), advice))
             sys.stdout.flush()
             session['turns'][-1].setdefault('advisor_notes', []).append(
                 {'model': model, 'engine': engine, 'text': advice, 'question': question, 'created_at': now()})
@@ -300,6 +301,7 @@ def run(args, working_model):
             store.finish(row_id, None, events, status='advisor')
             with store.db:
                 store.db.execute('UPDATE history SET direct_answer=? WHERE id=?', (advice, row_id))
+            chat_screen.after_reply(args, session, events, lane=(engine, model))
         return 0
     except KeyboardInterrupt:
         if store and row_id:

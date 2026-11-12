@@ -270,7 +270,8 @@ class Runtime:
         for step in range(self.max_steps):
             check_request_size(params,self.engine)
             if self.engine=='openai':
-                response=client.responses.create(**params)
+                from openai_transport import complete_response
+                response=complete_response(client.responses,**params)
                 if self.settings.on('background'):
                     initial=response.status;deadline=time.monotonic()+1800
                     try:

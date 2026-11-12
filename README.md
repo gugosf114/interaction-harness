@@ -1041,3 +1041,73 @@ Exit codes: 0 for success, recall with no match, or a declined execution; 2 for 
 - [Anthropic schema support](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
 - [Anthropic prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)
 - [Anthropic model IDs](https://platform.claude.com/docs/en/models/overview)
+
+## Chat screen
+
+The interactive prompt now keeps pasted text together, saves input history, and
+shows a status line after each gated reply. The screen lives in `chat_screen.py`;
+`cli.run_chat` hands it the existing turn runner. The answer and proposed command
+still go to stdout. Prompts, settings, help, phase updates and status go to stderr.
+
+The status shows lane/model, thinking level, session and exchange, input/output
+and cache-read tokens, context use, elapsed seconds and every off switch. Token
+counts match `history.db` and include working-model correction attempts. Context
+use counts the **last provider request**, not the sum of input billed across tool
+calls or retries. It includes system pages, tool definitions and conversation.
+The editable `prices.json` holds the measured one-million-token Claude window and
+OpenAI's documented 1,050,000-token Sol window (922,000 maximum input; 128,000
+maximum output). `/status` prints those limits and their sources. The old 380,000
+Sol experiment established a lower bound, not its actual window.
+
+Known costs appear for the turn and session. The price table comes from the
+providers' official pricing pages, checked November 12, 2026. Cache writes, reads,
+ordinary input and output are charged once each; thinking is already part of
+output. Judge and add-on calls join the turn bill. Unknown models, tiers, tool
+charges or usage shapes hide the corresponding money figure. `/cost` states when
+pricing is unknown. `state/chat-status.jsonl` keeps the display receipt, usage
+records, seconds and known cost. No prompt or private thinking is added to it.
+
+The dark-screen colors distinguish prompt, answer, proposed command, command
+output, Sources, errors and status. `--plain` or the presence of `NO_COLOR` removes
+colors. If stdout or stderr is piped, neither stream is colored. A temporary live
+line shows thinking, provider-reported web activity (and its query when supplied),
+a running command, or the judge/advisor. It clears before the answer. Both provider
+streams are fully buffered before the existing four-field and display gates.
+Public phase metadata is the only stream content shown early.
+
+`/help` reads the same registry used to recognize commands. It includes existing
+commands such as `/advisor`, `/wrong`, `/fork`, `/rewind`, `/mods`, `/voice`, `/on`,
+`/off`, `/tools`, `/both`, `/image` and `/file`. New commands:
+
+| Command | Action |
+| --- | --- |
+| `/model NAME`, `/effort LEVEL` | Change model/lane or thinking for the next turn. `g1` and `george` are model aliases. |
+| `/new`, `/sessions`, `/session NAME`, `/continue` | Start, list, open or resume sessions. |
+| `/recall WORDS`, `/cost`, `/status` | Search saved answers; show cost; show every setting. |
+| `/clear`, `/copy`, `/save FILE` | Clear only the screen; copy the last answer; save that answer. Quote a path with spaces. |
+| `/retry`, `/edit` | Ask the last message again; put it back at the prompt for editing. |
+| `/paste` | Read a block until a line containing only `.`. |
+| `/temperature`, `/seed`, `/stop`, `/prefill`, `/service-tier` | Set the existing request knobs mid-chat; `off` clears one. |
+
+A terminal paste containing newlines stays one message through bracketed-paste
+mode. Press Enter to send it. A typed line ending in `\` continues onto the next
+line. Up/Down recall full messages from private `state/chat-input.json`, including
+after relaunch. Ctrl-C during a call stops that turn and returns to the prompt;
+Ctrl-C at the prompt clears the edit. `quit` and Ctrl-D leave the chat. The native
+launcher keeps the bridge alive when the chat handles a terminal interrupt.
+
+An explicit `/paste` block is literal input, even if it says `quit` or names a
+slash command. A multiline terminal paste keeps a final backslash. History writes
+take a lock, so two open chats keep both messages. `/copy` reads the clipboard back
+before it reports success. A locked phone that returns no text gets an error.
+Command cancellation drains the bridge reply before the next command starts.
+`state/chat-cost.jsonl` keeps cost receipts, including an unknown amount for a
+cancelled call without usage. An unknown amount hides the session total.
+
+Tests: `test_chat_screen.py`, `test_chat_cost.py`, `test_chat_transport.py`,
+`test_chat_bridge.py`.
+`verify_chat_screen.py --engine openai|anthropic --state PRIVATE_DIRECTORY` drives
+a real Termux PTY through three turns, a 12-line paste, a lane change, a call
+interrupt, clipboard round-trip, save and history across launches. Proof state
+turns off spoken output and the canonical-memory commit hook; reply gates and the
+judge stay on. The private report checks status numbers against SQLite.

@@ -420,6 +420,8 @@ def display_text(reply: HarnessReply, sources=()) -> str:
 
 
 def record_event(event: dict, log_path: Path | None = None) -> None:
+    from chat_progress import record_usage
+    record_usage(event)
     path = log_path or STATE / 'usage.jsonl'
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, 'O_NOFOLLOW', 0)

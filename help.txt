@@ -233,3 +233,22 @@ Skills and apps, typed in the shell (a lane types them too; card skills, card ap
   app list|info|perms|front|install|update|uninstall|disable|enable|stop|clear|open|grant|revoke|default ...
                         Installed apps through adb or Shizuku (--via adb |
                         --via shizuku).
+
+Chat screen:
+  --plain                       Turn off colors (also NO_COLOR).
+  /help                         Every slash command and its one-line description.
+  /model NAME                   Change model and lane; g1 and george are aliases.
+  /effort LEVEL                 low, medium, high, xhigh, max.
+  /new, /sessions               New session; list saved sessions.
+  /session NAME, /continue      Open a session; open the last saved session.
+  /recall WORDS                 Search saved answers.
+  /cost, /status                Known costs; every setting and its value.
+  /clear                       Clear the screen only.
+  /copy, /save FILE             Last answer to clipboard or file.
+  /retry, /edit                 Ask again; edit the last message.
+  /paste                       A block ending with a line containing only a dot.
+  /temperature N, /seed N       Change existing sampling knobs; off clears them.
+  /stop WORDS, /prefill WORDS   Change stop string or answer opening; off clears.
+  /service-tier TIER            Change service tier; off clears.
+  A paste stays whole. A trailing backslash continues a line.
+  Up/Down recall messages across launches. Ctrl-C stops the current turn.

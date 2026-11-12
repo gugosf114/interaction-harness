@@ -177,6 +177,8 @@ def build_packet(*, request: str, reply, earlier: list, metadata: dict, loop: bo
 
 def send(client, engine: str, model: str, effort: str, packet_text: str):
     """One stateless call: the judge prompt and the packet. No tools, no pages, no history. Strict JSON out."""
+    from chat_progress import phase
+    phase('Waiting on judge')
     messages = [{'role': 'user', 'content': packet_text}]
     if engine == 'openai':
         response = client.responses.create(

@@ -23,6 +23,9 @@ def complete_message(endpoint, **params):
         return endpoint.create(**params)
     with method(**params) as stream:
         try:
+            from chat_progress import watching, public_event
+            if watching():
+                for event in stream: public_event(event)
             message = stream.get_final_message()
         except AssertionError as exc:
             raise _incomplete(stream, 'Claude stream ended before a message was received.') from exc
