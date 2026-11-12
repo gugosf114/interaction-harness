@@ -331,7 +331,7 @@ class KeeperTests(Base):
                 except OSError:
                     return b''
             mine = [p for p in Path('/proc').iterdir() if p.name.isdigit() and b'keeper.sh\x00watch' in read(p / 'cmdline')
-                    and str(self.state).encode() in read(p / 'environ')]
+                    and ('HARNESS_STATE_DIR='+str(self.state)).encode()+b'\0' in read(p / 'environ')]
             self.assertEqual(len(mine), 1)
             first = int((self.paths.home / 'daemon.pid').read_text())
             os.kill(first, 9)

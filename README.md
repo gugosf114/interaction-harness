@@ -728,7 +728,8 @@ agentd start | stop | restart | log [N] | url | password
 ```
 
 - `~/.termux/boot/20-agentd` links to `agentd/boot/20-agentd`. At boot it takes the wake lock and starts `agentd/keeper.sh`.
-- The keeper is the same shape as the phone's other keepers: one watch loop (a lock folder with its pid) that looks every 5 seconds and starts the service when it is not running. Phone timer 7742 (`timer-add`, put back after a reboot by `timers-ensure`) runs `keeper.sh tick` every 15 minutes, so a dead keeper comes back too.
+- The keeper is the same shape as the phone's other keepers: one watch loop (a kernel-held `keeper.flock` lock and a separate pid) that looks every 5 seconds and starts the service when it is not running. Phone timer 7742 (`timer-add`, put back after a reboot by `timers-ensure`) runs `keeper.sh tick` every 15 minutes, so a dead keeper comes back too.
+- The keeper lock file stays in place. Concurrent starts share that inode; daemon and sleep children close the lock descriptor. A running keeper from the older version is preserved until it exits. Cleanup removes only the exiting keeper's own pid. Tests: `test_keeper_recall_regression.py`.
 - The service holds `termux-wake-lock`. Killing it does not stop running jobs; when it comes back it picks up their results. A job whose runner died is marked `interrupted` and is not replayed.
 - `job stop` sends Ctrl-C through the native launcher. Jobs use the existing buffered transport; a background OpenAI request is cancelled at the provider. Public request ids are saved under `state/agentd/requests/`, and the provider cancellation receipt stays in `usage.jsonl`. No stream text or private thinking is shown.
 - `agentd stop` writes `state/agentd/STOPPED`; the keeper then does nothing until `agentd start`.

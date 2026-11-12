@@ -16,7 +16,7 @@ P=/data/data/com.termux/files/usr/bin
 PATH="$P:$PATH"; export PATH
 SELF=$(readlink -f "$0"); HERE=$(dirname "$SELF"); ROOT=$(dirname "$HERE")
 STATE="${HARNESS_STATE_DIR:-$ROOT/state}"; DIR="$STATE/agentd"; mkdir -p "$DIR"
-LOG="$DIR/keeper.log"; LOCK="$DIR/keeper.lock"; PIDF="$DIR/daemon.pid"; OFF="$DIR/STOPPED"
+LOG="$DIR/keeper.log"; LOCK="$DIR/keeper.lock"; GUARD="$DIR/keeper.flock"; PIDF="$DIR/daemon.pid"; OFF="$DIR/STOPPED"
 PY="${AGD_PYTHON:-$P/python}"
 log(){ printf '[%s] %s\n' "$(date '+%F %T')" "$*" >>"$LOG"; }
 cmd_of(){ { tr '\0' ' ' <"/proc/$1/cmdline"; } 2>/dev/null; }
@@ -27,19 +27,24 @@ once(){
   [ -f "$OFF" ] && return 0
   daemon_alive && return 0
   "$P/termux-wake-lock" 2>/dev/null
-  setsid "$PY" -B "$ROOT/toolbox/bin/agentd" _daemon </dev/null >>"$DIR/daemon.out" 2>&1 &
+  setsid "$PY" -B "$ROOT/toolbox/bin/agentd" _daemon 9>&- </dev/null >>"$DIR/daemon.out" 2>&1 &
   log "service was not running - started"; }
 
 case "${1:-tick}" in
   once)  once ;;
   watch)
-    if ! mkdir "$LOCK" 2>/dev/null; then
-      loop_alive && exit 0
-      rm -rf "$LOCK"; mkdir "$LOCK" 2>/dev/null || exit 0
-    fi
-    echo $$ >"$LOCK/pid"; trap 'rm -rf "$LOCK"' EXIT
+    # This inode stays in place. The kernel releases it when this watcher exits.
+    exec 9>>"$GUARD"
+    flock -n 9 || exit 0
+    # A keeper started before the flock upgrade can still be running.
+    loop_alive && exit 0
+    mkdir -p "$LOCK"
+    echo $$ >"$LOCK/pid"
+    cleanup(){ [ "$(cat "$LOCK/pid" 2>/dev/null)" = "$$" ] && rm -f "$LOCK/pid"; }
+    trap cleanup EXIT
+    trap 'exit 0' INT TERM
     log "watch loop up"
-    while [ ! -f "$OFF" ]; do once; sleep "${AGD_SEC:-5}"; done ;;
+    while [ ! -f "$OFF" ]; do once; sleep "${AGD_SEC:-5}" 9>&-; done ;;
   tick)  [ -f "$OFF" ] && exit 0
          loop_alive || { setsid sh "$SELF" watch </dev/null >/dev/null 2>&1 & } ;;
   start) rm -f "$OFF"; exec sh "$SELF" tick ;;
