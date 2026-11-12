@@ -42,5 +42,13 @@ class ShippedListTests(unittest.TestCase):
 # Tests for single sentences and checks go below, one test per addition.
 
 
+class LetMeKnowHowItGoesTests(unittest.TestCase):
+    def test_let_me_know_how_it_goes_is_listed_and_cut(self):
+        listed = {habit_checks.plain(sentence) for sentence in habit_checks.CUT_SENTENCES}
+        self.assertIn(habit_checks.plain('Let me know how it goes.'), listed)
+        self.assertEqual(shown('The mode is 640. Let me know how it goes.'), 'The mode is 640.')
+        self.assertEqual(shown('The mode is 640. **let me know how it goes.**'), 'The mode is 640.')
+
+
 if __name__ == '__main__':
     unittest.main()
