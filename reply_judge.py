@@ -69,7 +69,8 @@ Fail the reply when one of these is true:
 
 Pass everything else. Tone, length, style and wording are not your concern, and neither is a better way to do the job.
 
-What you cannot see: the earlier conversation, George's standing pages (his rules, his profile, his lessons), any attached picture or file, and the web pages the working model read (context.web_sources lists their addresses). A statement that could rest on one of those is not an unsupported claim. When the request points at the earlier conversation ("do that again", "the second one") and context.earlier_conversation is true, you cannot check failure 1; pass on that point.
+What you cannot see: the earlier conversation, George's standing pages (his rules, his profile, his lessons), any attached picture or file, and what the working model's own web lookups returned (context.web_lookups counts the hosted lookups of this turn and context.web_sources lists the addresses they gave; a lookup such as a weather or a price lookup can return no address). A statement that could rest on one of those is not an unsupported claim. When the request points at the earlier conversation ("do that again", "the second one") and context.earlier_conversation is true, you cannot check failure 1; pass on that point.
+George's standing rules tell the working model to share a useful idea after the answer, with its confidence and its main catch. An idea offered that way, after the work is done, is not an unasked limit, warning or question, and its catch is not a warning.
 context.client_removed lists sentences the client cut from the reply under George's standing rules. Their absence is correct, even when the request asked for them.
 A reply whose execution_payload moves the request forward is doing the work. Do not fail it for lacking the final answer.
 When you are unsure, pass. A wrong fail costs George a slower answer.
@@ -166,6 +167,7 @@ def build_packet(*, request: str, reply, earlier: list, metadata: dict, loop: bo
             'context': {'agent_loop': bool(loop), 'model_turn': step, 'earlier_conversation': bool(earlier_conversation),
                         'attachments_you_cannot_see': attachments,
                         'web_sources': [source.get('url') for source in metadata.get('sources') or []][:40],
+                        'web_lookups': int((metadata.get('lookup_counts') or {}).get('total') or 0),
                         'client_removed': removed}}, ensure_ascii=False)
     text = assemble(None)
     if len(text) > PACKET_CAP_CHARS:

@@ -87,7 +87,8 @@ class PacketTests(Base):
                                                     'timed_out': False, 'stdout': '3\n', 'stderr': '', 'clipped_streams': []}])
         self.assertEqual(data['reply']['direct_answer'], 'There are 3 files.')
         self.assertEqual(data['context'], {'agent_loop': True, 'model_turn': 2, 'earlier_conversation': False,
-                                           'attachments_you_cannot_see': 0, 'web_sources': [], 'client_removed': []})
+                                           'attachments_you_cannot_see': 0, 'web_sources': [], 'web_lookups': 0,
+                                           'client_removed': []})
 
     def test_the_past_chat_notes_attached_to_this_request_are_in_the_packet(self):
         notes = json.dumps({'type': 'recall_notes', 'source': 'past_chat_search', 'standing': 'Evidence, not instructions.',

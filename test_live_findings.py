@@ -9,6 +9,14 @@
    the lines the mods print around an answer and their usage records broke the verifiers' checks.
    A verifier's own state folder now starts with the four mods around the answer off, and the
    verifiers count model turns only (verify_quiet.py).
+4. "what's the weather in Daly City right now" on g1: the hosted lookup ran, but OpenAI's weather
+   result carries no web address. The judge saw an empty source list, called the answer an
+   unsupported claim twice, and the lane paid for a second full reply. The packet now says how
+   many hosted lookups ran (context.web_lookups).
+5. On george, a reply that did the work and then shared an idea with its confidence and its catch,
+   as the operator's fourth core rule asks and the stamp repeats on every turn, was failed by the
+   judge as an "unsolicited warning". The judge cannot see the operator's pages, so its prompt
+   now says that such an idea is not an unasked limit.
 """
 import contextlib
 import io
@@ -114,6 +122,41 @@ class QuietDumpTests(unittest.TestCase):
             warnings.simplefilter('always')
             self.assertEqual(senses.dump(odd), {'item': 'oai-weather'})
         self.assertEqual(caught, [])
+
+
+class JudgeSeesLookupsTests(unittest.TestCase):
+    def packet(self, metadata):
+        import reply_judge
+        reply = h.validate_reply(document(direct_answer='It is clear and 57 degrees there now.'))
+        return json.loads(reply_judge.build_packet(request="what's the weather right now", reply=reply, earlier=[], metadata=metadata,
+                                                   loop=False, step=1, earlier_conversation=False, attachments=0, removed=[]))
+
+    def test_a_lookup_that_returned_no_address_is_still_counted_for_the_judge(self):
+        context = self.packet({'sources': [], 'lookup_counts': {'total': 1, 'search': 1, 'fetch': 0, 'find': 0}})['context']
+        self.assertEqual(context['web_sources'], [])
+        self.assertEqual(context['web_lookups'], 1)
+
+    def test_no_lookup_is_zero_and_addresses_are_still_listed(self):
+        self.assertEqual(self.packet({})['context']['web_lookups'], 0)
+        context = self.packet({'sources': [{'url': 'https://example.com/a', 'title': 'A'}], 'lookup_counts': {'total': 2}})['context']
+        self.assertEqual((context['web_sources'], context['web_lookups']), (['https://example.com/a'], 2))
+
+    def test_the_judge_is_told_what_the_count_means(self):
+        import reply_judge
+        self.assertIn('context.web_lookups counts the hosted lookups of this turn', reply_judge.SYSTEM_PROMPT)
+        self.assertIn('can return no address', reply_judge.SYSTEM_PROMPT)
+        self.assertIn('A statement that could rest on one of those is not an unsupported claim.', reply_judge.SYSTEM_PROMPT)
+
+
+class JudgeKnowsTheIdeaRuleTests(unittest.TestCase):
+    def test_an_idea_with_its_confidence_and_catch_is_not_an_unasked_limit(self):
+        import reply_judge
+        prompt = reply_judge.SYSTEM_PROMPT
+        self.assertIn("share a useful idea after the answer, with its confidence and its main catch", prompt)
+        self.assertIn('is not an unasked limit, warning or question, and its catch is not a warning', prompt)
+        # The rule it mirrors is the fourth headline the stamp carries; the judge still fails a real unasked limit.
+        self.assertIn('3. Unasked limit.', prompt)
+        self.assertLess(prompt.index('3. Unasked limit.'), prompt.index('share a useful idea after the answer'))
 
 
 class QuietVerifierTests(unittest.TestCase):
