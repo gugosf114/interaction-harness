@@ -167,6 +167,14 @@ class MemoryVersions(unittest.TestCase):
 
 
 class Usage(unittest.TestCase):
+    def test_local_hook_receipts_do_not_hide_known_model_cost(self):
+        import chat_cost
+        model={'engine':'openai','model_requested':'gpt-6.1-sol',
+               'usage':{'input_tokens':100,'output_tokens':10}}
+        expected=chat_cost.price(model)
+        self.assertIsNotNone(expected)
+        self.assertEqual(chat_cost.total([model,{'kind':'hook:voice','status':'played'},
+                                         {'kind':'hook:memory-version','status':'saved'}]),expected)
     def test_usage_watch_switch_and_notification(self):
         with tempfile.TemporaryDirectory() as folder:
             state=Path(folder)

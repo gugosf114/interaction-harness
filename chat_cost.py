@@ -74,7 +74,7 @@ def price(event, prices=None, service_tier=None):
 
 
 def total(events, service_tier=None):
-    billed = [e for e in events if e.get('kind') != 'recall']
+    billed = [e for e in events if e.get('kind') != 'recall' and not str(e.get('kind','')).startswith('hook:')]
     if not billed: return None
     values = [price(e, service_tier=service_tier if not e.get('kind') else None) for e in billed]
     return sum(values) if all(v is not None for v in values) else None

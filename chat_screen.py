@@ -143,6 +143,7 @@ class Screen:
             with self.lock: self.paint()
 
     def track(self, event):
+        if str(event.get('kind','')).startswith('hook:'): return
         if event.get('usage') or event.get('kind') != 'recall':
             self.cost_events.append(json.loads(json.dumps(event)))
 
