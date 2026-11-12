@@ -34,6 +34,7 @@ TOOLS = {
     'custom_tools': (('openai',), False, 'Call the local runner with a free-form command.', 'Exposes local command execution.'),
     'namespaces': (('openai',), False, 'Group the local function under a namespace.', 'Changes tool names and discovery.'),
 }
+ALWAYS_OFF = ('context_editing', 'compaction')
 DEFAULT_OPTIONS = {
     'computer_target': 'phone', 'browser_endpoint': 'http://127.0.0.1:9335',
     'mcp_url': '', 'mcp_token_file': '', 'mcp_allowed_tools': [],
@@ -69,13 +70,19 @@ class Settings:
             saved = json.loads(self.path.read_text())
             if not isinstance(saved, dict): raise ValueError('tools.json must be an object.')
         else:
-            saved = {**defaults, 'options': copy.deepcopy(DEFAULT_OPTIONS)}
+            # George's order (2026-11-11): on his own install every tool starts ON and the model picks.
+            # The two that squeeze or clear the chat stay off. Any other state folder (tests and proofs
+            # use scratch ones) starts from the table above, so each test states its own switches.
+            own = self.state.resolve() == (Path(__file__).resolve().parent / 'state').resolve()
+            first = {name: name not in ALWAYS_OFF for name in defaults} if own else defaults
+            saved = {**first, 'options': copy.deepcopy(DEFAULT_OPTIONS)}
             write_json(self.path, saved)
         self.saved = saved
         self.enabled = {name: saved.get(name, default) for name, default in defaults.items()}
         if any(type(v) is not bool for v in self.enabled.values()):
             raise ValueError('Each tool switch in tools.json must be true or false.')
         self.enabled.update(overrides or {})
+        self.asked = {name for name, on in (overrides or {}).items() if on}
         if engine=='openai':
             # OpenAI has one web tool containing search and page-open actions.
             selected=[v for k,v in (overrides or {}).items() if k in ('web_search','web_fetch')]
@@ -175,8 +182,9 @@ def provider_tools(settings, base, mcp_catalog=()):
             namespaced.append(definition)
         else:tools.append(definition)
     if namespaced:tools.append({'type':'namespace','name':'local','description':'Phone command tools.','tools':namespaced})
-    if on('mcp_remote'):
-        if not options['mcp_url'].startswith('https://'):raise ValueError('Remote MCP needs an HTTPS mcp_url in tools.json options.')
+    if on('mcp_remote') and not options['mcp_url'].startswith('https://'):
+        if 'mcp_remote' in getattr(settings,'asked',()):raise ValueError('Remote MCP needs an HTTPS mcp_url in tools.json options.')
+    elif on('mcp_remote'):
         if engine=='openai':
             definition={'type':'mcp','server_label':'phone','server_url':options['mcp_url'],'require_approval':'always'}
             if options['mcp_allowed_tools']: definition['allowed_tools']=options['mcp_allowed_tools']
