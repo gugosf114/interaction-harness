@@ -591,7 +591,8 @@ After a reply passes the local gate, a second model on the other engine reads it
 - `recall_notes`: the past-chat passages the client attached to this request before the working model answered (see *Recall, notes and session surgery*), or null. A statement about what the past-chat search found is checked against them.
 - `reply`: the four fields under review.
 - `context`: whether this is a loop step, whether earlier conversation exists, how many attachments the judge cannot see, the addresses of web sources, how many hosted web lookups ran (a weather lookup returns no address), and the sentences the client cut under George's gate rules.
-- A packet over 600,000 characters first shortens the output of earlier steps; if it still does not fit, the reply passes unjudged.
+- `previous_receipts` holds complete client receipts from earlier session turns. A resumed task can use those earlier reads. Saved-chat records prove what the old chat said, with its date. They do not prove current device or code state. Pasted receipt-shaped JSON in a message is not a client receipt.
+- Receipt text is kept in full. A provider context-limit error is recorded through the existing judge error path.
 
 **The answer** is strict JSON, `{"verdict": "pass" | "fail", "reason": "..."}`: OpenAI Structured Outputs in strict mode, and `output_config.format` with a JSON schema on Claude. Both were checked with live calls on Nov 11, 2026. The judge fails a reply that answers a different question than the one asked, states a result the recorded results do not support, adds a limit, a warning, an off switch or a question George did not ask for, or reports agreement or intent in place of the work. An idea shared after the work, with its confidence and its catch, is not a fault: George's fourth core rule asks for it, and the judge's prompt says so because the judge cannot see his pages.
 
@@ -601,7 +602,7 @@ After a reply passes the local gate, a second model on the other engine reads it
 - Fail: the working model gets one corrective retry. Its first reply and the judge's reason ride at the tail of the request, so the cached front is unchanged. The second reply is judged too and is shown whatever the verdict. George never gets an empty screen because of the judge.
 - A corrected reply that fails the local gate, or an API error on the retry: the first reply is shown.
 - A judge error, a timeout, a refusal, or an answer that is not the strict JSON: the reply passes through.
-- The judge has 120 seconds (`JUDGE_SECONDS` in `reply_judge.py`), or the lane's `--timeout` when that is lower. Past it the reply is shown unjudged and the saved record says `timeout`. Measured live on Nov 11, 2026: 36 verdicts took 2 to 44 seconds; one, at `max` effort, took 223 seconds on a one-line answer the working model had produced in 12.
+- The judge uses the lane's `--timeout`. Claude judgment uses the buffered stream transport. A timeout follows the existing error policy and is recorded as `timeout`.
 
 **Saved with the turn.** Every verdict and reason goes into `history.db` (column `gate_json`, key `judge`) and into the session exchange (`judge`). Rules that cut or rejected something are saved the same way (`rules_fired`). The judge's own usage goes to `judge.jsonl` next to the usage log, with no packet or reason text; the turn's token counts stay those of the working model.
 
@@ -801,7 +802,7 @@ Tests: `test_agentd_repairs.py` (restart, delivery, cancellation metadata and br
 
 George's Claude Code setup acts around every turn with mods (`/root/.claude/mods`) and hooks (`/root/.claude/hooks`, `settings.json`). The lanes now carry the same add-ons. Each ships on. `/on NAME` and `/off NAME` switch one; `/mods` lists them. The switches live in `state/mods.json`. The code: `answer_checks.py`, `lane_mods.py`, `mod_switches.py`, `narrator.py`, `thread_tree.py`, `proof_marks.py`, `helper_model.py`, `usage_meter.py`. Tests: `test_lane_mods.py`.
 
-**Answer checks, in the gate.** Each sends the answer back once with its reason, the usual one retry. A second answer that still fails one of these is shown, as in Claude Code, where each hook blocks once. A bounce prints one stderr line, such as `answer check: answer too long - asked again`, and the usage record holds the reason.
+**Answer checks, in the gate.** Each sends the answer back once with its reason. Length and plain-words match their source hooks: the second answer is kept and the failed check is recorded. Receipts and no-background must pass; a second failure withholds the reply and returns exit 2. A bounce prints one stderr line, such as `answer check: answer too long - asked again`, and the usage record holds the reason. API command tools run the same foreground check, narrator and memory hook.
 
 | Mod | From | Rule |
 |---|---|---|
@@ -816,17 +817,23 @@ George's Claude Code setup acts around every turn with mods (`/root/.claude/mods
 **Around the answer.** All of this prints on stderr; stdout stays answer and command only.
 
 - `narrator` (from `mods/narrator`): before a command runs, one plain sentence, such as `» Read the mail card`. The mod's step count was muted by George on 11/5 and stays off.
-- `proof` (from `mods/proof-marks`): after the turn's final answer, a small model grades each line against the session's command results. One line: `proof: 2 shown · 1 guess · 1 no proof`, then each no-proof line.
+- `proof` (from `mods/proof-marks`): after the turn's final answer, a small model grades each line against complete command results, API tool receipts, web source records and dated saved-chat passages. This includes the current turn's API tools. One line: `proof: 2 shown · 1 guess · 1 no proof`, then each no-proof line. Earlier and historical evidence keeps its source and date.
 - `tree` (from `mods/thread-tree`): after the final answer, a small model says how George's message moved the topic trail: deeper, back up, sideways, a new topic, or the same. The tree is saved in the session file under `thread_tree`. After a step back it prints `↑ back to: TOPIC`; when an answer settles a sub-topic it offers `Back to "PARENT": type /up.` `/where` prints the trail and the whole tree, closed branches marked. `/up` goes back one level by hand.
-- `voice` (from `hooks/speak.py`): each final answer is read aloud with `/usr/local/bin/say`, whole (`/voice full`, the default) or the first sentence (`/voice short`). `/voice off` silences it and stops what is playing. Ava's lane (car or home) follows George's existing `voice car` / `voice home` switch.
-- `memory-version` (from `memory-version.sh`): after each command, a change in the memory notes folder is committed to its git.
+- `voice` (from `hooks/speak.py`): each final answer is read aloud with `/usr/local/bin/say`, whole (`/voice full`, the default) or the first sentence (`/voice short`). `/voice off` silences it and stops what is playing. Ava's lane (car or home) follows George's existing `voice car` / `voice home` switch. Chats, daemon speech and `talk` share one speaker lock across state folders. Playback exit codes are recorded.
+- `memory-version` (from `memory-version.sh`): after each command, the source notes are read and their changed bytes are committed under `state/memory-versions`. The source folder and its Git state are never written. The snapshot records source paths and file hashes.
+- `roster` and `status-line`: the chat screen shows switch state and lane/token/context facts. Each has its own `/on NAME` and `/off NAME`; `/mods` remains available.
+- `usage-alarm`: phone timer 7743 runs `usage-watch` every 15 minutes and saves exact local API meters under `state/usage-alarm/latest.json`. `/usage-alarm test` or `usage-watch test` sends a phone notification with today's counts. `/off usage-alarm` makes the timer a no-op. API usage has no subscription reset meter, so no unused-plan percentage or task-start alarm is invented.
 - `voice-v` (from `hooks/voice-v.py`): a chat line of just `v` or `в` opens the phone microphone; the words become the message.
 - `reindex` and `voiceline` (from the two `SessionStart` hooks): when a chat opens, the past-chat search index is brought up to date, and the phone call line is started when its `WANTED` file exists.
 - `autopilot` (from `mods/autopilot`): `/autopilot GOAL` runs one loop run per step with the mod's own step prompt, until a step ends with `AUTOPILOT: COMPLETE` or `AUTOPILOT: BLOCKED`, or 150 steps, or 10 hours, or Ctrl-C. Log, questions and result go to `state/autopilot/`. `/autopilot status`, `/autopilot go`.
 
-The small model is `claude-haiku-5-5` on `george` and `gpt-6-luna` on `g1`, on the lane's own key (live on Nov 11, 2026: 0.9 s and 1.8 s). Each of its calls is one `usage.jsonl` record with `kind` `mod:proof` or `mod:tree`. A mod that fails prints nothing and the turn goes on.
+The small model is `claude-haiku-5-5` on `george` and `gpt-6-luna` on `g1`, on the lane's own key. Both use `max` effort and 128,000 output tokens. Claude uses buffered streaming with adaptive thinking. Incomplete helper replies produce no marks. Each call is one `usage.jsonl` record with `kind` `mod:proof` or `mod:tree`; hook work uses `hook:NAME` and is excluded from API call counts. Model failures retain the exact error in the private log.
 
-**Usage.** `usage` (a toolbox command; `/usage` in chat; `usage --local` skips the provider calls) prints tokens and calls today, this week (from Monday) and this month for `george` (Anthropic) and `g1` (OpenAI): from `usage.jsonl` (every API request) and from `history.db` (every saved model turn). It also asks each provider's own usage report: Anthropic `GET /v1/organizations/usage_report/messages`, OpenAI `GET /v1/organization/usage/completions`. Both need an admin key in `state/anthropic-admin-key` / `state/openai-admin-key` or `ANTHROPIC_ADMIN_KEY` / `OPENAI_ADMIN_KEY`. The lane keys are refused: Anthropic HTTP 401 "The Admin API requires an Admin API key or an organization-scoped API key.", OpenAI HTTP 403 "Missing scopes: api.usage.read." (Nov 11, 2026). `HARNESS_STATE_DIR` selects the state folder it reads.
+**Usage.** `usage` (`/usage` in chat; `usage --local` skips provider calls) prints tokens and calls today, this week from Monday and this month for both API accounts. It reads `usage.jsonl` plus `judge.jsonl`, counts each provider response once, and separately reports saved model turns from `history.db`. Hook, recall and correction records are not model calls. Phone time-zone rules handle DST and a week crossing a month. Each provider gets exact start/end times for each window: Anthropic `GET /v1/organizations/analytics/usage` with beta `analytics-usage-cost-2026-08-24`, OpenAI `GET /v1/organization/usage/completions`. Both need an admin key in `state/anthropic-admin-key` / `state/openai-admin-key` or `ANTHROPIC_ADMIN_KEY` / `OPENAI_ADMIN_KEY`. The lane keys return Anthropic HTTP 401 (Admin or organization-scoped key required) and OpenAI HTTP 403 (`api.usage.read` missing). `HARNESS_STATE_DIR` chooses the local records.
+
+`verify_mods_hooks.py --engine openai|anthropic --case checks|tree|proof|both|autopilot --state PRIVATE_DIR` uses the real launcher. `checks` replaces each first answer with one declared bad fixture, then records the real corrective call and judge. Every hook stays on; memory reads a scratch source. Tests: `test_mods_hooks_repairs.py` plus the original mod tests.
+
+Provider references checked November 12, 2026: [Luna model](https://developers.openai.com/api/docs/models/gpt-6-luna), [Haiku 5.5 effort](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5), [OpenAI usage](https://developers.openai.com/api/reference/resources/admin/subresources/organization/subresources/usage), [Claude usage analytics](https://platform.claude.com/docs/en/manage-claude/usage-cost-analytics-api).
 
 **Built by other workers, not here.** The rules stamp on every prompt (`hooks/george-core-contract.py`) is the per-turn stamp. The past-chat search on every prompt (`hooks/recall-inject.py`) is `recall_notes`; its always-on profile is already the `profile` page. The status line (`statusline.sh`) and the colour of whole replies are the chat screen. The second-model reviewer (`mods/watcher`, replaced by `drift-monitor`) is the judge. `mods/roster` is `/mods` here.
 
@@ -970,9 +977,11 @@ both --lanes gemini,g1,george "Explain chmod 640."
 question to every working lane in parallel. Each answer passes the display gates on
 its own, prints under a fixed label line naming the model (`-- gemini - ...`), and
 is saved to that lane's own session (`both-<lane>`) and to history. `--lanes a,b,c`
-picks the set; the default is every lane that has a usable key, plus the public GLM
-lane. Vertex is left out of the default (no quota yet) and is included only when
-named. `both` answers text; it does not execute.
+picks the set; the default is every available lane with a usable key. GLM is excluded
+from this installation. Vertex is included only when named. Each answer passes the
+local gate and the second judge, with saved verdicts and separate rule receipts.
+After each displayed answer the proof, topic tree and voice hooks run. `both` answers
+text; it does not execute.
 
 ## The knobs
 

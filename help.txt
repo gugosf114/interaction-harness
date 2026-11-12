@@ -209,11 +209,14 @@ Mods, typed at the > prompt of a george or g1 chat (each ships on):
   /mods                 every mod, on or off, with one line on what it does
   /on NAME, /off NAME   switch one mod: length, plain-words, receipts, no-background,
                         undertaker, proof, narrator, tree, voice, voice-v,
-                        memory-version, reindex, voiceline, autopilot
+                        memory-version, reindex, voiceline, autopilot, usage-alarm,
+                        roster, status-line
   /where                the open topics, top to current, and the whole topic tree
   /up                   close the current branch and go back to its parent
   /voice full|short|on|off   read each answer aloud: whole, first sentence, on, off
   /usage                tokens and calls today, this week, this month (also: usage)
+  /usage-alarm [test]    save the API usage meter; test sends a phone reading
+  usage-watch           the phone timer's 15-minute meter script
   /autopilot GOAL       step after step until done, blocked, 150 steps or 10 hours;
                         /autopilot status, /autopilot go; Ctrl-C stops it
   v                     a line of just v: the phone listens, the words become the message

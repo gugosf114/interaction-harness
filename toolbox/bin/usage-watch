@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+unset LD_LIBRARY_PATH
+here=$(dirname "$(readlink -f "$0")")
+exec /data/data/com.termux/files/usr/bin/python "$here/../../usage_watch.py" "$@"

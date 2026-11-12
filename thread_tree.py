@@ -89,8 +89,8 @@ def labels(tree: dict) -> list[str]:
 def move_prompt(tree: dict, message: str, answer: str) -> str:
     trail = '\n'.join(f'{n}. {label}' for n, label in enumerate(labels(tree), 1)) or '(empty)'
     return (f'CURRENT TRAIL (top first, deepest last):\n{trail}\n\n'
-            f"USER'S NEWEST MESSAGE:\n{message[:2000]}\n\n"
-            f'START OF THE ANSWER IT GOT:\n{answer[:1500]}\n\n'
+            f"USER'S NEWEST MESSAGE:\n{message}\n\n"
+            f'THE ANSWER IT GOT:\n{answer}\n\n'
             'Choose ONE action:\n'
             '- push: the message goes DEEPER into a sub-topic of the deepest item. Give a short label.\n'
             '- pop: the message CLOSES the current branch and returns to the parent. No label.\n'

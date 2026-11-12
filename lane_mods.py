@@ -19,12 +19,14 @@ import shlex
 import subprocess
 import sys
 import time
+import speech_lock
 
 import mod_switches
 import narrator
 import proof_marks
 import thread_tree
 import helper_model
+import memory_versions
 
 SAY = '/usr/local/bin/say'
 MEMORY_VERSION = '/root/.claude/memory-version.sh'
@@ -64,12 +66,17 @@ def before_command(command: str) -> None:
 
 
 def after_command(execution: dict) -> None:
-    if on('memory-version') and os.path.exists(MEMORY_VERSION):
+    if on('memory-version'):
         try:
-            subprocess.run([MEMORY_VERSION], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL, timeout=20)
-        except (OSError, subprocess.SubprocessError):
-            pass
+            result = memory_versions.snapshot(_h().STATE)
+            _hook_event('memory-version', result)
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            _hook_event('memory-version', {'status': 'error', 'error': str(exc)})
+
+
+def _hook_event(name, result):
+    from datetime import datetime, timezone
+    _h().record_event({'time_utc': datetime.now(timezone.utc).isoformat(), 'kind': 'hook:' + name, **result})
 
 
 # ------------------------------------------------------------------ turn end
@@ -100,13 +107,16 @@ def speak(answer: str) -> None:
     line = spoken(answer, mod_switches.setting('voice-mode', h.STATE) != 'short')
     if not line or not os.path.exists(SAY):
         return
-    try:
-        subprocess.run([SAY, '-s'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
-    except (OSError, subprocess.SubprocessError):
-        pass
-    # As speak.py does: Ava reads on while the next prompt is already open.
-    subprocess.Popen([SAY, line], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     start_new_session=True)
+    with speech_lock.acquire():
+        try:
+            subprocess.run([SAY, '-s'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            pass
+        result = subprocess.run([SAY, line], stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    _hook_event('voice', {'status': 'played' if result.returncode == 0 else 'error',
+                         'exit_code': result.returncode, 'characters': len(line), 'error': result.stderr.strip()})
+    if result.returncode:
+        say_err('Voice failed: ' + (result.stderr.strip() or f'exit {result.returncode}'))
 
 
 def grade(engine: str, answer: str, history: list, log_path) -> None:
@@ -115,7 +125,7 @@ def grade(engine: str, answer: str, history: list, log_path) -> None:
         return
     raw = helper_model.complete(engine, 'proof', proof_marks.SYSTEM,
                                 proof_marks.grade_prompt(proof_marks.evidence(history), lines),
-                                effort='medium', log_path=log_path)
+                                effort='max', log_path=log_path)
     marks = proof_marks.parse(raw, len(lines))
     if marks:
         say_err(proof_marks.render(lines, marks, _color()))
@@ -124,7 +134,7 @@ def grade(engine: str, answer: str, history: list, log_path) -> None:
 def track(engine: str, session: dict, message: str, answer: str, log_path) -> None:
     tree = session.get('thread_tree') or thread_tree.empty()
     raw = helper_model.complete(engine, 'tree', thread_tree.SYSTEM, thread_tree.move_prompt(tree, message, answer),
-                                effort='low', log_path=log_path)
+                                effort='max', log_path=log_path)
     tree, done = thread_tree.update(tree, raw, message)
     session['thread_tree'] = tree
     line = thread_tree.after_turn_line(tree, done)
@@ -148,15 +158,19 @@ def turn_end(args, session: dict, message: str, reply, history: list, save) -> N
 def session_start() -> None:
     if on('reindex') and os.path.exists(REINDEX[1]):
         try:
-            subprocess.run(REINDEX, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
-        except (OSError, subprocess.SubprocessError):
-            pass
+            result=subprocess.run(REINDEX, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
+            _hook_event('reindex', {'status':'ok' if result.returncode==0 else 'error','exit_code':result.returncode,
+                                    'error':result.stderr.strip()})
+        except (OSError, subprocess.SubprocessError) as exc:
+            _hook_event('reindex', {'status':'error','error':str(exc)})
     if on('voiceline') and os.path.exists(VOICELINE_WANTED):
         try:
-            subprocess.run(['bash', '-c', VOICELINE], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL, timeout=15)
-        except (OSError, subprocess.SubprocessError):
-            pass
+            result=subprocess.run(['bash', '-c', VOICELINE], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=15)
+            _hook_event('voiceline', {'status':'ok' if result.returncode==0 else 'error','exit_code':result.returncode})
+        except (OSError, subprocess.SubprocessError) as exc:
+            _hook_event('voiceline', {'status':'error','error':str(exc)})
+    elif on('voiceline'):
+        _hook_event('voiceline', {'status':'not_requested'})
 
 
 # ------------------------------------------------------------------ session file
@@ -220,9 +234,10 @@ Before COMPLETE or BLOCKED, write a short summary to {folder}/result.md."""
 
 def outcome(answer: str) -> str:
     import re
-    if re.search(r'AUTOPILOT:\s*COMPLETE', answer, re.I):
+    last=answer.strip().splitlines()[-1] if answer.strip() else ''
+    if re.fullmatch(r'AUTOPILOT:\s*COMPLETE', last, re.I):
         return 'complete'
-    if re.search(r'AUTOPILOT:\s*BLOCKED', answer, re.I):
+    if re.fullmatch(r'AUTOPILOT:\s*BLOCKED', last, re.I):
         return 'blocked'
     return 'continue'
 
@@ -236,6 +251,7 @@ def autopilot(goal: str, sid: str, run_turn, clock=time.monotonic) -> int:
     started, status = clock(), 0
     for step in range(1, AUTOPILOT_MAX_STEPS + 1):
         if clock() - started >= AUTOPILOT_MAX_HOURS * 3600:
+            record.write_text(json.dumps({'goal':goal,'session':sid,'step':step,'state':'time_limit'})+'\n')
             say_err(f'Autopilot stopped: time cap ({AUTOPILOT_MAX_HOURS}h). Progress is in {folder}/log.md.')
             return status
         record.write_text(json.dumps({'goal': goal, 'session': sid, 'step': step, 'state': 'running'}) + '\n')
@@ -245,11 +261,16 @@ def autopilot(goal: str, sid: str, run_turn, clock=time.monotonic) -> int:
             record.write_text(json.dumps({'goal': goal, 'session': sid, 'step': step, 'state': 'stopped'}) + '\n')
             say_err('Autopilot stopped.')
             return 130
+        if status:
+            record.write_text(json.dumps({'goal':goal,'session':sid,'step':step,'state':'error','exit_code':status})+'\n')
+            say_err(f'Autopilot stopped: step exited {status}.')
+            return status
         result = outcome(last_answer(sid))
         if result != 'continue':
             record.write_text(json.dumps({'goal': goal, 'session': sid, 'step': step, 'state': result}) + '\n')
             say_err(f'Autopilot stopped: {"goal complete" if result == "complete" else "blocked, needs you"} - see {folder}/result.md.')
             return status
+    record.write_text(json.dumps({'goal':goal,'session':sid,'step':AUTOPILOT_MAX_STEPS,'state':'step_limit'})+'\n')
     say_err(f'Autopilot stopped: step cap ({AUTOPILOT_MAX_STEPS} steps). Progress is in {folder}/log.md.')
     return status
 
@@ -290,6 +311,13 @@ def chat_line(raw: str, sid: str, run_turn, native=None):
         return False, None
     head, rest = words[0].lower(), words[1:]
     state = h.STATE
+    aliases={'proof-marks':'proof','thread-tree':'tree','answer-length':'length','receipts-gate':'receipts','speak':'voice'}
+    if head in ('/on','/off') and len(rest)==1:
+        rest=[aliases.get(rest[0],rest[0])]
+        if rest[0] in ('watcher','drift-monitor'):
+            import reply_judge
+            reply_judge.chat_switch(head+' judge',state)
+            return True,None
     if head in ('/on', '/off') and len(rest) == 1 and rest[0] in mod_switches.MODS:
         mod_switches.set_value(rest[0], head == '/on', state)
         print(f'{rest[0]} {"on" if head == "/on" else "off"}.')
@@ -320,6 +348,11 @@ def chat_line(raw: str, sid: str, run_turn, native=None):
         import usage_meter
         print(usage_meter.report(state, h.ROOT / 'state', providers='--local' not in rest).rstrip())
         return True, None
+    if head == '/usage-alarm':
+        import usage_watch
+        result=usage_watch.tick(state,notify=rest==['test'])
+        print('Usage meter '+result['status']+'.')
+        return True, None
     if head == '/autopilot':
         if not mod_switches.is_on('autopilot', state):
             say_err('autopilot is off. /on autopilot')
@@ -333,6 +366,11 @@ def chat_line(raw: str, sid: str, run_turn, native=None):
         if arg.lower() == 'status':
             print(f'Autopilot {last.get("state", "idle")} · step {last.get("step", 0)}\nGoal: {last.get("goal", "-")}' if last
                     else 'Autopilot is idle. Start it: /autopilot GOAL')
+        elif arg.lower() == 'stop':
+            last.update(state='stopped')
+            record.parent.mkdir(parents=True,exist_ok=True)
+            record.write_text(json.dumps(last)+'\n')
+            print('Autopilot stopped.')
         elif arg.lower() == 'go':
             if last.get('goal'):
                 autopilot(last['goal'], sid, run_turn)

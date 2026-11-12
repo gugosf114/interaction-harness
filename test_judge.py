@@ -80,7 +80,7 @@ class PacketTests(Base):
 
     def test_it_holds_the_request_the_results_and_the_reply_and_nothing_else(self):
         data = json.loads(self.packet())
-        self.assertEqual(sorted(data), ['command_results', 'context', 'recall_notes', 'reply', 'request', 'tool_uses', 'type'])
+        self.assertEqual(sorted(data), ['command_results', 'context', 'previous_receipts', 'recall_notes', 'reply', 'request', 'tool_uses', 'type'])
         self.assertIsNone(data['recall_notes'])
         self.assertEqual(data['request'], 'Count the files in ~/reports.')
         self.assertEqual(data['command_results'], [{'step': 1, 'command': 'ls ~/reports | wc -l', 'approved': True, 'exit_code': 0,
@@ -106,17 +106,18 @@ class PacketTests(Base):
         self.assertEqual(reply_judge.turn_exchanges(turns, 1, True), [])
         self.assertEqual(reply_judge.turn_exchanges(turns, 1, False), [])
 
-    def test_an_oversized_packet_keeps_the_latest_result_whole_and_trims_older_streams(self):
+    def test_large_packet_keeps_every_result_whole(self):
         big = 'x' * 350000
         text = self.packet(earlier=[self.exchange('cat a', big, step=1), self.exchange('cat b', big, step=2)], step=3)
         data = json.loads(text)
-        self.assertLessEqual(len(text), reply_judge.PACKET_CAP_CHARS)
+        self.assertGreater(len(text), 700000)
         self.assertEqual(data['command_results'][1]['stdout'], big)
-        self.assertLess(len(data['command_results'][0]['stdout']), 10000)
-        self.assertEqual(data['command_results'][0]['clipped_streams'], ['stdout'])
+        self.assertEqual(data['command_results'][0]['stdout'], big)
+        self.assertEqual(data['command_results'][0]['clipped_streams'], [])
 
-    def test_a_packet_that_cannot_fit_is_none(self):
-        self.assertIsNone(self.packet(request='y' * (reply_judge.PACKET_CAP_CHARS + 1)))
+    def test_long_request_is_kept_for_provider_to_accept_or_refuse(self):
+        request='y' * 700000
+        self.assertEqual(json.loads(self.packet(request=request))['request'],request)
 
 
 class AskTests(Base):
@@ -210,11 +211,10 @@ class FlowTests(Base):
         self.assertEqual(judge.calls[0]['model'], h.ANTHROPIC_MODEL)
         self.assertEqual((judge.calls[0]['effort'], judge.calls[0]['timeout']), ('xhigh', 77))
 
-    def test_the_judge_never_gets_longer_than_its_own_ceiling(self):
+    def test_the_judge_uses_the_lane_timeout(self):
         judge = FakeJudge(verdict())
         self.ask_through(judge, FakeClient([response(reply(RIGHT))]), engine='openai', effort='max', timeout=1800)
-        self.assertEqual(judge.calls[0]['timeout'], reply_judge.JUDGE_SECONDS)
-        self.assertEqual(reply_judge.JUDGE_SECONDS, 120)
+        self.assertEqual(judge.calls[0]['timeout'], 1800)
 
     def test_a_second_fail_is_shown_anyway(self):
         judge = FakeJudge(verdict('fail', REASON), verdict('fail', 'Still the wrong question; name the capital.'))

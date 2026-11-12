@@ -147,7 +147,9 @@ def ask_lane(paths, lane, session, text, timeout=None):
 def speak(text):
     if not text:
         return False
-    return run([config.TERMUX_BIN + '/proot-distro', 'login', 'debian', '--', 'say', text], 900).returncode == 0
+    import speech_lock
+    with speech_lock.acquire():
+        return run([config.TERMUX_BIN + '/proot-distro', 'login', 'debian', '--', 'say', text], 900).returncode == 0
 
 
 def main(argv=None, paths=None) -> int:

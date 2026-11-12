@@ -281,7 +281,7 @@ class LaneTests(unittest.TestCase):
 
 class BothTests(unittest.TestCase):
     def test_select_lanes_explicit_order(self):
-        self.assertEqual(both.select_lanes('glm,gemini'), ['gemini', 'glm'])
+        self.assertEqual(both.select_lanes('anthropic,openai'), ['openai', 'anthropic'])
 
     def test_select_lanes_unknown(self):
         with self.assertRaises(h.HarnessError):
@@ -291,7 +291,7 @@ class BothTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         root = Path(tmp.name)
         self.addCleanup(tmp.cleanup)
-        args = NS(lanes='gemini,glm', session=None, no_normalize=True, effort='max', timeout=90,
+        args = NS(lanes='gemini,openai', session=None, no_normalize=True, effort='max', timeout=90,
                   usage_log=root / 'usage.jsonl', turns=100, no_web=True, web_max=5, model=None,
                   temperature=None, seed=None, stop=None, prefill=None, service_tier=None)
 
@@ -304,18 +304,21 @@ class BothTests(unittest.TestCase):
                                   direct_answer=f'Answer from {engine}.', execution_payload=None)
 
         out = io.StringIO()
+        err = io.StringIO()
         with patch.object(h, 'STATE', root / 'state'), patch.object(h, 'request_reply', fake_reply), \
-                contextlib.redirect_stdout(out):
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = both.run(args, 'Explain chmod 640.')
         text = out.getvalue()
         self.assertEqual(code, 0)
+        self.assertNotIn('──',text)
+        self.assertIn('── openai',err.getvalue())
         self.assertIn('gemini', text)
-        self.assertIn('glm', text)
+        self.assertIn('openai', text)
         self.assertIn('Answer from gemini.', text)
-        self.assertIn('Answer from glm.', text)
+        self.assertIn('Answer from openai.', text)
         sessions = {p.name for p in (root / 'state' / 'sessions').glob('*.json')}
         self.assertIn('both-gemini.json', sessions)
-        self.assertIn('both-glm.json', sessions)
+        self.assertIn('both-openai.json', sessions)
 
 
 if __name__ == '__main__':

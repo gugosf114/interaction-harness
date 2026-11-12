@@ -78,7 +78,9 @@ class Phone:
         return parse_voice_state(out) if code == 0 else 'off'
 
     def say(self, text):
-        return self.checked([*DEB, 'say', text], 600)
+        import speech_lock
+        with speech_lock.acquire():
+            return self.checked([*DEB, 'say', text], 600)
 
     # --- texts ---------------------------------------------------------------------------------------------
     def sms_inbox(self, limit=40):

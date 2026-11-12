@@ -22,6 +22,8 @@ Spoken answers in George's Claude Code sessions
 Spoken answers in george and g1
   Each final answer is read aloud with `say`. In a chat: /voice full (whole answer), /voice short
   (first sentence), /voice off, /voice on. The setting is in the harness's state/mods.json.
+  Lane chats, daemon jobs and talk take turns through one speaker lock.
+  The lane saves the voice command's exit code in usage.jsonl as hook:voice.
 
 Known failure
   With no network `say` falls back to the robot voice.

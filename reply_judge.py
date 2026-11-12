@@ -9,7 +9,7 @@ no tools. The answer is strict JSON: {"verdict": "pass" | "fail", "reason": "...
 A fail gives the working model one corrective retry that carries the judge's reason. The second reply
 is shown whatever the judge says about it; George never gets an empty screen because of the judge.
 A judge error, a timeout, a refusal or an answer that is not the strict JSON passes the reply through.
-The judge has JUDGE_SECONDS (120) to answer; a slow judge never holds a finished reply longer than that.
+The judge uses the lane timeout and buffered Claude streaming.
 Every verdict is saved with the turn: history.db column gate_json, and the session exchange under "judge".
 
 /off judge and /on judge flip the switch (switches.json in the lane's state folder). It ships on.
@@ -40,15 +40,6 @@ LIVE = False            # second_gate.switch_on sets it for a real command-line 
 SWITCH_FILE = 'switches.json'
 SWITCH = 'judge'
 LOG_NAME = 'judge.jsonl'
-# The packet is refused above this size and the reply passes through unjudged. It matches the advisor's cap:
-# about 200,000 tokens, inside the smaller window measured live on 2026-11-11.
-PACKET_CAP_CHARS = 600000
-OLD_STREAM_CHARS = 4000  # when the packet is over the cap, earlier steps keep this much of each end of a stream
-MAX_REASON_CHARS = 1000
-# The judge's own time ceiling, in seconds. Past it the reply is shown unjudged (status "timeout").
-# Live on 2026-11-11, 36 verdicts took 2 to 44 seconds; one, at max effort, thought for 223 seconds over a
-# one-line answer that the working model had produced in 12. The lane's --timeout still applies when it is lower.
-JUDGE_SECONDS = 120
 SCHEMA = {'type': 'object',
           'properties': {'verdict': {'type': 'string', 'enum': ['pass', 'fail']}, 'reason': {'type': 'string'}},
           'required': ['verdict', 'reason'], 'additionalProperties': False}
@@ -58,6 +49,7 @@ The user message is one JSON object, the packet:
 - request: what George typed. It is the whole job for this turn.
 - command_results: every shell command the client ran for this request so far, in order, each with its exit code and output. tool_uses lists other tool calls the client recorded. Together they are the only record of work done in this turn.
 - recall_notes: passages from George's saved past chats that the client found by a keyword search in code and attached to this request before the working model answered; null when it attached none. The working model read them. They are part of this turn's record: a statement about what the past-chat search found is checked against them.
+- previous_receipts: full typed receipts from earlier exchanges in this session. They support statements about those earlier reads and results, including a resumed task. They do not prove an action just happened again. Saved-chat passages prove the historical record, not current code behavior.
 - reply: the reply under review. direct_answer is what George will read. execution_payload, when it is not null, is a shell command the client runs next; the reply is then a step in progress and the final answer comes later.
 - context: what the client knows about this turn.
 
@@ -115,32 +107,17 @@ def command_result(exchange: dict, number: int, limit: int | None = None) -> dic
         return None
     record = {'step': number, 'command': exchange['reply'].get('execution_payload'), 'approved': result.get('approved'),
               'exit_code': result.get('exit_code'), 'timed_out': bool(result.get('timed_out'))}
-    clipped = []
     for name in ('stdout', 'stderr'):
         value = result.get(name, '')
         value = value if isinstance(value, str) else ''
-        shown = clip_stream(value)
-        if limit is not None and len(shown) > 2 * limit:
-            shown = (shown[:limit] + f'\n[... {len(shown) - 2 * limit} characters omitted here; the start and the end are kept ...]\n'
-                     + shown[-limit:])
-        if shown != value:
-            clipped.append(name)
-        record[name] = shown
-    record['clipped_streams'] = clipped
+        record[name] = value
+    record['clipped_streams'] = []
     return record
 
 
 def tool_receipts(records) -> list:
-    """Tool-use receipts as the client recorded them, with very long text fields cut in the middle."""
-    def clip(value):
-        if isinstance(value, str) and len(value) > 20000:
-            return value[:10000] + f'\n[... {len(value) - 20000} characters omitted ...]\n' + value[-10000:]
-        if isinstance(value, dict):
-            return {key: clip(item) for key, item in value.items()}
-        if isinstance(value, list):
-            return [clip(item) for item in value]
-        return value
-    return [clip(record) for record in records or [] if isinstance(record, dict)]
+    """Complete tool-use receipts as the client recorded them."""
+    return [record for record in records or [] if isinstance(record, dict)]
 
 
 def recall_record(message) -> dict | None:
@@ -155,24 +132,22 @@ def recall_record(message) -> dict | None:
 
 
 def build_packet(*, request: str, reply, earlier: list, metadata: dict, loop: bool, step: int,
-                 earlier_conversation: bool, attachments: int, removed: list, recall=None) -> str | None:
-    """The packet text, or None when it cannot fit under the cap."""
+                 earlier_conversation: bool, attachments: int, removed: list, recall=None, previous=None) -> str | None:
+    """The complete receipt packet. Provider limits are reported through the judge error path."""
     def assemble(limit):
         results = [record for number, exchange in enumerate(earlier, 1)
-                   for record in [command_result(exchange, number, None if number == len(earlier) else limit)] if record]
+                   for record in [command_result(exchange, number, None)] if record]
         uses = [use for exchange in earlier for use in exchange.get('api_tool_uses') or []] + list(metadata.get('api_tool_uses') or [])
         return json.dumps({
             'type': 'judge_packet', 'request': request, 'command_results': results, 'tool_uses': tool_receipts(uses),
             'recall_notes': recall_record(recall), 'reply': reply.model_dump(),
+            'previous_receipts': previous or [],
             'context': {'agent_loop': bool(loop), 'model_turn': step, 'earlier_conversation': bool(earlier_conversation),
                         'attachments_you_cannot_see': attachments,
-                        'web_sources': [source.get('url') for source in metadata.get('sources') or []][:40],
+                        'web_sources': [source.get('url') for source in metadata.get('sources') or []],
                         'web_lookups': int((metadata.get('lookup_counts') or {}).get('total') or 0),
                         'client_removed': removed}}, ensure_ascii=False)
-    text = assemble(None)
-    if len(text) > PACKET_CAP_CHARS:
-        text = assemble(OLD_STREAM_CHARS)
-    return text if len(text) <= PACKET_CAP_CHARS else None
+    return assemble(None)
 
 
 def send(client, engine: str, model: str, effort: str, packet_text: str):
@@ -192,7 +167,8 @@ def send(client, engine: str, model: str, effort: str, packet_text: str):
         if response.status != 'completed':
             return response, 'incomplete', ''
         return response, None, response.output_text or ''
-    response = client.messages.create(
+    from anthropic_transport import complete_message
+    response = complete_message(client.messages,
         model=model, max_tokens=h.MAX_OUTPUT_TOKENS, thinking={'type': 'adaptive'}, system=SYSTEM_PROMPT, messages=messages,
         output_config={'effort': effort, 'format': {'type': 'json_schema', 'schema': SCHEMA}})
     if response.stop_reason == 'refusal':
@@ -209,7 +185,7 @@ def parse_verdict(text: str) -> tuple[str, str]:
         raise ValueError('wrong fields')
     if value['verdict'] not in ('pass', 'fail') or not isinstance(value['reason'], str):
         raise ValueError('wrong values')
-    reason = ' '.join(value['reason'].split())[:MAX_REASON_CHARS]
+    reason = ' '.join(value['reason'].split())
     if value['verdict'] == 'fail' and not reason:
         raise ValueError('a fail needs a reason')
     if h.CONTROLS.search(reason):
@@ -274,6 +250,8 @@ class Second:
         engine, model = advisor.other_lane(kwargs.get('engine', 'openai'))
         turns, step, loop = turn.get('turns') or [], int(turn.get('step') or 1), bool(turn.get('loop'))
         earlier = turn_exchanges(turns, step, loop)
+        import receipt_context
+        previous = turns[:len(turns)-len(earlier)] if earlier else turns
         # The past-chat notes the client attached to this request: at step 1 they come with the turn, later from the saved step.
         recall = turn.get('recall_notes') or next((exchange['recall_notes'] for exchange in earlier if exchange.get('recall_notes')), None)
         packet = build_packet(
@@ -283,11 +261,12 @@ class Second:
             attachments=len(kwargs.get('attachments') or []) + sum(
                 len((exchange.get('execution_result') or {}).get('attachments') or []) + len(exchange.get('attachments') or [])
                 for exchange in earlier),
-            removed=[item['text'] for item in self.fired if item.get('action') == 'strip_sentence'], recall=recall)
+            removed=[item['text'] for item in self.fired if item.get('action') == 'strip_sentence'], recall=recall,
+            previous=list(receipt_context.records(receipt_context.messages_from_turns(previous))))
         if packet is None:
             return {'engine': engine, 'model': model, 'verdict': None, 'reason': '', 'status': 'packet_over_cap'}
         return (self.judge or ask)(packet, engine=engine, model=model, effort=kwargs.get('effort', h.DEFAULT_EFFORT),
-                          timeout=min(float(kwargs.get('timeout', 90)), JUDGE_SECONDS), log_path=kwargs.get('log_path'))
+                          timeout=float(kwargs.get('timeout', 1800)), log_path=kwargs.get('log_path'))
 
     def request_reply(self, current: str, *, judge_turn: dict | None = None, **kwargs):
         gate_rules.drain()

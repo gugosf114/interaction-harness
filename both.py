@@ -17,9 +17,12 @@ import extra_lanes
 import lane_base
 import knobs as knobs_mod
 import recall_notes
+import reply_judge
+import lane_mods
+from copy import copy
 from phonetics import normalize
 from lookup_gate import turn_metadata
-from storage import Store, history_messages
+from storage import Store, history_messages, atomic_json
 
 # Fixed lane order for display and default selection.
 LANE_ORDER = ['openai', 'anthropic', 'gemini', 'openrouter', 'glm', 'vertex']
@@ -43,7 +46,7 @@ def has_credentials(engine: str) -> bool:
 
 def default_lanes():
     # Every lane that can be called now, minus vertex (no key; request it by name).
-    return [e for e in LANE_ORDER if e != 'vertex' and has_credentials(e)]
+    return [e for e in LANE_ORDER if e not in ('vertex','glm') and has_credentials(e)]
 
 
 def select_lanes(spec):
@@ -55,6 +58,8 @@ def select_lanes(spec):
     chosen = [part.strip() for part in spec.split(',') if part.strip()]
     valid = set(['openai', 'anthropic', *extra_lanes.LANES.keys()])
     for engine in chosen:
+        if engine == 'glm':
+            raise h.HarnessError('GLM is not available in this installation.')
         if engine not in valid:
             raise h.HarnessError(f'Unknown lane {engine!r}. Choose from: ' + ', '.join(sorted(valid)) + '.')
     # Keep a stable order for printing.
@@ -87,7 +92,10 @@ def _one_lane(engine, cleaned, raw, args, kb, base):
             recalled = recall_notes.for_turn(cleaned, state=h.STATE, session=session, before_row=row_id,
                                              log_path=args.usage_log, enabled=not getattr(args, 'no_recall', False))
             if recalled: past.append(recall_notes.message(recalled))
-            reply = h.request_reply(cleaned, engine=engine, model=model, effort=args.effort,
+            second = reply_judge.Second()
+            reply = second.request_reply(cleaned, judge_turn={'turns': session['turns'], 'step': 1,
+                                         'loop': False, 'recall_notes': recalled},
+                                    engine=engine, model=model, effort=args.effort,
                                     timeout=args.timeout, log_path=args.usage_log, events=events, history=past,
                                     request_context=cleaned, web=not args.no_web, web_max=args.web_max, knobs=kb)
             store.finish(row_id, reply, events)
@@ -96,11 +104,14 @@ def _one_lane(engine, cleaned, raw, args, kb, base):
                         'engine': engine, 'model': model}
             if recalled: exchange['recall_notes'] = recalled
             exchange.update(metadata)
+            second.record(store, row_id, exchange)
             store.save_session(session, exchange, args.turns)
             text = h.display_text(reply, metadata['sources'])
-        return engine, model, text, None
+        return engine, model, text, (sid, reply), None
     except Exception as exc:
-        return engine, model, None, str(exc)
+        if 'row_id' in locals():
+            store.finish(row_id, events=events, error=str(exc))
+        return engine, model, None, None, str(exc)
     finally:
         store.close()
 
@@ -123,17 +134,29 @@ def run(args, question):
     with ThreadPoolExecutor(max_workers=len(lanes)) as pool:
         futures = [pool.submit(_one_lane, engine, cleaned, raw, args, kb, base) for engine in lanes]
         for future in futures:
-            engine, model, text, error = future.result()
-            results[engine] = (model, text, error)
+            engine, model, text, final, error = future.result()
+            results[engine] = (model, text, error, final)
     status = 0
     for engine in lanes:
-        model, text, error = results[engine]
-        sys.stdout.write(label(engine, model) + '\n')
+        model, text, error, final = results[engine]
+        print(label(engine, model),file=sys.stderr,flush=True)
         if error:
-            sys.stdout.write(f'[error: {error}]\n')
+            print(f'[error: {error}]',file=sys.stderr,flush=True)
             status = 2
         else:
             sys.stdout.write(text if text.endswith('\n') else text + '\n')
+            sys.stdout.flush()
+            sid, reply = final
+            lane_args = copy(args)
+            lane_args.engine = engine
+            from receipt_context import messages_from_turns
+            store = Store(h.STATE)
+            try:
+                with store.session(sid,args.turns) as session:
+                    lane_mods.turn_end(lane_args,session,cleaned,reply,messages_from_turns(session['turns']),
+                                      lambda:atomic_json(store.sessions/(sid+'.json'),session))
+            finally:
+                store.close()
         sys.stdout.write('\n')
     sys.stdout.flush()
     return status

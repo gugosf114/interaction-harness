@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import json
 import re
+import receipt_context
 
-EVIDENCE_CAP = 60000
 SYSTEM = ('You grade each numbered line of an assistant reply for how well EVIDENCE supports the claim the line '
-          'actually makes. The evidence is command results from the current work session. Use the whole reply as '
+          'actually makes. The evidence contains command results, API tool results, web sources and dated saved-chat '
+          'passages from the work session. Saved chats prove what was recorded then, not current code or new work. Use the whole reply as '
           'context so you can tell a real claim from an example or hypothetical. Reply with JSON only.')
 WORD = {'g': 'shown', 'y': 'guess', 'r': 'no proof'}
 COLOR = {'g': '\033[32m', 'y': '\033[33m', 'r': '\033[31m'}
@@ -23,26 +24,21 @@ def content_lines(text: str) -> list[str]:
 
 
 def evidence(history: list) -> str:
-    """Every execution observation in the request history, newest kept first under the cap, back in order."""
-    blocks = [m['content'][:4000] for m in history
-              if m.get('role') == 'user' and isinstance(m.get('content'), str) and '"execution_observation"' in m['content']]
-    out, total = [], 0
-    for block in reversed(blocks):
-        if total + len(block) > EVIDENCE_CAP and out:
-            break
-        out.insert(0, block)
-        total += len(block)
-    return '\n---\n'.join(out)
+    """Every typed receipt in order, including this turn's tool calls and saved-chat evidence."""
+    return receipt_context.text(history)
 
 
 def grade_prompt(proof: str, lines: list[str]) -> str:
     numbered = '\n'.join(f'{i}| {line.strip()}' for i, line in enumerate(lines, 1))
-    return (f'EVIDENCE - command results from this session, newest last:\n{proof or "(no commands have run this session)"}\n\n'
+    return (f'EVIDENCE - typed receipts from this session, newest last:\n{proof or "(no receipts in this session)"}\n\n'
             f'REPLY LINES - grade each:\n{numbered}\n\n'
             'Grade every line with ONE letter:\n'
             'g = a factual statement the EVIDENCE supports (a value it printed, a file or output it shows). For a claim '
             'that an action was just DONE (pushed, committed, sent, deployed, saved, "it works", "done"), use g ONLY if the '
             'evidence actually shows that action happened.\n'
+            'A claim about what a dated saved chat says can be g when recall_notes supports it. '
+            'A saved chat alone cannot prove the code or device still behaves that way today. '
+            'A failed tool, a discovery listing, or mere approval does not prove completed work.\n'
             'y = anything not proven by the evidence but not false: an opinion, a plan, a question, a heading, OR a '
             'hypothetical / example (often marked by "would", "let\'s say", "for example", "if", "imagine"), OR a general '
             'fact from common knowledge.\n'

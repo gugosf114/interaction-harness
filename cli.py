@@ -217,7 +217,8 @@ def main(argv=None, *, literal=False):
                 store.save_session(session,exchange,args.turns)
                 sys.stdout.write(chat_screen.display_reply(reply,metadata['sources']));sys.stdout.flush()
                 if not (args.loop and reply.execution_payload):  # the turn's final answer: proof marks, thread tree, voice
-                    lane_mods.turn_end(args,session,cleaned,reply,past,lambda:atomic_json(store.sessions/(sid+'.json'),session))
+                    from receipt_context import messages_from_turns
+                    lane_mods.turn_end(args,session,cleaned,reply,messages_from_turns(session['turns']),lambda:atomic_json(store.sessions/(sid+'.json'),session))
                 chat_screen.after_reply(args,session,events)
                 if not (args.execute and reply.execution_payload):return last_exit
                 request={'op':'exec','command':reply.execution_payload,'timeout':args.exec_timeout}

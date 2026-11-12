@@ -25,6 +25,7 @@ import re
 import sys
 import tempfile
 import time
+import threading
 
 import habit_checks
 
@@ -40,7 +41,7 @@ _LIST_MARK = re.compile(r"^(\s*(?:[-*•]|\d+[.)])\s+)")
 _SENTENCE_END = re.compile(r"(?<=[.!?:])\s+")
 
 # What the gate cut or rejected, newest last. The client drains it after each reply and saves it with the turn.
-FIRED: list[dict] = []
+_fired_local = threading.local()
 _cache: dict = {}
 _warned: set = set()
 
@@ -231,14 +232,14 @@ def active_rules() -> list[Rule]:
 
 
 def note(kind: str, name: str, action: str, text: str) -> None:
-    FIRED.append({'kind': kind, 'name': name, 'action': action, 'text': text[:500]})
-    del FIRED[:-200]
+    if not hasattr(_fired_local, 'items'): _fired_local.items = []
+    _fired_local.items.append({'kind': kind, 'name': name, 'action': action, 'text': text[:500]})
 
 
 def drain() -> list[dict]:
     """What fired since the last call, oldest first. The list is emptied."""
-    fired = list(FIRED)
-    FIRED.clear()
+    fired = list(getattr(_fired_local, 'items', []))
+    _fired_local.items = []
     return fired
 
 

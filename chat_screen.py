@@ -43,6 +43,7 @@ for _name, _syntax, _description, _owner in [
     ('where', '', 'Show the topic trail.', 'mods'), ('up', '', 'Go up one topic.', 'mods'),
     ('voice', 'on|off|full|short', 'Set spoken answers.', 'mods'),
     ('usage', '[--local]', 'Show token use today, this week and this month.', 'mods'),
+    ('usage-alarm', '[test]', 'Save the token meter; test sends a phone reading.', 'mods'),
     ('autopilot', 'GOAL|status|go', 'Run or resume the saved goal.', 'mods'),
     ('both', 'QUESTION', 'Ask the selected lanes the same question.', 'both'),
     ('image', 'PATH [WORDS]', 'Attach a picture.', 'attachment'),
@@ -235,9 +236,11 @@ def after_reply(args, session, events, lane=None):
         money = f'${amount:.5f}/turn'
         if prior is not None: money += f' ${prior+amount:.5f}/session'
     row.update(cost_events=cost_events, cost_usd=amount)
-    text = status_text(shown_args, row['session'], row['exchange'], events, elapsed, off, money)
+    import mod_switches
+    text = status_text(shown_args, row['session'], row['exchange'], events, elapsed,
+                       off if mod_switches.is_on('roster',ACTIVE.state) else [], money)
     ACTIVE.last_status = text
-    ACTIVE.note(text)
+    if mod_switches.is_on('status-line',ACTIVE.state): ACTIVE.note(text)
     record(ACTIVE.state, row['session'], amount)
     ACTIVE.has_receipt = True
     path = ACTIVE.state/'chat-status.jsonl'

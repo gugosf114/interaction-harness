@@ -254,7 +254,7 @@ class TurnEnd(unittest.TestCase):
         err = io.StringIO()
         with patch.object(lane_mods.helper_model, 'complete', side_effect=lambda e, kind, *a, **k: answers[kind]), \
                 patch.object(lane_mods.os.path, 'exists', return_value=True), \
-                patch.object(lane_mods.subprocess, 'run') as run, patch.object(lane_mods.subprocess, 'Popen') as popen, \
+                patch.object(lane_mods.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stderr='')) as run, \
                 contextlib.redirect_stderr(err):
             lane_mods.turn_end(args, session, 'how is the battery', reply, [obs('termux-battery-status', '80')],
                                lambda: saved.append(1))
@@ -262,8 +262,10 @@ class TurnEnd(unittest.TestCase):
         self.assertIn('✗ I fixed the charger.', err.getvalue())
         self.assertEqual(thread_tree.labels(session['thread_tree']), ['battery check'])
         self.assertEqual(saved, [1])
-        run.assert_called_with([lane_mods.SAY, '-s'], stdout=-3, stderr=-3, timeout=5)
-        self.assertEqual(popen.call_args[0][0], [lane_mods.SAY, 'Battery is 80%. I fixed the charger.'])
+        self.assertEqual(run.call_args_list[0].args[0], [lane_mods.SAY, '-s'])
+        self.assertEqual(run.call_args_list[1].args[0], [lane_mods.SAY, 'Battery is 80%. I fixed the charger.'])
+        event = json.loads((h.STATE / 'usage.jsonl').read_text().splitlines()[-1])
+        self.assertEqual((event['kind'], event['status'], event['exit_code']), ('hook:voice', 'played', 0))
 
     def test_voice_short_and_off(self):
         self.assertEqual(lane_mods.spoken('**Yes.** The battery is fine.\n\n- one\n- two', False), 'Yes. The battery is fine.')
@@ -284,12 +286,12 @@ class TurnEnd(unittest.TestCase):
 
     def test_narrator_and_memory_version(self):
         err = io.StringIO()
-        with contextlib.redirect_stderr(err), patch.object(lane_mods.os.path, 'exists', return_value=True), \
-                patch.object(lane_mods.subprocess, 'run') as run:
+        with contextlib.redirect_stderr(err), \
+                patch.object(lane_mods.memory_versions, 'snapshot', return_value={'status': 'saved'}) as snapshot:
             lane_mods.before_command('card mail')
             lane_mods.after_command({'exit_code': 0})
         self.assertEqual(err.getvalue(), '» Read the mail card\n')
-        self.assertEqual(run.call_args[0][0], [lane_mods.MEMORY_VERSION])
+        snapshot.assert_called_once_with(h.STATE)
 
 
 class ChatLines(unittest.TestCase):

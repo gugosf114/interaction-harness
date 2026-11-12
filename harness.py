@@ -33,6 +33,7 @@ from lookup_gate import violation as lookup_violation, source_block, urls
 from choice_check import violation as choice_violation
 from gate_rules import apply as operator_rules
 import answer_checks
+from runtime_lifetime import managed_runtime
 import mod_switches
 import stamp
 
@@ -431,6 +432,7 @@ def record_event(event: dict, log_path: Path | None = None) -> None:
         f.write(json.dumps(event, ensure_ascii=True, separators=(',', ':')) + '\n')
 
 
+@managed_runtime
 def request_reply(
     raw_input: str, *, client=None, model: str | None = None, engine: str = 'openai',
     effort: str = DEFAULT_EFFORT, timeout: float = 90,
@@ -527,10 +529,11 @@ def request_reply(
                 receipts=(api_runtime.receipts if api_runtime else [])+([native_tool_evidence] if native_tool_evidence else [])
                 reason=api_tool_violation(reply.direct_answer,receipts)
                 if reason:raise GateError(reason)
-                # George's answer checks (answer_checks.py): one retry, and a second answer is shown even if it still fails.
-                soft=answer_checks.soft_violation(reply,request_context or raw_input,history or [],raw_input,STATE) if MODS_ON else None
-                if soft and attempt==1:
-                    print('answer check: '+soft.split(' - ',1)[0]+' - asked again',file=sys.stderr,flush=True)
+                # Style hooks bounce once. Receipts and detached commands must pass before display/execution.
+                soft=answer_checks.soft_violation(reply,request_context or raw_input,history or [],raw_input,STATE,
+                                                 api_runtime.receipts if api_runtime else None) if MODS_ON else None
+                if soft and (attempt==1 or soft.startswith(('receipts - ', 'no background - '))):
+                    if attempt==1:print('answer check: '+soft.split(' - ',1)[0]+' - asked again',file=sys.stderr,flush=True)
                     raise GateError(soft)
                 if soft:event['answer_check_kept']=soft.split(' - ',1)[0]
             except OpeningScrubError:
@@ -577,7 +580,6 @@ def request_reply(
             event['provider_error'] = getattr(exc,'body',None)
             raise HarnessError(f'The API rejected this request (HTTP {exc.status_code}).') from exc
         finally:
-            if api_runtime:api_runtime.close()
             event.update(senses.metadata())
             if native_tool_evidence:event.setdefault('api_tool_uses',[]).append(native_tool_evidence)
             if senses.last_usage:event.setdefault('usage',senses.last_usage)

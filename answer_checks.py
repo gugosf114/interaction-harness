@@ -5,8 +5,8 @@ Four checks send an answer back once with a reason (the harness's usual one retr
   plain-words    from hooks/plain-words.sh     reading grade 5 or lower, no listed jargon
   receipts       from hooks/receipts-gate.py   a WiM behaviour claim needs a receipt this turn, or GUESS
   no-background  from hooks/no-background.sh   a command must not detach from the session
-In Claude Code each hook blocks once and then lets the second answer through (stop_hook_active).
-The lanes do the same: a second answer that still fails one of these four is shown, never dropped.
+The two style hooks skip a second Stop call (stop_hook_active); the lanes keep that behavior.
+Receipts and foreground execution must pass after the single retry, or the reply is withheld.
 
 One more, undertaker (from the proof-marks mod), removes pure filler lines in code with no retry.
 Every function is pure. Switches and play mode are read by the caller (soft_violation).
@@ -18,6 +18,7 @@ import os
 import re
 
 import mod_switches
+import receipt_context
 
 # The Claude Code switches these hooks already honour. Read-only; the lanes never write them.
 PLAY_MODE = '/root/.claude/play-mode'
@@ -139,12 +140,7 @@ def turn_evidence(history: list, current_input: str | None = None) -> str:
         for index, message in enumerate(history):
             if message.get('role') == 'user' and not data(message.get('content')):
                 start = index
-    parts = []
-    for message in history[start:]:
-        content = message.get('content')
-        if message.get('role') == 'user' and isinstance(content, str) and '"execution_observation"' in content:
-            parts.append(content)
-    return '\n'.join(parts)
+    return receipt_context.text(history[start:], {'execution_observation', 'api_tool_observations'})
 
 
 def receipts(answer: str, evidence: str) -> str | None:
@@ -210,7 +206,7 @@ def play_mode() -> bool:
     return os.path.exists(PLAY_MODE)
 
 
-def soft_violation(reply, asked: str, history: list, current_input: str | None, state) -> str | None:
+def soft_violation(reply, asked: str, history: list, current_input: str | None, state, tool_uses=None) -> str | None:
     """The first failing check's reason, or None. reply is the validated HarnessReply."""
     answer = reply.direct_answer
     on = lambda name: mod_switches.is_on(name, state)
@@ -230,7 +226,10 @@ def soft_violation(reply, asked: str, history: list, current_input: str | None, 
         if reason:
             return reason
     if on('receipts'):
-        reason = receipts(answer, turn_evidence(history, current_input))
+        evidence = turn_evidence(history, current_input)
+        if tool_uses:
+            evidence += '\n' + json.dumps({'type': 'api_tool_observations', 'uses': tool_uses}, ensure_ascii=False)
+        reason = receipts(answer, evidence)
         if reason:
             return reason
     return None

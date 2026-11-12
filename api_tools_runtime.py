@@ -118,9 +118,18 @@ class Runtime:
         if not self.execute or self.executor is None:
             result={'approved':False,'exit_code':1,'stdout':'','stderr':'Client API tools require --loop or --exec.'}
         else:
+            import lane_mods
+            import answer_checks
+            reason = answer_checks.no_background(command) if lane_mods.on('no-background') else None
+            if reason:
+                result={'approved':False,'exit_code':1,'stdout':'','stderr':reason}
+                self.record(tool,ident,'failed',command=command,input=inputs or {},execution=result)
+                return result
             request={'op':'exec','command':command,'timeout':self.exec_timeout}
             if self.auto_confirm:request['auto_confirm']=True
+            lane_mods.before_command(command)
             result=self.executor(request)
+            lane_mods.after_command(result)
             result=prepare_execution(result,self.engine,self.state)
         status='success' if result.get('approved') and result.get('exit_code')==0 and not result.get('attachment_errors') else 'failed'
         self.record(tool,ident,status,command=command,input=inputs or {},execution=result)
