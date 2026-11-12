@@ -741,17 +741,19 @@ The small model is `claude-haiku-5-5` on `george` and `gpt-6-luna` on `g1`, on t
 
 Two lanes shipped first: `george` (Anthropic) and `g1` (OpenAI). Four more brains
 answer through the same four-field reply, the same display gates, the same pages,
-sessions, history and loop. Each provider is its own module (`extra_lanes.py`); the
-edit to `harness.request_reply` is a single dispatch branch. Each lane is an
-OpenAI-compatible Chat Completions endpoint, except Vertex, which is Anthropic's
-Messages shape over Google's rawPredict HTTPS endpoint.
+sessions, history and loop. Each provider is its own module (`gemini_lane.py`,
+`openrouter_lane.py`, `glm_lane.py`, `vertex_lane.py`), built on one shared gate
+(`lane_base.py`); the edit to `harness.request_reply` is a single dispatch branch
+into `extra_lanes.py`. A lane is either an OpenAI-compatible Chat Completions
+endpoint, or a provider's own JSON-over-HTTPS shape (Gemini's `generateContent`,
+Anthropic's Messages over Vertex `rawPredict`).
 
-| Shortcut | `--engine` | Model (default) | Key | Reply |
-|---|---|---|---|---|
-| `g2` | `gemini` | `gemini-3.1-pro-preview` | `state/gemini-api-key` | strict four-field JSON |
-| `g3` | `openrouter` | `openai/gpt-4o-mini` | `state/openrouter-api-key` (none yet) | strict four-field JSON |
-| `g4` | `glm` | `glm-george` (George's LoRA v11) | none (public Modal endpoint) | plain text, wrapped as an observation |
-| `gv` | `vertex` | `claude-sonnet-4-5` | gcloud token (ADC) | strict four-field JSON (emit_reply tool) |
+| Shortcut | `--engine` | Model (default) | Key | Reply | Hosted web |
+|---|---|---|---|---|---|
+| `g2` | `gemini` | `gemini-4-carbon` | `state/gemini-api-key` | strict four-field JSON | Google Search + URL context |
+| `g3` | `openrouter` | `z-ai/glm-5.3` | `state/openrouter-api-key` (none yet) | strict four-field JSON | web plugin |
+| `g4` | `glm` | `glm-george` (George's LoRA v11) | none (public Modal endpoint) | plain text, wrapped as an observation | none |
+| `gv` | `vertex` | `claude-opus-5-5` | gcloud token (ADC) | strict four-field JSON (`emit_reply` tool) | `web_search_20250305` |
 
 ```sh
 g2 "Explain chmod 640."
@@ -762,40 +764,54 @@ harness --engine gemini "Explain chmod 640."
 
 The shortcuts carry the same flags as `george` and `g1` (`--effort max --loop -y`).
 A lane's default model, endpoint and key are overridable by environment variable
-(`GEMINI_MODEL`, `OPENROUTER_BASE_URL`, `GLM_OPENAI_URL`, …) or by a saved file in
-`state/`.
+(`GEMINI_MODEL`, `OPENROUTER_BASE_URL`, `GLM_OPENAI_URL`, `VERTEX_MODEL`, ...) or by
+a saved file in `state/`. A `wrap` lane returns plain text, so it answers but
+proposes no command; a `json` lane returns the strict four fields and can.
 
-- **Gemini (`g2`).** Strongest text model the key could call on 2026-11-11, found
-  from a live model list, is `gemini-3.1-pro-preview`. Strict `response_format`
-  json_schema returns the four fields. Reasoning effort is sent as
-  `reasoning_effort` (mapped to low/medium/high). This endpoint exposes **no
-  hosted web search or page fetch and no PDF input**; a web question is answered
-  from training knowledge, and the lane never claims a lookup. Image input is
-  available on the endpoint but not yet wired here.
+- **Gemini (`g2`).** Google's own `generateContent` API, not the OpenAI-compatible
+  shim, because only the native API carries Grounding with Google Search, URL
+  context, inline images and PDFs alongside the strict JSON reply. The strongest
+  model the key could call on 2026-11-11, found from a live model list, is
+  `gemini-4-carbon` ("Our strongest reasoning model" on Google's model page).
+  Reply: `responseMimeType` `application/json` + `responseJsonSchema` (the four
+  fields). Reasoning depth is `thinkingConfig.thinkingLevel` (LOW/MEDIUM/HIGH).
+  Web search and page fetch are on by default (`google_search` + `url_context`);
+  a web answer records its grounding chunks as sources. Image and PDF input are
+  wired. Caching is implicit: the frozen pages lead `systemInstruction` and stay
+  byte-identical, so a repeated prefix reports `cachedContentTokenCount`.
 - **Open models (`g3`).** Any OpenAI-compatible endpoint behind a base URL and a
-  key: OpenRouter and the like. No key exists yet. To turn it on, in native
-  Termux: `export OPENROUTER_API_KEY=...` then
+  key: OpenRouter and the like. Strict `response_format` json_schema returns the
+  four fields; the `web` plugin adds search (sources come back as `url_citation`
+  annotations). No key exists yet. To turn it on, in native Termux:
+  `export OPENROUTER_API_KEY=...` then
   `python ~/interaction-harness/save_lane_key.py openrouter` (optionally
   `export OPENROUTER_BASE_URL=...` and `export OPENROUTER_MODEL=...` first). Until
-  then the lane answers with one line naming the missing key.
+  then the lane answers with one line naming the missing key. George's one step:
+  make a key at `https://openrouter.ai/keys` and save it with the command above.
 - **GLM (`g4`).** George's own fine-tuned GLM-4.5-Air + LoRA (adapter v11), served
   OpenAI-compatible on Modal at `gugosf--glm-george-openai.us-east.modal.run`. The
-  model returns plain text, so the client wraps its answer as a four-field
-  observation; this lane answers but proposes no commands. The endpoint scales to
-  zero after three idle minutes, so the first call after a pause cold-starts for
-  about 6–10 minutes. If the app is torn down, bring it up with
+  model returns plain text with no JSON mode or tools, so the client wraps its
+  answer as a four-field observation; this lane answers but proposes no commands.
+  The endpoint scales to zero after three idle minutes, so the first call after a
+  pause cold-starts for about 6-10 minutes (the lane raises its own timeout floor
+  for that). If the app is torn down, bring it up with
   `deb modal deploy /root/.glm/modal/app.py` (profile `gmail`, workspace `gugosf`,
   app `glm-george`).
 - **Claude through Vertex (`gv`).** `gcloud` is signed in as George on project
-  `bakers-agent`. Claude models are recognized through Vertex in the `global`
-  location (a model name returns HTTP 429, not 404 or 403), so the lane is built
-  and calls the rawPredict endpoint with a gcloud token. Usage bills to project
-  `bakers-agent`'s billing account, where George's Google Cloud credit sits. On
-  2026-11-11 every call returns **HTTP 429**: *"Quota exceeded for
+  `bakers-agent`, which holds his Google Cloud credit. Claude models are
+  recognized through Vertex in the `global` location (a real model name returns
+  HTTP 429, a made-up one returns 404, so the name is live), and the lane calls
+  the `rawPredict` endpoint with a gcloud access token. **Usage bills to project
+  `bakers-agent`'s billing account** (billing account `019593-02A1D3-8633C5`,
+  billing enabled), where the credit sits. On 2026-11-11 every call returns **HTTP
+  429**: *"Quota exceeded for
   aiplatform.googleapis.com/global_online_prediction_requests_per_base_model with
-  base model: anthropic-claude-sonnet-4-5. Please submit a quota increase
-  request."* The lane works once George requests Claude quota in the Vertex AI
-  console for project `bakers-agent`.
+  base model: anthropic-claude-opus. Please submit a quota increase request."* The
+  project's granted quota for every Claude base model in `global` is 0. A quota
+  increase was filed from here (Cloud Quotas API, three preferences on
+  `anthropic-claude-opus`: requests/min 30, input tokens/min 2,000,000, output
+  tokens/min 200,000). The lane works once Google grants it; George can also raise
+  it in the Vertex AI console for project `bakers-agent`.
 
 ## Ask several at once
 
@@ -806,10 +822,11 @@ both --lanes gemini,g1,george "Explain chmod 640."
 
 `both "QUESTION"`, and `/both QUESTION` inside a `george` or `g1` chat, send one
 question to every working lane in parallel. Each answer passes the display gates on
-its own, prints under a fixed label line naming the model (`── gemini · …`), and is
-saved to that lane's own session (`both-<lane>`) and to history. `--lanes a,b,c`
+its own, prints under a fixed label line naming the model (`-- gemini - ...`), and
+is saved to that lane's own session (`both-<lane>`) and to history. `--lanes a,b,c`
 picks the set; the default is every lane that has a usable key, plus the public GLM
-lane. Vertex is included only when named. `both` answers text; it does not execute.
+lane. Vertex is left out of the default (no quota yet) and is included only when
+named. `both` answers text; it does not execute.
 
 ## The knobs
 
@@ -818,32 +835,43 @@ subscription never did. Nothing here changes a default; every knob is off until 
 
 | Flag | Meaning |
 |---|---|
-| `--temperature N` | Sampling temperature (0–2). |
+| `--temperature N` | Sampling temperature (0-2). |
 | `--seed N` | Fixed sampling seed for repeatable output. |
 | `--stop WORD` | A stop string; repeatable (up to four). |
 | `--prefill TEXT` | Force the first words of the answer. |
 | `--service-tier TIER` | Request a faster service tier. |
 
 Each knob is sent only where the model accepts it. A knob the model refuses prints
-the provider's exact error once and the lane carries on without it. `--prefill` is
-enforced on the validated `direct_answer`, because the strict four-field schema
-forbids a true assistant-message prefill. Support measured live against each model
-on 2026-11-11:
+the provider's exact error once and the lane carries on without it: the built-in
+lanes carry a recorded map (`knobs.BUILTIN_SUPPORT`), the new lanes send what their
+module marks supported and, on a live 400 that names a field, drop that field and
+retry. `--prefill` is enforced on the validated `direct_answer`, because every
+strict-JSON lane forbids a true assistant-message prefill (the request cannot end
+with a model turn). `--service-tier fast` becomes Anthropic/Vertex fast mode
+(`speed: "fast"`); on OpenRouter the tier maps to provider routing
+(`provider.sort`, and `:nitro` for a priority endpoint). Support measured live
+against each model on 2026-11-11:
 
-| Knob | openai (gpt-6.1-sol) | anthropic (opus-5-5) | gemini | openrouter | glm | vertex |
+| Knob | openai (gpt-6.1-sol) | anthropic (opus-5-5) | gemini (4-carbon) | openrouter | glm | vertex (opus-5-5) |
 |---|---|---|---|---|---|---|
-| temperature | refused (HTTP 400) | refused (HTTP 400) | yes | yes | yes | yes |
-| seed | no param | no param | refused (unknown field) | yes | no | no |
-| stop | no param | yes (`stop_sequences`) | yes | yes | no | yes (`stop_sequences`) |
+| temperature | refused (HTTP 400) | refused (HTTP 400) | yes | yes | yes | yes* |
+| seed | refused (HTTP 400) | refused (HTTP 400) | refused (drop+retry) | yes | no | no |
+| stop | refused (HTTP 400) | yes (`stop_sequences`) | yes (`stopSequences`) | yes | no | yes (`stop_sequences`) |
 | prefill | answer layer | answer layer | answer layer | answer layer | answer layer | answer layer |
-| service tier | yes | yes | yes | yes | no | no |
+| service tier | yes (`service_tier`) | yes (`service_tier`/`speed`) | yes (`service_tier`) | yes (`provider.sort`/`:nitro`) | no | fast->`speed`* |
 
-The exact refusal text for the two built-in lanes is recorded in `knobs.py`
-(`BUILTIN_SUPPORT`); the new lanes' support map is in `extra_lanes.py`
-(`Lane.knob_support`), and anything a provider still rejects live is dropped with
-its exact error by the chat sender's drop-and-retry.
+The exact live refusals for the two built-in lanes are recorded in `knobs.py`
+(`BUILTIN_SUPPORT`): OpenAI answers HTTP 400 *"Unsupported parameter: 'temperature'
+is not supported with this model."*, *"Unknown parameter: 'seed'."* and *"Unknown
+parameter: 'stop'. Did you mean 'store'?"*; Anthropic answers *"temperature: Extra
+inputs are not permitted"* and *"seed: Extra inputs are not permitted"*. Gemini
+refuses `seed` with *Unknown name "seed"* and refuses a true prefill with *"Requests
+ending with a model turn are not supported."* `*` = the vertex lane's knob rows are
+read from the Vertex and Anthropic documentation and the first-party Anthropic live
+call; the Vertex call itself is quota-blocked (HTTP 429) until a grant, so they are
+proven on the model, not yet through Vertex.
 
-Tests: `test_extra_lanes.py` (lanes, knobs, and `both`, all with fake clients).
+Tests: `test_extra_lanes.py` (every lane, every knob, and `both`, all with fakes).
 
 ## Verification
 

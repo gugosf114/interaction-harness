@@ -77,20 +77,28 @@ def from_args(args) -> Knobs:
 # Knob support on the two built-in lanes, measured live against the production
 # models on 2026-11-11. ('send', api_field) applies it; ('skip', error) prints the
 # recorded provider error once and carries on; ('prefill', None) is the answer-layer
-# forced opening. gpt-6.1-sol and claude-opus-5-5 were the models checked.
+# forced opening. gpt-6.1-sol (Responses API) and claude-opus-5-5 (Messages API)
+# were the models checked, with these exact responses:
+#   openai temperature -> 400 "Unsupported parameter: 'temperature' is not supported with this model."
+#   openai seed        -> 400 "Unknown parameter: 'seed'."
+#   openai stop        -> 400 "Unknown parameter: 'stop'. Did you mean 'store'?"
+#   openai service_tier='priority'/'flex' -> accepted (usage.service_tier reflects it)
+#   anthropic temperature -> 400 "temperature: Extra inputs are not permitted"
+#   anthropic seed        -> 400 "seed: Extra inputs are not permitted"
+#   anthropic stop_sequences, service_tier, speed='fast' -> accepted
 BUILTIN_SUPPORT = {
     'openai': {
         'temperature': ('skip', "Unsupported parameter: 'temperature' is not supported with this model."),
-        'seed': ('skip', 'The OpenAI Responses API accepts no seed parameter on this model.'),
-        'stop': ('skip', 'The OpenAI Responses API accepts no stop parameter; it enforces structured output.'),
+        'seed': ('skip', "Unknown parameter: 'seed'."),
+        'stop': ('skip', "Unknown parameter: 'stop'. Did you mean 'store'?"),
         'service_tier': ('send', 'service_tier'),
         'prefill': ('prefill', None),
     },
     'anthropic': {
-        'temperature': ('skip', 'temperature: Extra inputs are not permitted (HTTP 400 on this model).'),
-        'seed': ('skip', 'The Anthropic Messages API accepts no seed parameter.'),
+        'temperature': ('skip', 'temperature: Extra inputs are not permitted'),
+        'seed': ('skip', 'seed: Extra inputs are not permitted'),
         'stop': ('send', 'stop_sequences'),
-        'service_tier': ('send', 'service_tier'),
+        'service_tier': ('send', 'service_tier'),   # 'fast' is special-cased to speed below
         'prefill': ('prefill', None),
     },
 }
@@ -106,6 +114,10 @@ def resolve_builtin(engine: str, kb: 'Knobs'):
               'service_tier': kb.service_tier, 'prefill': kb.prefill}
     for name, value in values.items():
         if value is None:
+            continue
+        # Anthropic's fast mode rides the service-tier knob: --service-tier fast -> speed:"fast".
+        if name == 'service_tier' and engine == 'anthropic' and str(value).lower() == 'fast':
+            wire['speed'] = 'fast'
             continue
         action, detail = support.get(name, ('skip', 'not supported on this lane.'))
         if action == 'send':

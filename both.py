@@ -14,6 +14,7 @@ import threading
 
 import harness as h
 import extra_lanes
+import lane_base
 import knobs as knobs_mod
 from phonetics import normalize
 from lookup_gate import turn_metadata
@@ -33,9 +34,9 @@ def has_credentials(engine: str) -> bool:
         if engine in ('openai', 'anthropic'):
             return bool(h.load_key(engine))
         lane = extra_lanes.LANES[engine]
-        if lane.key_env is None and lane.key_file is None:
+        if not lane_base.needs_key(lane):
             return True  # public endpoint (glm) or ambient credential
-        return bool(extra_lanes.lane_key(lane))
+        return bool(lane_base.lane_key(lane))
     except Exception:
         return False
 

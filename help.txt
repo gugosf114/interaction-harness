@@ -160,6 +160,17 @@ Second gate, typed in a chat:
   /off judge, /on judge The judge on the other engine reads each reply before
                         it is shown; a fail gives one corrective retry.
 
+More lanes, in the shell (README: More lanes):
+  g2 "QUESTION"         Gemini (gemini-4-carbon). Hosted Google Search on.
+  g3 "QUESTION"         Open models through one OpenAI-compatible key (OpenRouter).
+                        Needs a key: save_lane_key.py openrouter. Web plugin on.
+  g4 "QUESTION"         George's own GLM model on Modal. Plain-text lane; answers,
+                        runs no command. First call after idle cold-starts.
+  gv "QUESTION"         Claude through Google Vertex AI, billed to project
+                        bakers-agent. Needs a Vertex Claude quota grant.
+  both "QUESTION"       Ask every working lane at once; one labelled answer each.
+  both --lanes a,b,c "QUESTION"
+                        Pick the lane set. In a chat: /both QUESTION.
 Second gate, typed in the shell (a lane can type them too; see card lessons):
   rule add NAME --row N --action strip_sentence|reject --pattern 'REGEX' --bad 'SENTENCE'
                         Add a gate rule. Refused unless it matches its own bad
