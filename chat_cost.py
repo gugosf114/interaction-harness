@@ -9,6 +9,18 @@ def price(event, prices=None, service_tier=None):
     if prices is None:
         try: prices = json.loads(PRICES.read_text()).get('models', {})
         except (OSError, ValueError): return None
+    reports = (event.get('lookup_counts') or {}).get('provider_reports') or []
+    ids = event.get('provider_response_ids') or []
+    by_id = {r.get('response_id'):r for r in reports if r.get('response_id') in ids}
+    if len(by_id) > 1:
+        # Long-context rates are per request, not per aggregate model turn.
+        values = []
+        for ident, report in by_id.items():
+            part = {**event, 'usage':report.get('usage') or {}, 'response_id':ident,
+                    'provider_response_ids':[ident],
+                    'lookup_counts':{**event.get('lookup_counts',{}), 'provider_reports':[]}}
+            values.append(price(part, prices, service_tier))
+        return sum(values) if all(v is not None for v in values) else None
     entry = prices.get(event.get('model_returned') or event.get('model_requested'))
     if not entry or not entry.get('verified'): return None
     usage = event.get('usage') or {}
@@ -52,7 +64,9 @@ def price(event, prices=None, service_tier=None):
     search = server.get('web_search_requests',0)
     if event.get('engine') == 'openai':
         ids = event.get('provider_response_ids') or [event.get('response_id')]
-        search = sum(x.get('kind') == 'search' for x in counts.get('calls',[]) if x.get('response_id') in ids)
+        calls = [x for x in counts.get('calls',[]) if x.get('response_id') in ids]
+        if any(x.get('kind') not in ('search',) for x in calls): return None
+        search = len(calls)
     if search:
         if 'usd_per_web_search' not in entry: return None
         total += search*entry['usd_per_web_search']

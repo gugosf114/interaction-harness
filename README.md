@@ -1101,6 +1101,8 @@ slash command. A multiline terminal paste keeps a final backslash. History write
 take a lock, so two open chats keep both messages. `/copy` reads the clipboard back
 before it reports success. A locked phone that returns no text gets an error.
 Command cancellation drains the bridge reply before the next command starts.
+OpenAI background streams also cancel their `response.created` id on interruption,
+using the provider's [cancel endpoint](https://developers.openai.com/api/docs/guides/background).
 `state/chat-cost.jsonl` keeps cost receipts, including an unknown amount for a
 cancelled call without usage. An unknown amount hides the session total.
 

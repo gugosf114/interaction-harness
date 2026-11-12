@@ -11,6 +11,11 @@ class CostTests(unittest.TestCase):
     def test_long_context_uses_official_higher_rate(self):
         event={'engine':'openai','model_requested':'gpt-6.1-sol','usage':{'input_tokens':300000,'output_tokens':1000}}
         self.assertAlmostEqual(price(event),1.215)
+    def test_long_context_threshold_is_per_provider_request(self):
+        event={'engine':'openai','model_requested':'gpt-6.1-sol','usage':{'input_tokens':300000,'output_tokens':200},
+               'provider_response_ids':['a','b'],'lookup_counts':{'provider_reports':[
+                   {'response_id':ident,'usage':{'input_tokens':150000,'output_tokens':100}} for ident in ('a','b')]}}
+        self.assertAlmostEqual(price(event),.602)
     def test_unknown_model_tier_or_bill_hides_money(self):
         base={'engine':'openai','model_requested':'gpt-6.1-sol','usage':{'input_tokens':1,'output_tokens':1}}
         self.assertIsNone(price({**base,'model_requested':'unknown'}))
@@ -24,6 +29,9 @@ class CostTests(unittest.TestCase):
     def test_openai_search_calls_count_only_this_response(self):
         base={'engine':'openai','model_requested':'gpt-6.1-sol','response_id':'now','usage':{'input_tokens':100,'output_tokens':10},'lookup_counts':{'calls':[{'response_id':'old','kind':'search'},{'response_id':'now','kind':'search'}]}}
         self.assertAlmostEqual(price(base),.0103)
+    def test_unpriced_openai_fetch_hides_money(self):
+        event={'engine':'openai','model_requested':'gpt-6.1-sol','response_id':'a','usage':{'input_tokens':100,'output_tokens':10},'lookup_counts':{'calls':[{'response_id':'a','kind':'fetch'}]}}
+        self.assertIsNone(price(event))
     def test_missing_cancelled_turn_cost_hides_session_total(self):
         from pathlib import Path
         import tempfile

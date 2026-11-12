@@ -26,3 +26,16 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(endpoint.calls,[{'model':'gpt-6.1-sol'}])
     def test_one_off_path_preserved(self):
         with patch.object(chat_progress,'listener',None):self.assertEqual(complete_response(Endpoint()),{'nonstream':True})
+    def test_background_interrupt_cancels_the_created_response(self):
+        from unittest.mock import Mock
+        class Interrupted(Stream):
+            def __iter__(self):
+                yield SimpleNamespace(type='response.created',response=SimpleNamespace(id='resp-proof'))
+                raise KeyboardInterrupt
+        class Background(Endpoint):
+            def stream(self,**kw):return Interrupted([],None)
+        endpoint=Background();endpoint.cancel=Mock(return_value=SimpleNamespace(status='cancelled'))
+        with patch.object(chat_progress,'listener',lambda *_:None),patch('harness.record_event') as record:
+            with self.assertRaises(KeyboardInterrupt):complete_response(endpoint,background=True)
+        endpoint.cancel.assert_called_once_with('resp-proof')
+        self.assertEqual(record.call_args.args[0]['status'],'cancelled')
