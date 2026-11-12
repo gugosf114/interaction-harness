@@ -3,6 +3,8 @@
 # The work is done by gate_rules_cli.py on the Debian side, where the harness's Python lives.
 here=$(dirname "$(readlink -f "$0")")
 root=$(dirname "$(dirname "$here")")
-# The harness's Python can start only on the Debian side. From native Termux, go through the bridge.
-[ -x "$root/.venv/bin/python" ] && exec "$root/.venv/bin/python" -B "$root/gate_rules_cli.py" "$@"
-exec proot-distro login debian -- env HARNESS_STATE_DIR="${HARNESS_STATE_DIR:-}" "$root/.venv/bin/python" -B "$root/gate_rules_cli.py" "$@"
+# This checkout's own Python environment when it has one, else Debian's python3: the code uses the standard library only.
+run='p="$1/.venv/bin/python"; [ -x "$p" ] || p=python3; s="$1/$2"; shift 2; exec "$p" -B "$s" "$@"'
+[ -e /etc/debian_version ] && exec sh -c "$run" sh "$root" gate_rules_cli.py "$@"
+# From native Termux, go through the bridge.
+exec proot-distro login debian -- env HARNESS_STATE_DIR="${HARNESS_STATE_DIR:-}" sh -c "$run" sh "$root" gate_rules_cli.py "$@"

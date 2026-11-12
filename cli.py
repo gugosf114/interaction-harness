@@ -251,7 +251,7 @@ def main(argv=None):
                 recalled=recall_cli.notes(args,session,cleaned,row_id) if step==1 else None
                 if recalled:past.append({'role':'user','content':recalled})
                 # The judge on the other engine reads the reply before it is shown; a fail gives one corrective retry.
-                judged=dict(turns=session['turns'],step=step,loop=args.loop,
+                judged=dict(turns=session['turns'],step=step,loop=args.loop,recall_notes=recalled,
                             renew=lambda:{'api_runtime':api_tools_cli.runtime(args,h.STATE,sid,native)})
                 reply=second.request_reply(current,judge_turn=judged,engine=args.engine,model=model,effort=args.effort,timeout=args.timeout,
                                       log_path=args.usage_log,events=events,history=past,execution_confirmed=supported,

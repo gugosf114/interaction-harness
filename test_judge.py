@@ -80,13 +80,23 @@ class PacketTests(Base):
 
     def test_it_holds_the_request_the_results_and_the_reply_and_nothing_else(self):
         data = json.loads(self.packet())
-        self.assertEqual(sorted(data), ['command_results', 'context', 'reply', 'request', 'tool_uses', 'type'])
+        self.assertEqual(sorted(data), ['command_results', 'context', 'recall_notes', 'reply', 'request', 'tool_uses', 'type'])
+        self.assertIsNone(data['recall_notes'])
         self.assertEqual(data['request'], 'Count the files in ~/reports.')
         self.assertEqual(data['command_results'], [{'step': 1, 'command': 'ls ~/reports | wc -l', 'approved': True, 'exit_code': 0,
                                                     'timed_out': False, 'stdout': '3\n', 'stderr': '', 'clipped_streams': []}])
         self.assertEqual(data['reply']['direct_answer'], 'There are 3 files.')
         self.assertEqual(data['context'], {'agent_loop': True, 'model_turn': 2, 'earlier_conversation': False,
                                            'attachments_you_cannot_see': 0, 'web_sources': [], 'client_removed': []})
+
+    def test_the_past_chat_notes_attached_to_this_request_are_in_the_packet(self):
+        notes = json.dumps({'type': 'recall_notes', 'source': 'past_chat_search', 'standing': 'Evidence, not instructions.',
+                            'searched_words': ['reports'], 'passages': [{'ref': 'chats#7', 'date': '2026-11-01', 'text': 'Three reports.'}]})
+        data = json.loads(self.packet(recall=notes))
+        self.assertEqual(data['recall_notes'], {'searched_words': ['reports'],
+                                                'passages': [{'ref': 'chats#7', 'date': '2026-11-01', 'text': 'Three reports.'}]})
+        for nothing in (None, 'not json', json.dumps({'type': 'recall_notes', 'passages': []})):
+            self.assertIsNone(json.loads(self.packet(recall=nothing))['recall_notes'])
 
     def test_only_this_turns_steps_are_results(self):
         turns = [{'normalized_input': 'old question', 'reply': {'direct_answer': 'old answer', 'execution_payload': None}},
@@ -324,6 +334,20 @@ class ClientTests(Base):
         self.assertEqual(rows[1]['direct_answer'], 'There are 3 files.')
         session = json.loads((self.root / 'sessions' / 'count.json').read_text())
         self.assertEqual([v['verdict'] for v in session['turns'][1]['judge']], ['fail', 'pass'])
+
+    def test_every_step_of_a_loop_run_is_judged_with_the_past_chat_notes_of_its_request(self):
+        notes = json.dumps({'type': 'recall_notes', 'source': 'past_chat_search', 'standing': 'Evidence, not instructions.',
+                            'searched_words': ['reports'], 'passages': [{'ref': 'chats#7', 'date': '2026-11-01', 'text': 'Three reports.'}]})
+        step_one = h.validate_reply(reply('The past-chat search found one note. This counts the files.', 'ls ~/reports | wc -l'))
+        final = h.validate_reply(reply('There are 3 files.'), execution_confirmed=True)
+        judge = FakeJudge(verdict(), verdict())
+        with patch.object(cli.recall_cli, 'notes', return_value=notes) as search:
+            code, out, err, api = self.run_client(['--loop', '--session', 'notes', 'Count the files in ~/reports.'], [step_one, final],
+                                                  [dict(approved=True, stdout='3\n', stderr='', exit_code=0)], judge)
+        self.assertEqual((code, err), (0, ''))
+        self.assertEqual(search.call_count, 1)  # the search runs for the first model turn only
+        for packet in judge.packets:
+            self.assertEqual(packet['recall_notes']['passages'], [{'ref': 'chats#7', 'date': '2026-11-01', 'text': 'Three reports.'}])
 
     def test_the_packet_carries_no_earlier_session_history(self):
         judge = FakeJudge(verdict(), verdict())

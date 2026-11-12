@@ -2,7 +2,8 @@
 
 After a reply passes the local gate, one stateless call goes to the other engine (from george to
 gpt-6.1-sol, from g1 to claude-opus-5-5). It carries a fixed prompt and one packet: George's request,
-the command results recorded for this request, and the reply. No session history, no operator pages,
+the command results recorded for this request, the past-chat notes the client attached to it, and the reply.
+No session history, no operator pages,
 no tools. The answer is strict JSON: {"verdict": "pass" | "fail", "reason": "..."}.
 
 A fail gives the working model one corrective retry that carries the judge's reason. The second reply
@@ -51,6 +52,7 @@ SYSTEM_PROMPT = """You are the second check on a reply that another model wrote 
 The user message is one JSON object, the packet:
 - request: what George typed. It is the whole job for this turn.
 - command_results: every shell command the client ran for this request so far, in order, each with its exit code and output. tool_uses lists other tool calls the client recorded. Together they are the only record of work done in this turn.
+- recall_notes: passages from George's saved past chats that the client found by a keyword search in code and attached to this request before the working model answered; null when it attached none. The working model read them. They are part of this turn's record: a statement about what the past-chat search found is checked against them.
 - reply: the reply under review. direct_answer is what George will read. execution_payload, when it is not null, is a shell command the client runs next; the reply is then a step in progress and the final answer comes later.
 - context: what the client knows about this turn.
 
@@ -135,8 +137,19 @@ def tool_receipts(records) -> list:
     return [clip(record) for record in records or [] if isinstance(record, dict)]
 
 
+def recall_record(message) -> dict | None:
+    """This turn's recall_notes message as data for the packet: the words searched and the passages found."""
+    try:
+        data = json.loads(message) if isinstance(message, str) else None
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or not data.get('passages'):
+        return None
+    return {'searched_words': data.get('searched_words'), 'passages': data['passages']}
+
+
 def build_packet(*, request: str, reply, earlier: list, metadata: dict, loop: bool, step: int,
-                 earlier_conversation: bool, attachments: int, removed: list) -> str | None:
+                 earlier_conversation: bool, attachments: int, removed: list, recall=None) -> str | None:
     """The packet text, or None when it cannot fit under the cap."""
     def assemble(limit):
         results = [record for number, exchange in enumerate(earlier, 1)
@@ -144,7 +157,7 @@ def build_packet(*, request: str, reply, earlier: list, metadata: dict, loop: bo
         uses = [use for exchange in earlier for use in exchange.get('api_tool_uses') or []] + list(metadata.get('api_tool_uses') or [])
         return json.dumps({
             'type': 'judge_packet', 'request': request, 'command_results': results, 'tool_uses': tool_receipts(uses),
-            'reply': reply.model_dump(),
+            'recall_notes': recall_record(recall), 'reply': reply.model_dump(),
             'context': {'agent_loop': bool(loop), 'model_turn': step, 'earlier_conversation': bool(earlier_conversation),
                         'attachments_you_cannot_see': attachments,
                         'web_sources': [source.get('url') for source in metadata.get('sources') or []][:40],
@@ -252,6 +265,8 @@ class Second:
         engine, model = advisor.other_lane(kwargs.get('engine', 'openai'))
         turns, step, loop = turn.get('turns') or [], int(turn.get('step') or 1), bool(turn.get('loop'))
         earlier = turn_exchanges(turns, step, loop)
+        # The past-chat notes the client attached to this request: at step 1 they come with the turn, later from the saved step.
+        recall = turn.get('recall_notes') or next((exchange['recall_notes'] for exchange in earlier if exchange.get('recall_notes')), None)
         packet = build_packet(
             request=kwargs.get('request_context') or turn['current'], reply=reply, earlier=earlier,
             metadata=turn_metadata(events), loop=loop, step=step,
@@ -259,7 +274,7 @@ class Second:
             attachments=len(kwargs.get('attachments') or []) + sum(
                 len((exchange.get('execution_result') or {}).get('attachments') or []) + len(exchange.get('attachments') or [])
                 for exchange in earlier),
-            removed=[item['text'] for item in self.fired if item.get('action') == 'strip_sentence'])
+            removed=[item['text'] for item in self.fired if item.get('action') == 'strip_sentence'], recall=recall)
         if packet is None:
             return {'engine': engine, 'model': model, 'verdict': None, 'reason': '', 'status': 'packet_over_cap'}
         return (self.judge or ask)(packet, engine=engine, model=model, effort=kwargs.get('effort', h.DEFAULT_EFFORT),

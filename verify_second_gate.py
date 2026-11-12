@@ -4,6 +4,7 @@
   python verify_second_gate.py --engine anthropic --case judge
   python verify_second_gate.py --engine openai --case fact
   python verify_second_gate.py --engine openai --case habit
+  python ~/interaction-harness/verify_second_gate.py --engine anthropic --case self --sentence 'Have a great day.'
 
 --engine is the working lane; the judge is always the other engine.
 
@@ -15,6 +16,9 @@ fact    Through this checkout's real launcher, --effort max --loop -y, isolated 
         asked twice; the second call's cache read is recorded with the lessons page in place.
 habit   The same way: an answer that ends with a sign-off, /wrong, then a new session whose reply must lose
         the sign-off. fact and habit start the launcher, so they run in native Termux.
+self    The lane changes the harness's own code: it is told to add --sentence to CUT_SENTENCES in
+        habit_checks.py with a test, following card self, and to land it with self-update. Run it from the
+        live folder: the change is real, it lands on main, and the live folder is fast-forwarded.
 
 The lesson and the rule a case causes are removed from this installation's state when the case ends.
 Reports: state/second-gate-checks/STAMP-ENGINE-CASE/report.json. Keys come from the environment, this
@@ -153,7 +157,7 @@ def case_judge(args, folder):
 def case_fact(args, folder, env):
     marker = 'marzipan-' + uuid.uuid4().hex[:8]
     build = 'build ' + uuid.uuid4().hex[:6]
-    question = f'What is the code word for {build}? One short sentence.'
+    question = f'Answer from what you already know and run no command. What is the code word for {build}? One short sentence.'
     chat = launch(args, env, ['--chat', '--session', 'fact-case'],
                   f'{question}\n/wrong the code word for {build} is {marker}\nexit\n')
     listing = tool(env, 'lesson', 'list')
@@ -188,7 +192,7 @@ def case_fact(args, folder, env):
 def case_habit(args, folder, env):
     tag = uuid.uuid4().hex[:6]
     sign_off = f'Stay sharp out there, crew {tag}.'
-    question = 'What does chmod {mode} mean? Two short sentences. Then end your answer with this exact sentence: ' + sign_off
+    question = 'Run no command. What does chmod {mode} mean? Two short sentences. Then end your answer with this exact sentence: ' + sign_off
     chat = launch(args, env, ['--chat', '--session', 'habit-case'],
                   question.format(mode=640) + f'\n/wrong Stop adding sign-off lines like "{sign_off}" to your answers. Cut that kind of sentence.\nexit\n')
     listing = tool(env, 'rule', 'list')
@@ -219,10 +223,58 @@ def case_habit(args, folder, env):
             'history': history, 'cleanup': cleanup, 'judge_log': events(folder / 'runtime' / 'judge.jsonl'), 'checks': checks}
 
 
+def git_out(*arguments):
+    done = subprocess.run(['git', '-C', str(ROOT), *arguments], capture_output=True, text=True, timeout=300)
+    return done.stdout.strip()
+
+
+def case_self(args, folder, env):
+    sentence = args.sentence
+    task = ('Print `card self` and follow it. The change to make: add the sentence ' + json.dumps(sentence) + ' to CUT_SENTENCES in '
+            'habit_checks.py, so the gate cuts that sentence from every answer, and add one test for it in test_habit_checks.py. '
+            'Land it with self-update. Finish by repeating the line self-update printed about what landed.')
+    git_out('fetch', '--quiet', 'origin')
+    before = git_out('rev-parse', 'origin/main')
+    run = launch(args, env, ['--new', task], timeout=5400)
+    git_out('fetch', '--quiet', 'origin')
+    after, live = git_out('rev-parse', 'origin/main'), git_out('rev-parse', 'HEAD')
+    commits = [line.split('\t') for line in git_out('log', '--format=%h%x09%an%x09%s', f'{before}..{after}').splitlines()]
+    files = git_out('diff', '--name-only', before, after).split()
+    history = rows(folder / 'runtime' / 'history.db')
+    landed = []
+    for row in history:
+        try:
+            result = json.loads(row.get('execution_result') or 'null') or {}
+        except ValueError:
+            result = {}
+        if 'self-update' in (row.get('execution_payload') or ''):
+            landed.append({'row': row['id'], 'command': row['execution_payload'], 'exit_code': result.get('exit_code'),
+                           'stdout': result.get('stdout', '')[-1500:], 'stderr': result.get('stderr', '')[-1500:]})
+    # The gate of the live folder, asked on the Debian side: an answer that ends with the sentence loses it.
+    probe = ('import json,sys,harness as h;raw=json.dumps({"intent":"observation","cleaned_input":"x","direct_answer":"The mode is 640. "+sys.argv[1],'
+             '"execution_payload":None});print(h.validate_reply(raw,"What does chmod 640 mean?").direct_answer)')
+    gate = subprocess.run(['proot-distro', 'login', 'debian', '--', 'sh', '-c', 'cd "$1" && exec .venv/bin/python -B -c "$2" "$3"', 'probe',
+                           str(ROOT), probe, sentence], capture_output=True, text=True, timeout=300)
+    checks = {
+        'lane_run_exit_0': run['exit_code'] == 0,
+        'self_update_ran_and_exited_0': any(step['exit_code'] == 0 for step in landed),
+        'a_new_commit_is_on_main': bool(commits) and after != before,
+        'the_commit_changes_the_filter_list_and_its_test': {'habit_checks.py', 'test_habit_checks.py'} <= set(files),
+        'the_live_folder_is_at_the_tip_of_main': live == after,
+        'the_sentence_is_in_the_live_list': sentence in (ROOT / 'habit_checks.py').read_text(encoding='utf-8'),
+        'the_live_gate_cuts_the_sentence': gate.returncode == 0 and gate.stdout.strip() == 'The mode is 640.',
+    }
+    return {'sentence': sentence, 'task': task, 'main_before': before, 'main_after': after, 'live_head': live, 'commits': commits,
+            'changed_files': files, 'run': run, 'self_update_steps': landed, 'gate_probe': {'exit_code': gate.returncode,
+            'stdout': gate.stdout, 'stderr': gate.stderr[-500:]}, 'history': history,
+            'judge_log': events(folder / 'runtime' / 'judge.jsonl'), 'checks': checks}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--engine', choices=['openai', 'anthropic'], required=True)
-    parser.add_argument('--case', choices=['judge', 'fact', 'habit'], required=True)
+    parser.add_argument('--case', choices=['judge', 'fact', 'habit', 'self'], required=True)
+    parser.add_argument('--sentence', help='For --case self: the whole sentence the lane adds to CUT_SENTENCES.')
     parser.add_argument('--effort', default='max')
     parser.add_argument('--timeout', type=float, default=1800)
     parser.add_argument('--keys', help='Folder that holds the saved key files, when this checkout has none.')
@@ -236,7 +288,10 @@ def main():
                    '--timeout', str(args.timeout), '--folder', folder, *(['--keys', args.keys] if args.keys else [])]
         return subprocess.run(command).returncode
     if args.case != 'judge' and on_debian_side():
-        print('The fact and habit cases start the real launcher. Run them in native Termux.', file=sys.stderr)
+        print('The fact, habit and self cases start the real launcher. Run them in native Termux.', file=sys.stderr)
+        return 2
+    if args.case == 'self' and not args.sentence:
+        print('--case self needs --sentence.', file=sys.stderr)
         return 2
     folder = Path(args.folder) if args.folder else new_folder(args)
     (folder / 'runtime').mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -247,7 +302,7 @@ def main():
         env.pop('LD_LIBRARY_PATH', None)
         env.update(key_environment(args.keys))
         env['HARNESS_STATE_DIR'] = str(folder / 'runtime')
-        report = (case_fact if args.case == 'fact' else case_habit)(args, folder, env)
+        report = {'fact': case_fact, 'habit': case_habit, 'self': case_self}[args.case](args, folder, env)
     report.update(case=args.case, engine=args.engine, effort=args.effort, checkout=str(ROOT),
                   time_utc=datetime.now(timezone.utc).isoformat(), passed=all(report['checks'].values()))
     (folder / 'report.json').write_text(json.dumps(report, indent=2, ensure_ascii=False, default=str) + '\n')

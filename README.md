@@ -564,6 +564,7 @@ After a reply passes the local gate, a second model on the other engine reads it
 
 - `request`: what George typed for this turn (the loop's original task on later steps).
 - `command_results`: every command the client ran for this request so far, with exit code and both output streams, clipped as the working model saw them. `tool_uses`: the API-tool receipts of this turn.
+- `recall_notes`: the past-chat passages the client attached to this request before the working model answered (see *Recall, notes and session surgery*), or null. A statement about what the past-chat search found is checked against them.
 - `reply`: the four fields under review.
 - `context`: whether this is a loop step, whether earlier conversation exists, how many attachments the judge cannot see, the addresses of web sources, and the sentences the client cut under George's gate rules.
 - A packet over 600,000 characters first shortens the output of earlier steps; if it still does not fit, the reply passes unjudged.
