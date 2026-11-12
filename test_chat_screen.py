@@ -76,6 +76,14 @@ class ScreenTests(unittest.TestCase):
         with patch.object(editor,'line',side_effect=['first\nlast \\', 'NEXT']) as line:
             self.assertEqual(editor.read(),'first\nlast \\')
             self.assertEqual(line.call_count,1)
+    def test_edit_keeps_literal_paste_provenance(self):
+        for text in ('/status','/paste','quit'):
+            editor=ChatInput(self.root,lambda _,text,**kw:text,100)
+            editor.initial=text;editor.initial_literal=True
+            with patch.object(editor,'line',return_value=text) as line:
+                value=editor.read()
+            self.assertEqual(value,text);self.assertTrue(value.literal)
+            self.assertFalse(editor.initial_literal);self.assertEqual(line.call_count,1)
     def test_parallel_history_writers_keep_both_messages(self):
         from concurrent.futures import ThreadPoolExecutor
         from threading import Barrier

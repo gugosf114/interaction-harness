@@ -30,6 +30,7 @@ class ChatInput:
         self.color = color
         self.limit = limit
         self.initial = ''
+        self.initial_literal = False
         try: self.history = json.loads(self.path.read_text())
         except (OSError, ValueError): self.history = []
         if not isinstance(self.history, list): self.history = []
@@ -87,9 +88,11 @@ class ChatInput:
         return line.rstrip('\r\n')
 
     def read(self):
-        text = self.line()
-        block = text.strip().lower() == '/paste'
-        pasted = '\n' in text
+        prefill_literal = self.initial_literal
+        try: text = self.line()
+        finally: self.initial_literal = False
+        block = not prefill_literal and text.strip().lower() == '/paste'
+        pasted = prefill_literal or '\n' in text
         if block:
             lines = []
             oversized = False
@@ -113,4 +116,4 @@ class ChatInput:
                 text = text[:-1] + '\n' + self.line('· ')
         if len(text) > self.limit:
             raise InputTooLong(f'Input exceeds {self.limit} characters.')
-        return InputMessage(text, literal=block or '\n' in text)
+        return InputMessage(text, literal=prefill_literal or block or '\n' in text)

@@ -409,6 +409,7 @@ def run_chat(args, model, cli):
                     if not last_input: raise ValueError('This session has no message yet.')
                     if name == 'edit':
                         editor.initial = last_input
+                        editor.initial_literal = last_literal
                         if not editor.readline: screen.note(last_input)
                         continue
                     if last_literal:
