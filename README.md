@@ -899,7 +899,7 @@ against each model on 2026-11-11:
 | Knob | openai (gpt-6.1-sol) | anthropic (opus-5-5) | gemini (4-carbon) | openrouter | glm | vertex (opus-5-5) |
 |---|---|---|---|---|---|---|
 | temperature | refused (HTTP 400) | refused (HTTP 400) | yes | yes | yes | yes* |
-| seed | refused (HTTP 400) | refused (HTTP 400) | refused (drop+retry) | yes | no | no |
+| seed | refused (HTTP 400) | refused (HTTP 400) | yes | yes | no | no |
 | stop | refused (HTTP 400) | yes (`stop_sequences`) | yes (`stopSequences`) | yes | no | yes (`stop_sequences`) |
 | prefill | answer layer | answer layer | answer layer | answer layer | answer layer | answer layer |
 | service tier | yes (`service_tier`) | yes (`service_tier`/`speed`) | yes (`service_tier`) | yes (`provider.sort`/`:nitro`) | no | fast->`speed`* |
@@ -909,8 +909,10 @@ The exact live refusals for the two built-in lanes are recorded in `knobs.py`
 is not supported with this model."*, *"Unknown parameter: 'seed'."* and *"Unknown
 parameter: 'stop'. Did you mean 'store'?"*; Anthropic answers *"temperature: Extra
 inputs are not permitted"* and *"seed: Extra inputs are not permitted"*. Gemini
-refuses `seed` with *Unknown name "seed"* and refuses a true prefill with *"Requests
-ending with a model turn are not supported."* `*` = the vertex lane's knob rows are
+(gemini-4-carbon) accepts `seed` live and refuses only a true prefill, with *"Requests
+ending with a model turn are not supported."* The new lanes send every set knob and,
+on a live 400 that names a field, drop that field and retry; `test_extra_lanes.py`
+exercises that drop-and-retry with a fake 400. `*` = the vertex lane's knob rows are
 read from the Vertex and Anthropic documentation and the first-party Anthropic live
 call; the Vertex call itself is quota-blocked (HTTP 429) until a grant, so they are
 proven on the model, not yet through Vertex.
