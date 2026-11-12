@@ -17,10 +17,10 @@ import re
 
 # Each entry is one whole sentence. The history row or the date that caused it goes in a comment on its line.
 CUT_SENTENCES: list[str] = [
-    'Let me know how it goes.',  # 2026-11-12: George asked the gate to cut it from every answer.
-    'Have a great day.',  # 2026-11-12: George asked the gate to cut it from every answer.
-    'Take care.',  # 2026-11-12, history row 2: George asked the gate to cut it from every answer.
-    'All the best.',  # 2026-11-12, history row 2: George asked the gate to cut it from every answer.
+    'Let me know how it goes.',  # 2026-11-12: added in the live proof of self-update by the george lane, verify_second_gate.py --case self.
+    'Have a great day.',  # 2026-11-12: added in the live proof of self-update by the g1 lane, verify_second_gate.py --case self.
+    'Take care.',  # 2026-11-12: added in the live proof of self-update by the george lane, through /wrong.
+    'All the best.',  # 2026-11-12: added in the live proof of self-update by the g1 lane, through /wrong and self-update --row.
 ]
 
 # Functions (answer, asked) -> reason or None.

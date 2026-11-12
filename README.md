@@ -606,7 +606,7 @@ After a reply passes the local gate, a second model on the other engine reads it
 
 The judge runs only under the command-line entry point, so unit tests never call a model. Code: `reply_judge.py`; two hooks in `cli.py`. Tests: `test_judge.py`.
 
-**Live proof (Nov 11, 2026).** `verify_second_gate.py --case judge` plants a wrong-question first reply (a `chmod` explanation for "What is the capital of France?") and makes the real judge call and the real corrective retry. On both lanes the judge failed the planted reply with a reason, the working model answered "Paris" on the retry, the judge passed that, and a planted right answer passed with no second call. Exit code 0 on both lanes. Each verdict took 2 to 6 seconds at `max` effort: gpt-6.1-sol used about 830 input and 90 to 130 output tokens, claude-opus-5-5 about 1,320 input and 115 to 390 output tokens.
+**Live proof (Nov 11, 2026).** `verify_second_gate.py --case judge` plants a wrong-question first reply (a `chmod` explanation for "What is the capital of France?") and makes the real judge call and the real corrective retry. On both lanes the judge failed the planted reply with a reason, the working model answered "Paris" on the retry, the judge passed that, and a planted right answer passed with no second call. Exit code 0 on both lanes. Those verdicts took 2 to 10 seconds at `max` effort: gpt-6.1-sol used about 830 input and 70 to 200 output tokens, claude-opus-5-5 about 1,320 input and 115 to 390 output tokens. One earlier run on the `g1` lane exited 1 because the judge call to Anthropic failed with `APIConnectionError`; the reply passed through unjudged, as built, and the rerun exited 0. A real turn on each lane from the live folder saved a `pass` verdict in `history.db` and one line in `judge.jsonl`.
 
 ### The choice check
 
@@ -690,6 +690,12 @@ Exit codes: 0 landed, or nothing to land; 1 a test failed; 2 wrong use; 3 the re
 `card self` gives the lane the whole move: clone, read, exact edits, a test, `self-update`, tell George. A habit that no pattern can hold goes into `habit_checks.py`, as a sentence in `CUT_SENTENCES` or a function in `CHECKS`, with its test in `test_habit_checks.py`.
 
 Code: `self_update.py`; the commands are `toolbox/bin/self-clone` and `toolbox/bin/self-update`. Tests: `test_self_update.py`, `test_habit_checks.py`.
+
+**Live proof (Nov 12, 2026).** Run from the live folder on each lane, `--effort max --loop -y`, isolated state folder. Every run exited 0, and each change was landed on `main` by the lane itself.
+
+- `verify_second_gate.py --case self`: the lane was told to add one sentence to `CUT_SENTENCES` with a test. It printed `card self`, ran `self-clone`, made the edit with `edit-exact`, ran the one test file, and ran `self-update`, which exited 0. `george` landed `529925a` ("Let me know how it goes."; 678 tests and the 4 native tests passed). `g1` landed `44a2018` ("Have a great day."; 679 and 4). After each run `main` and the live folder were at the lane's commit, and the live gate cut the sentence.
+- `/wrong` to code: a chat answer ended with a planted closing line, then `/wrong Never end an answer with "…". This habit goes in code…`. The lane chose the code bin, followed `card self` and landed the change. `george` landed `4f190f0` ("Take care."; 713 and 4). `g1` used `self-update --row 2` and landed `50d4aee` ("All the best."; 717 and 4); its commit message ends with `Correction: history row 2`, and the correction row holds the commit.
+- These four sentences came from the proof, not from George. They are closing lines with no content. To take one back out: delete its line in `habit_checks.py` and its test in `test_habit_checks.py`, then `self-update`.
 
 ## Always on
 
