@@ -19,6 +19,7 @@ import re
 CUT_SENTENCES: list[str] = [
     'Let me know how it goes.',  # 2026-11-12: George asked the gate to cut it from every answer.
     'Have a great day.',  # 2026-11-12: George asked the gate to cut it from every answer.
+    'Take care.',  # 2026-11-12, history row 2: George asked the gate to cut it from every answer.
 ]
 
 # Functions (answer, asked) -> reason or None.

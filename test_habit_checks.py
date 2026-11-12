@@ -58,5 +58,15 @@ class HaveAGreatDayTests(unittest.TestCase):
         self.assertEqual(shown('The mode is 640. **have a great day.**'), 'The mode is 640.')
 
 
+class TakeCareTests(unittest.TestCase):
+    def test_take_care_is_listed_and_cut(self):
+        listed = {habit_checks.plain(sentence) for sentence in habit_checks.CUT_SENTENCES}
+        self.assertIn(habit_checks.plain('Take care.'), listed)
+        self.assertEqual(shown('The mode is 640. Take care.'), 'The mode is 640.')
+        self.assertEqual(shown('The mode is 640. **take care.**'), 'The mode is 640.')
+        answer = "chmod 600 lets only the file's owner read and write it. The group and everyone else get no access. Take care."
+        self.assertEqual(shown(answer), "chmod 600 lets only the file's owner read and write it. The group and everyone else get no access.")
+
+
 if __name__ == '__main__':
     unittest.main()
