@@ -31,6 +31,7 @@ from senses import TurnSenses, SensesError
 from attachments import AttachmentError
 from lookup_gate import violation as lookup_violation, source_block, urls
 from choice_check import violation as choice_violation
+from gate_rules import apply as operator_rules
 
 ROOT = Path(__file__).resolve().parent
 PREFIX_SHA256 = '73d3ce09d43431650591b9ff9c9eb7e5fe3def714e0a49eebdfd7c8fd2fd2854'
@@ -376,7 +377,11 @@ def validate_reply(raw: str, input_text: str | None = None, *, execution_confirm
     reason = choice_violation(answer, request_context or input_text)
     if reason:
         raise GateError(reason)
-    return reply
+    # The operator's rules kept as data and the habit checks kept in code (gate_rules.py), after every built-in check.
+    answer, reason = operator_rules(answer, request_context or input_text)
+    if reason:
+        raise GateError(reason)
+    return reply.model_copy(update={'direct_answer': answer})
 
 
 def display_text(reply: HarnessReply, sources=()) -> str:
@@ -546,4 +551,6 @@ if __name__ == '__main__':
     _client.PAGES_FILE = _client.ROOT / 'state' / 'pages.json'
     import recall_notes as _recall
     _recall.wire()  # the past-chat search is on only under the command-line entry point, like the page list
+    import second_gate as _second_gate
+    _second_gate.switch_on(_client.ROOT / 'state')  # the operator's gate rules, the judge, the lessons page
     raise SystemExit(main())

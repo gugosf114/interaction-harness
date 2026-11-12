@@ -1,0 +1,233 @@
+# Known-good sentences. No operator gate rule may match one of these lines (gate_rules.py, `rule add`).
+# Built by build_known_good.py from accepted answers in history.db and the positive cases in the tests.
+# One sentence per line. Add a line by hand when a rule cut something that must stay.
+The owner can read and write the file.
+This prints your identity.
+Probably a timeout; inspect the log.
+The file contains the expected value.
+This runs the next step.
+The title is Example Domain.
+Inspect the result.
+Print the page title.
+Maybe the cache is stale.
+The log shows the file was created.
+No command has run yet, so there is no file listing yet.
+Key presence has not been checked.
+The file list alone does not show the cause.
+It does not show any error.
+Restarting does not change the result.
+It does not change the outcome of the build.
+setup.sh is mode 644, so it is not executable.
+I did not check whether pip is installed.
+The .env.example file is empty, but setup.sh never uses it.
+The mount is read-only, so the write fails with EROFS.
+chmod 640 gives the owner read and write access.
+This only shows the first 40 lines.
+It only reads files that end in .log.
+It has not run yet.
+Setup was not run.
+setup.sh has mode 644.
+There is no .env file.
+this prints setup.sh.
+Which file or directory should be deleted?
+Which mailbox do you want me to check:
+Berkeley or Gmail?
+Should I use the main branch or the dev branch?
+What should I name the file?
+Where is the log file?
+How many lines should the summary have?
+Would you like the Berkeley or the Gmail mailbox?
+Can I see the full error text?
+Let me know which file you mean.
+Two files match.
+notes.txt or notes.bak?
+The folder holds two files.
+This deletes the temp file.
+The script prints "Do you want me to continue?" and waits for input.
+The prompt `Should I proceed?` comes from the installer.
+Do you want to continue?
+This command answers yes.
+It is unclear whether I should proceed past the failed step; the log shows exit code 2.
+I can't reach the laptop:
+ssh timed out.
+I can see two entries in the folder.
+I can tell the file is empty from its size.
+I could not find the file.
+I can find no error in the log.
+The log confirms the path, and I see no errors.
+I can confirm the file exists and I checked the mode.
+This prints setup.sh.
+This command prints "Testing Claude API connection" to the terminal.
+It does not contact the Claude API or test the connection.
+Receiving this reply shows that your request reached the model.
+This prints "Testing Claude API connection" to the terminal.
+It only prints text.
+It does not contact the Claude API or check the connection.
+This prints the message; it does not test an OpenAI API connection.
+This prints the message; it does not test the OpenAI API connection.
+This command only prints "Testing Claude API connection".
+It does not contact the Claude API or check whether the connection works.
+This prints the text "Testing Claude API connection".
+This prints a message; it does not test the OpenAI API connection.
+This command only prints the text "Testing Claude API connection".
+It does not test the Claude API.
+If this reply shows up in your client, the API request worked.
+It does not contact the Claude API or test a connection.
+No ranked survey data covers this.
+These are three common shortcuts based on experience.
+Making permission errors go away instead of fixing them.
+Running services as root, or using chmod -R 777 or chmod 666 on data directories so a process can write to them.
+Running setenforce 0, setting SELINUX=permissive, or disabling AppArmor when a denial shows up, then never turning it back on.
+Adding the app user to the docker group or giving it NOPASSWD:
+ALL in sudoers.
+These work because they remove the access controls.
+Best practice is a dedicated service account with only the access it needs, the correct owner and group, and an SELinux or AppArmor rule fix such as audit2allow or a semanage fcontext label.
+Shared or hard-coded credentials.
+One SSH key with no passphrase, copied to every host and to CI, often with root login allowed (PermitRootLogin yes or prohibit-password).
+Database passwords and API tokens written directly into cron jobs, shell scripts, systemd unit Environment= lines, or .env files that anyone can read and that sit in Git.
+Credentials that are never rotated, and accounts that stay active after people leave.
+Best practice is a separate account and key for each person, a secrets manager or files with mode 600, short-lived credentials, and regular rotation.
+Changing production by hand.
+Editing files in /etc or app config directly over SSH, restarting services by hand, and fixing things live with no ticket, review, or record.
+Cron jobs with output sent to /dev/null and no monitoring, so failures go unnoticed.
+Holding back packages, or skipping kernel and security updates for long periods "because it works."
+The result is configuration drift and servers that cannot be rebuilt reliably.
+Best practice is configuration management or infrastructure as code (Ansible, Puppet, Terraform), changes that go through review, scheduled patching, and monitored jobs.
+This command lists every entry in the current directory, including hidden files.
+It also shows permissions, owners, and sizes.
+I can't explain the failure until I see this output.
+Which setup are you running, and what error does it show?
+This changes to ~/interaction-harness and lists all of its files, including hidden ones, with their permissions.
+If each command runs in its own shell, the directory change will not apply to later commands.
+Which setup is failing, and what error does it show?
+First loop step:
+this prints the current directory and lists all its files, including hidden ones, with permissions.
+No earlier command has a recorded result, so nothing has been listed yet.
+The command line you sent has no closing double quote.
+If you typed it that way in a shell, the shell is still waiting for more input and George has not started.
+The cause of the setup failure is unknown until this output and the setup's error message are available.
+The task text is now complete, so the loop can start.
+this command prints the current directory and lists all its files, including hidden ones, with their permissions.
+I can only suggest causes of the setup failure after seeing this output.
+These commands print your user identity, your permission mask, and whether OPENAI_API_KEY is set.
+Which file should be deleted?
+Give the full path.
+chmod 640 gives the owner read and write access, the group read access, and everyone else no access.
+The digits are owner, group, and others.
+6 is read plus write (4+2).
+4 is read only.
+0 is no access.
+The session marker is emerald-d1f5f73e.
+The session marker is emerald-65860f05.
+The first prints your user ID and group IDs.
+The second prints your umask, which is the default permission mask for new files.
+The third prints only whether OPENAI_API_KEY is set.
+These read-only commands show your user ID and permission mask.
+The last one reports whether OPENAI_API_KEY is set without printing the key.
+Give its full path.
+chmod 640 lets the file's owner read and change it.
+Members of the file's group can only read it.
+Everyone else gets no access.
+Each digit is a sum:
+read is 4, write is 2, and execute is 1.
+So 6 means read and write, 4 means read only, and 0 means no access.
+The digits apply to owner, group, and others, in that order.
+None of these permissions lets anyone run the file as a program.
+The session marker is emerald-78c154f0.
+These read-only commands show your user ID, your permission mask, and whether OPENAI_API_KEY is set.
+The key's value is not printed.
+They also print whether OPENAI_API_KEY is set without showing its value.
+The key check uses the shell, so it works without Python.
+chmod 640 lets the owner read and write the file.
+The group can read it.
+Each digit adds up permission values:
+6 means read and write, 4 means read only, and 0 means no access.
+No one gets execute permission.
+The session marker is emerald-62352a7e.
+These commands show your user ID, your permission mask, and whether the API key is set.
+The first shows your user ID and groups.
+The second shows your permission mask.
+The third prints only "set" or "not set" for OPENAI_API_KEY.
+It never prints the key.
+The API key has not been checked yet.
+Everyone else gets nothing.
+Each digit is one gate:
+6 is read plus write (4+2), 4 is read only, 0 is no access.
+These commands print your user ID, permission mask, and whether OPENAI_API_KEY is set in the environment, without revealing its value.
+These commands show your user identity, permission mask, and whether OPENAI_API_KEY is set.
+The API key’s presence has not been checked.
+These commands show your user identity, permission mask, and whether OPENAI_API_KEY is set without revealing its value.
+The API key's presence is unconfirmed.
+No execute permission is granted.
+These commands show your user identity, permission mask, and whether OPENAI_API_KEY is set, without displaying its value.
+These commands show your user identity, permission mask, and whether OPENAI_API_KEY is set, without revealing its value.
+API key presence has not been checked.
+It grants no execute permission.
+These commands show your user ID, permission mask, and whether OPENAI_API_KEY is set.
+The API key’s presence is unverified.
+chmod 640 gives the file’s owner read and write access, its group read access, and everyone else no access.
+Step 1 of 2:
+this writes the marker loop-proof-bf4b6fb1b0a9 to roundtrip.txt.
+The read-back command comes after this step's execution observation arrives.
+Step 2 of 2:
+this reads roundtrip.txt back to confirm the marker.
+The write step exited 0 with no errors.
+This read command has not run yet.
+The observed marker is loop-proof-bf4b6fb1b0a9.
+The write step exited with code 0.
+The read step exited with code 0 and printed loop-proof-bf4b6fb1b0a9.
+Neither step produced stderr or timed out.
+This writes the verification marker to roundtrip.txt.
+This reads back the verification marker from roundtrip.txt.
+The write succeeded.
+This reads the verification marker from roundtrip.txt.
+this command writes the marker loop-proof-cbd5054dc522 to roundtrip.txt.
+The read step comes after its execution observation.
+This command reads roundtrip.txt to check that it contains the marker.
+The write command exited with code 0 and printed no output or errors.
+The read command has not run yet.
+The check passed.
+The observed marker is loop-proof-cbd5054dc522.
+The write command exited with code 0 and printed nothing.
+The cat command exited with code 0 and printed loop-proof-cbd5054dc522 with no errors.
+Neither command timed out or had truncated output.
+This writes the marker to the specified file.
+This reads the file to verify the marker.
+write the marker to roundtrip.txt.
+The file read comes after the execution result arrives.
+read roundtrip.txt to check the marker.
+The write step exited with code 0 and produced no output.
+The verification passed.
+The observed marker is loop-proof-e8020235c19d.
+The write step was approved, exited with code 0, and printed no errors.
+The cat read step was approved, exited with code 0, and printed the marker.
+No output was cut off.
+This prints HARNESS_EXEC_OK and the Python executable path.
+The session marker is orbit-f8817c5f.
+The session marker is orbit-28e46b4d.
+The latest stable Python is 3.15.2.
+It came out on Oct.
+I read this on python.org/downloads today.
+That page puts 3.15.2 at the top of its release list.
+Its main download button also gives 3.15.2.
+Other lines got updates the same day:
+3.14.10, 3.13.18, 3.12.16 and 3.11.18.
+Version 3.16 is only a test version for now.
+Its final release is planned for 2027-10-06.
+The group can only read it.
+Each digit stands for one set of people:
+6 = owner:
+read (4) + write (2)
+4 = group:
+0 = others:
+In ls -l it shows as -rw-r-----.
+The page title of https://example.com is "Example Domain".
+Quiet amber otters carry seven copper keys 071958.
+chmod 640 lets the owner read and change the file.
+Each digit is for one set of people:
+In ls -l, it shows as -rw-r-----.
+Python 3.15.2 is the latest stable release as of November 12, 2026.
+It was released on October 25, 2026, per the official Python downloads site.
+chmod 640 sets these file permissions:
+read and write.
+Quiet amber otters carry eleven copper keys ec4847.

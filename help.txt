@@ -155,3 +155,13 @@ best passages as a recall_notes data message. In chat: /off recall, /on
 recall, /fork [NEWNAME], /rewind [N]. Session commands: sessions, session
 show|export|fork|rewind|cut|splice|golden (card lanes). Notes: note
 add|show|list (card memory).
+
+Second gate, typed in the shell (a lane can type them too; see card lessons):
+  rule add NAME --row N --action strip_sentence|reject --pattern 'REGEX' --bad 'SENTENCE'
+                        Add a gate rule. Refused unless it matches its own bad
+                        sentences and no known-good sentence.
+  rule list             Every gate rule with its pattern, date and history row.
+  rule drop NAME        Remove one gate rule.
+  rule test [NAME] [--text 'WORDS']
+                        Test the stored rules again; show what the gate does
+                        to WORDS.

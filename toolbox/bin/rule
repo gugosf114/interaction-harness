@@ -1,0 +1,8 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# rule add|list|drop|test ... : the operator's gate rules, kept as data in state/gate_rules.json. See: card lessons
+# The work is done by gate_rules_cli.py on the Debian side, where the harness's Python lives.
+here=$(dirname "$(readlink -f "$0")")
+root=$(dirname "$(dirname "$here")")
+# The harness's Python can start only on the Debian side. From native Termux, go through the bridge.
+[ -x "$root/.venv/bin/python" ] && exec "$root/.venv/bin/python" -B "$root/gate_rules_cli.py" "$@"
+exec proot-distro login debian -- env HARNESS_STATE_DIR="${HARNESS_STATE_DIR:-}" "$root/.venv/bin/python" -B "$root/gate_rules_cli.py" "$@"

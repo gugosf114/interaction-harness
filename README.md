@@ -543,6 +543,42 @@ Claude caches the growing conversation using one automatic history marker alongs
 
 See [API_TOOLS_REPORT.md](API_TOOLS_REPORT.md) for one result per provider/tool pair, defaults, live exit codes, exact evidence paths, cache counts, and the limits of the checks. Runtime settings and full reports stay under ignored `state/`; they contain private device results.
 
+## Second gate
+
+The local gate filters wording with patterns in code. The second gate adds what patterns cannot do. The code is in new modules; `harness.py` and `cli.py` hold only the hooks.
+
+### The choice check
+
+When George's request is an instruction, the local gate rejects a reply that asks leave for the ordered work ("Do you want me to…", "Should I proceed?", "Shall I…", "Would you like me to…", "Let me know if you'd like…") or that ends by offering the work instead of doing it. The usual one corrective retry follows. A question about a missing fact is allowed: one that opens with which, what, where, when, who or how, or one that names real alternatives ("Should I use main or dev?"). The check is skipped when the request is not an instruction, and when George asked to be asked first. Code: `choice_check.py`. Tests: `test_choice_check.py`.
+
+### Rules as data
+
+A new filter rule no longer needs an edit to `harness.py`. The rules are a JSON list in `state/gate_rules.json` in this installation. Each entry holds:
+
+- `name`: lower-case letters, digits and hyphens.
+- `pattern`: a regular expression. It is matched one sentence at a time, without regard to case.
+- `action`: `strip_sentence` cuts each sentence that matches and keeps the rest. `reject` sends the reply back for one corrected try.
+- `bad`: the sentences the rule must match.
+- `date` and `history_row`: the day it was added and the `history.db` row that caused it.
+
+The gate reads the file when a run starts and again whenever the file changes, so a rule added while a chat is open applies to the next reply. The rules run after every built-in check in `validate_reply`. A reply in which every sentence is cut gets the corrective retry. A broken entry is skipped and named once on stderr; the other rules still run.
+
+```sh
+rule add NAME --row N --action strip_sentence --pattern 'REGEX' --bad 'SENTENCE' [--bad 'SENTENCE' ...]
+rule list
+rule drop NAME
+rule test [NAME] [--text 'WORDS']
+```
+
+- `rule add` refuses a rule (exit 1, nothing written) unless it matches every one of its own bad sentences and matches nothing in `gate_known_good.txt`. It also refuses when history row N does not exist.
+- `gate_known_good.txt` ships with the code: 230 sentences, built by `build_known_good.py` from the accepted answers in the saved `history.db` files and the positive cases in the existing tests. Add a line by hand when a rule cut something that must stay.
+- `rule test` runs every stored rule against its own bad sentences and the known-good file again. With `--text` it shows what the gate would do to those words.
+- Exit codes: 0 worked, 1 refused or a rule failed its test, 2 wrong use.
+
+A habit that no regular expression can express is a check in code: `habit_checks.py` holds `CUT_SENTENCES` (whole sentences cut wherever they stand) and `CHECKS` (functions that return a reason for the corrective retry). The gate runs both after the data rules.
+
+Code: `gate_rules.py`, `gate_rules_cli.py`, `habit_checks.py`, `gate_admin.py`; the command is `toolbox/bin/rule`. Tests: `test_gate_rules.py`. The unit tests never read the real rules file: it is switched on only by the command-line entry point (`second_gate.switch_on`), like the page list.
+
 ## Verification
 
 ```sh
