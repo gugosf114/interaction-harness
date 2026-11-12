@@ -47,14 +47,14 @@ class ChatTools(unittest.TestCase):
         r = run('chat-tail', 'abcdef12', env=self.env)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn('George: list the files', r.stdout); self.assertIn('Claude: Here they are.', r.stdout)
-        self.assertIn('[ran Bash: List files]', r.stdout)
+        self.assertIn('[requested Bash: ls -la]', r.stdout)
         for hidden in ('SECRET THOUGHT', 'system-reminder', 'side work'):
             self.assertNotIn(hidden, r.stdout)
 
     def test_tail_reads_codex_and_limits_the_count(self):
         r = run('chat-tail', '99887766', '2', env=self.env)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertNotIn('build it', r.stdout); self.assertIn('Codex: Built.', r.stdout); self.assertIn('[ran exec: git status]', r.stdout)
+        self.assertNotIn('build it', r.stdout); self.assertIn('Codex: Built.', r.stdout); self.assertIn('[requested exec: git status]', r.stdout)
 
     def test_unknown_id_and_missing_id_fail_plainly(self):
         self.assertEqual(run('chat-tail', 'nope', env=self.env).returncode, 1)

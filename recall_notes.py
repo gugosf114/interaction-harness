@@ -26,6 +26,7 @@ import re
 import sqlite3
 import sys
 import time
+from display_redaction import redact
 
 MAX_PASSAGES = 5            # passages in one recall_notes message
 PASSAGE_CHARS = 480         # longest passage text
@@ -251,18 +252,20 @@ def read_turns(connection, expression, limit):
     for rank, (row_id, stamp, role, source, session, file, text) in enumerate(rows):
         chat = session or (Path(file).stem if file else '')
         yield {'ref': f'chats#{row_id}', 'source': SOURCE_NAMES.get(source, source or 'chat'), 'chat': chat, 'stamp': stamp or '',
-               'speaker': 'George' if role == 'user' else 'assistant', 'body': text or '', 'rank': rank}
+               'speaker': 'George' if role == 'user' else 'assistant', 'body': text or '', 'rank': rank,
+               'source_path': file or '', 'source_row_id': row_id, 'timestamp': stamp or ''}
 
 
 def read_archive(connection, expression, limit):
     rows = connection.execute(
-        'SELECT m.row_id, m.timestamp, m.role, c.source, c.title, c.native_id, c.created_at, m.text '
+        'SELECT m.row_id, m.timestamp, m.role, c.source, c.title, c.native_id, c.created_at, m.text, m.message_id, c.source_path, m.source_locator '
         'FROM messages_fts f JOIN messages m ON m.message_id=f.message_id JOIN conversations c ON c.conversation_id=m.conversation_id '
         'WHERE messages_fts MATCH ? AND m.include_default=1 ORDER BY bm25(messages_fts) LIMIT ?', (expression, limit)).fetchall()
-    for rank, (row_id, stamp, role, source, title, native, created, text) in enumerate(rows):
+    for rank, (row_id, stamp, role, source, title, native, created, text, message_id, source_path, locator) in enumerate(rows):
         yield {'ref': f'archive#{row_id}', 'source': SOURCE_NAMES.get(source, source or 'chat'), 'chat': native or '',
                'title': title or '', 'stamp': stamp or created or '', 'speaker': 'George' if role == 'user' else 'assistant',
-               'body': text or '', 'rank': rank}
+               'body': text or '', 'rank': rank, 'source_row_id': row_id, 'timestamp': stamp or created or '',
+               'source_message_id': message_id, 'source_path': source_path or '', 'source_locator': locator or ''}
 
 
 def read_lanes(connection, expression, limit, before_row=None):
@@ -274,7 +277,7 @@ def read_lanes(connection, expression, limit, before_row=None):
         lane = LANES.get(engine, engine or 'lane')
         yield {'ref': f'lanes#{row_id}', 'source': lane + '-lane', 'chat': session or '', 'stamp': stamp or '',
                'speaker': 'George, then ' + (model or lane), 'body': 'George: ' + (asked or '') + '\n' + (model or lane) + ': ' + (answer or ''),
-               'asked': asked or '', 'answer': answer or '', 'rank': rank}
+               'asked': asked or '', 'answer': answer or '', 'rank': rank, 'source_row_id': row_id, 'timestamp': stamp or ''}
 
 
 READERS = {'turns': ('turns_fts', read_turns), 'archive': ('messages_fts', read_archive), 'lanes': ('history_fts', read_lanes)}
@@ -341,6 +344,8 @@ def session_fingerprints(session) -> set:
     prints = {fingerprint(turn.get('raw_input') or '', (turn.get('reply') or {}).get('direct_answer') or '')
               for turn in session.get('turns') or []}
     prints.update(session.get('rewound') or [])
+    prints.update('lanes#' + str(row) for row in session.get('excluded_history_rows') or [])
+    prints.update('lanes#' + str(turn['history_row']) for turn in session.get('turns') or [] if turn.get('history_row'))
     return prints
 
 
@@ -355,7 +360,8 @@ def search_one(corpus: dict, path, text: str, weights: dict, pairs: list, size: 
         arguments = (connection, match_expression(weights, pairs), CANDIDATES)
         rows = list(reader(*arguments, before_row) if corpus['kind'] == 'lanes' else reader(*arguments))
         for row in rows:
-            if corpus['kind'] == 'lanes' and fingerprint(row['asked'], row['answer']) in skip:
+            row['index_path'] = str(path)
+            if corpus['kind'] == 'lanes' and (row['ref'] in skip or fingerprint(row['asked'], row['answer']) in skip):
                 continue
             window = best_window(row['body'], weights, size, pairs)
             if window:
@@ -486,7 +492,9 @@ def choose(found, weights, limit):
         seen.add(core)
         per_chat[chat] = per_chat.get(chat, 0) + 1
         entry = {'ref': row['ref'], 'source': row['source'], 'chat': row['chat'], 'date': local_date(row['stamp']),
-                 'speaker': row['speaker'], 'text': passage}
+                 'speaker': row['speaker'], 'text': redact(passage)}
+        for key in ('source_row_id', 'timestamp', 'source_path', 'source_message_id', 'source_locator', 'index_path'):
+            if row.get(key) is not None: entry[key] = row[key]
         title = clean_title(row.get('title', ''))
         if title:
             entry['title'] = title
@@ -513,11 +521,11 @@ def for_turn(text: str, *, state, session=None, before_row=None, log_path=None, 
         return None
     try:
         result = search(text, state=state, session=session, before_row=before_row)
-        content = message_content(result['passages'], result['words']) if result['passages'] else None
+        content = message_content(result['passages'], result['words']) if result['passages'] and not result['timed_out'] else None
         status = 'attached' if content else 'timeout' if result['timed_out'] else 'error' if result['errors'] else 'nothing'
         record = {'time_utc': datetime.now(timezone.utc).isoformat(), 'kind': 'recall', 'status': status,
-                  'elapsed_ms': result['elapsed_ms'], 'words': len(result['words']), 'passages': len(result['passages']),
-                  'chars': len(content or ''), 'refs': [passage['ref'] for passage in result['passages']],
+                  'elapsed_ms': result['elapsed_ms'], 'words': len(result['words']), 'passages': len(result['passages']) if content else 0,
+                  'chars': len(content or ''), 'refs': [passage['ref'] for passage in result['passages']] if content else [],
                   'searched': result['searched'], 'errors': result['errors'], 'timed_out': result['timed_out']}
     except Exception as exc:   # recall is never a reason for a turn to fail
         content = None
@@ -584,7 +592,7 @@ def open_passage(ref: str, around: int = 2, state=None) -> str:
             lines.append(f"\n[{local_date(item[1])} · lanes#{item[0]}]\nGeorge: {item[3]}\n{item[2]}: {item[4]}"
                          + (f"\ncommand: {item[5]}" if item[5] else ''))
     connection.close()
-    return '\n'.join(lines) + '\n'
+    return redact('\n'.join(lines)) + '\n'
 
 
 def main(argv=None) -> int:

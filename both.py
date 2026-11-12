@@ -16,13 +16,13 @@ import harness as h
 import extra_lanes
 import lane_base
 import knobs as knobs_mod
+import recall_notes
 from phonetics import normalize
 from lookup_gate import turn_metadata
 from storage import Store, history_messages
 
 # Fixed lane order for display and default selection.
 LANE_ORDER = ['openai', 'anthropic', 'gemini', 'openrouter', 'glm', 'vertex']
-HISTORY_CHARS_DEFAULT = {'anthropic': 2400000, 'openai': 650000}
 
 # Opening a SQLite store sets WAL mode and may run a one-time migration, which needs a
 # brief write lock. Serialize just the open so parallel lanes do not race that setup.
@@ -83,14 +83,18 @@ def _one_lane(engine, cleaned, raw, args, kb, base):
         events = []
         with store.session(sid, args.turns) as session:
             row_id = store.begin(raw, cleaned, engine, model, sid)
-            past = history_messages(session['turns'], HISTORY_CHARS_DEFAULT.get(engine, 650000))
+            past = history_messages(session['turns'])
+            recalled = recall_notes.for_turn(cleaned, state=h.STATE, session=session, before_row=row_id,
+                                             log_path=args.usage_log, enabled=not getattr(args, 'no_recall', False))
+            if recalled: past.append(recall_notes.message(recalled))
             reply = h.request_reply(cleaned, engine=engine, model=model, effort=args.effort,
                                     timeout=args.timeout, log_path=args.usage_log, events=events, history=past,
                                     request_context=cleaned, web=not args.no_web, web_max=args.web_max, knobs=kb)
             store.finish(row_id, reply, events)
             metadata = turn_metadata(events)
-            exchange = {'raw_input': raw, 'normalized_input': cleaned, 'reply': reply.model_dump(),
+            exchange = {'history_row': row_id, 'history_timestamp': store.db.execute('SELECT timestamp FROM history WHERE id=?',(row_id,)).fetchone()[0], 'raw_input': raw, 'normalized_input': cleaned, 'reply': reply.model_dump(),
                         'engine': engine, 'model': model}
+            if recalled: exchange['recall_notes'] = recalled
             exchange.update(metadata)
             store.save_session(session, exchange, args.turns)
             text = h.display_text(reply, metadata['sources'])

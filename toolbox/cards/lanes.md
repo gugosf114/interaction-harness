@@ -29,4 +29,4 @@ At George's prompt (he types these, in a george or g1 chat)
 Flags: --fork SESSION [NEWNAME], --from NAME (a new session starts as a copy of NAME), --new (empty, no golden copy).
 
 Known failure
-  "No session named NAME": run sessions and copy the name. A PDF needs weasyprint on the Debian side.
+  "No session named NAME": run sessions and copy the name. A PDF uses the pinned maker weasyprint on the Debian side.

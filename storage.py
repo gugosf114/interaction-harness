@@ -1,4 +1,4 @@
-"""Private SQLite history and locked, bounded session files."""
+"""Private SQLite history and locked, complete session files."""
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import fcntl
@@ -224,7 +224,7 @@ class Store:
         return name
 
     @contextmanager
-    def session(self, name, turns=6):
+    def session(self, name, turns=None):
         if not NAME.fullmatch(name): raise ValueError('Invalid session name.')
         lock_path = self.sessions/(name+'.lock')
         fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
@@ -238,19 +238,22 @@ class Store:
                 data = {'version':1,'id':name,'created_at':now(),'turns':[]}
             except (ValueError, TypeError):
                 raise ValueError('The saved session is invalid; it was not overwritten.')
-            data['turns'] = data['turns'][-turns:]
             yield data
 
-    def save_session(self, data, exchange, turns=6):
-        data['turns'] = (data['turns']+[exchange])[-turns:]
+    def save_session(self, data, exchange, turns=None):
+        data['turns'].append(exchange)
         data['updated_at'] = now()
         atomic_json(self.sessions/(data['id']+'.json'),data)
         atomic_json(self.root/'active-session.json',{'id':data['id']})
 
 
-def history_messages(exchanges, max_chars=24000):
-    selected, used = [], 0
-    for exchange in reversed(exchanges):
+def history_messages(exchanges, max_chars=None):
+    """Replay every saved turn. Legacy max_chars never drops conversation.
+
+    Only explicit rewind/cut changes the live session; provider limits surface as errors.
+    """
+    selected = []
+    for exchange in exchanges:
         record = dict(exchange['reply'])
         pair = [
             {'role':'user','content':exchange['normalized_input']},
@@ -272,7 +275,5 @@ def history_messages(exchanges, max_chars=24000):
             pair.append(observation)
         # Advice the operator asked for sits after its exchange, so everything before it stays byte-identical.
         pair.extend({'role':'user','content':advisor_note(note)} for note in exchange.get('advisor_notes') or [])
-        size = sum(len(p['content'])+len(json.dumps(p.get('attachments',[]))) for p in pair)
-        if used + size > max_chars: break
-        selected.insert(0,pair); used += size
-    return [message for pair in selected for message in pair]
+        selected.extend(pair)
+    return selected

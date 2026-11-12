@@ -42,12 +42,12 @@ def make_turns(path, rows):
 
 def make_archive(path, rows):
     db = sqlite3.connect(path)
-    db.executescript('''CREATE TABLE conversations(conversation_id TEXT PRIMARY KEY, source TEXT, title TEXT, native_id TEXT, created_at TEXT);
+    db.executescript('''CREATE TABLE conversations(conversation_id TEXT PRIMARY KEY, source TEXT, title TEXT, native_id TEXT, created_at TEXT, source_path TEXT);
                         CREATE TABLE messages(row_id INTEGER PRIMARY KEY, message_id TEXT UNIQUE, conversation_id TEXT, ordinal INTEGER,
-                                              role TEXT, include_default INTEGER, timestamp TEXT, text TEXT);
+                                              role TEXT, include_default INTEGER, timestamp TEXT, text TEXT, source_locator TEXT);
                         CREATE VIRTUAL TABLE messages_fts USING fts5(message_id UNINDEXED, text);''')
     for number, (title, stamp, role, text) in enumerate(rows):
-        db.execute('INSERT INTO conversations VALUES(?,?,?,?,?)', (f'c{number}', 'chatgpt', title, f'native-{number}', stamp))
+        db.execute('INSERT INTO conversations(conversation_id,source,title,native_id,created_at) VALUES(?,?,?,?,?)', (f'c{number}', 'chatgpt', title, f'native-{number}', stamp))
         db.execute('INSERT INTO messages(message_id,conversation_id,ordinal,role,include_default,timestamp,text) VALUES(?,?,?,?,?,?,?)',
                    (f'm{number}', f'c{number}', 0, role, 1, stamp, text))
         db.execute('INSERT INTO messages_fts(message_id,text) VALUES(?,?)', (f'm{number}', text))

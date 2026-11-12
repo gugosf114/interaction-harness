@@ -4,7 +4,7 @@ George runs several AI sessions at once: Claude Code sessions and Codex sessions
 message to a file the moment it happens. These two commands read those files. They change nothing.
 
 List the sessions, newest first
-  chat-list            the 15 newest
+  chat-list            every session, newest first
   chat-list 40         the 40 newest
   One line each: last write time, kind (claude or codex), the first 8 characters of its id, size,
   and George's first words in it.
@@ -13,7 +13,7 @@ Read the end of one session
   chat-tail ID         the last 20 messages
   chat-tail ID 60      the last 60
   ID is any part of a session id from chat-list. Each line: time, who spoke (George, Claude, Codex),
-  what they said, and "[ran ...]" for each command or tool the model used. Hidden thinking is skipped.
+  what they said, and "[requested ...]" for each command or tool call. A "[result ...]" line shows the saved result. Private analysis, summary and encrypted thinking are skipped. Commands and public messages are printed in full. Recognizable keys and auth headers are hidden.
   Times in the files are UTC.
 
 Where the files live

@@ -132,33 +132,41 @@ def put_aside(state, name: str, turns: list, why: str) -> None:
             stream.write(json.dumps({'removed_at': now(), 'by': why, 'exchange': turn}, ensure_ascii=False) + '\n')
 
 
-def remove_groups(state, name: str, first: int, last: int, why: str) -> tuple[dict, list]:
-    """Drop operator exchanges first..last (1-based, inclusive). Returns the session and the turns that left."""
-    with locked(state, name):
-        data = read(state, name)
-        parts = groups(data['turns'])
-        if not parts:
-            raise SessionError(f'The session {name} has no exchange.')
-        if not 1 <= first <= last <= len(parts):
-            raise SessionError(f'The session {name} has {len(parts)} exchange' + ('' if len(parts) == 1 else 's')
-                               + f'; {first} to {last} is outside it.')
-        gone = [index for part in parts[first - 1:last] for index in part]
-        removed = [data['turns'][index] for index in gone]
-        data['turns'] = [turn for index, turn in enumerate(data['turns']) if index not in set(gone)]
-        data['rewound'] = sorted(set(data.get('rewound') or []) | {fingerprint(turn) for turn in removed})
-        put_aside(state, name, removed, why)
-        write(state, data)
+def _remove_locked(state, data, first, last, why):
+    """The caller holds this session's mutation lock."""
+    name = data['id']
+    parts = groups(data['turns'])
+    if not parts:
+        raise SessionError(f'The session {name} has no exchange.')
+    if not 1 <= first <= last <= len(parts):
+        raise SessionError(f'The session {name} has {len(parts)} exchanges; {first} to {last} is outside it.')
+    gone = {index for part in parts[first - 1:last] for index in part}
+    removed = [turn for index, turn in enumerate(data['turns']) if index in gone]
+    data['turns'] = [turn for index, turn in enumerate(data['turns']) if index not in gone]
+    data['rewound'] = sorted(set(data.get('rewound') or []) | {fingerprint(turn) for turn in removed})
+    data['excluded_history_rows'] = sorted(set(data.get('excluded_history_rows') or []) |
+                                          {turn['history_row'] for turn in removed if turn.get('history_row')})
+    put_aside(state, name, removed, why)
+    write(state, data)
     return data, removed
 
 
+def remove_groups(state, name: str, first: int, last: int, why: str) -> tuple[dict, list]:
+    """Drop operator exchanges first..last while holding the live-turn lock."""
+    with locked(state, name):
+        return _remove_locked(state, read(state, name), first, last, why)
+
+
 def rewind(state, name: str, count: int = 1) -> tuple[dict, list]:
-    """Drop the last `count` operator exchanges from a session."""
+    """Drop the latest count exchanges, including a turn that finished while waiting for the lock."""
     if count < 1:
         raise SessionError('Rewind takes a count of 1 or more.')
-    total = len(groups(read(state, name)['turns']))
-    if count > total:
-        raise SessionError(f'The session {name} has {total} exchange' + ('' if total == 1 else 's') + f'; cannot rewind {count}.')
-    return remove_groups(state, name, total - count + 1, total, 'rewind')
+    with locked(state, name):
+        data = read(state, name)
+        total = len(groups(data['turns']))
+        if count > total:
+            raise SessionError(f'The session {name} has {total} exchanges; cannot rewind {count}.')
+        return _remove_locked(state, data, total - count + 1, total, 'rewind')
 
 
 def cut(state, name: str, first: int, last: int) -> tuple[dict, list]:
@@ -397,8 +405,8 @@ def export_html(data: dict) -> str:
 def pdf_command(page: str, out: str) -> list[str]:
     """weasyprint lives on the Debian side. From native Termux it is reached through proot-distro."""
     if shutil.which('proot-distro'):
-        return ['proot-distro', 'login', 'debian', '--', 'weasyprint', '-q', page, out]
-    return ['weasyprint', '-q', page, out]
+        return ['proot-distro', 'login', 'debian', '--', '/root/.local/share/harness-makers/venv/bin/weasyprint', '-q', page, out]
+    return ['/root/.local/share/harness-makers/venv/bin/weasyprint', '-q', page, out]
 
 
 def export_pdf(state, name: str, out: str | None = None, run=subprocess.run) -> tuple[str, int]:

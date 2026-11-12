@@ -68,12 +68,7 @@ def runtime(args,state,session_id,executor):
 
 
 def history(exchanges,builder,budget,engine,enabled=True):
-    if not enabled:return builder(exchanges,budget)
-    for index in range(len(exchanges)-1,-1,-1):
-        context=exchanges[index].get('api_context')
-        if context and context.get('engine')==engine:
-            # Compaction covers the history preceding that exchange, not its current question.
-            return [*context['messages'],*builder(exchanges[index:],budget)]
+    """Replay originals even when an older saved turn carries a provider summary."""
     return builder(exchanges,budget)
 
 

@@ -275,8 +275,9 @@ def run_chat(args, model, cli):
     def options(force_loop=False):
         result = ['--engine', args.engine, '--model', args.model, '--effort', args.effort,
             '--timeout', str(args.timeout), '--usage-log', str(args.usage_log), '--session', sid,
-            '--turns', str(args.turns), '--history-chars', str(args.history_chars),
             '--exec-timeout', str(args.exec_timeout)]
+        if args.turns is not None: result += ['--turns', str(args.turns)]
+        if args.history_chars is not None: result += ['--history-chars', str(args.history_chars)]
         if args.plain: result.append('--plain')
         if args.no_normalize: result.append('--no-normalize')
         if args.execute: result.append('--exec')
@@ -365,7 +366,7 @@ def run_chat(args, model, cli):
                     elif rest.startswith('claude-'): engine = 'anthropic'
                     elif rest.startswith('gemini-'): engine = 'gemini'
                     if engine != args.engine:
-                        if getattr(args, '_history_chars_default', False): args.history_chars = cli.HISTORY_CHARS_DEFAULT.get(engine,650000)
+                        if getattr(args, '_history_chars_default', False): args.history_chars = cli.HISTORY_CHARS_DEFAULT.get(engine)
                         for key, spec in api_tools_cli.TOOLS.items():
                             if engine not in spec[0]: setattr(args, 'api_'+key, None)
                     args.engine, args.model = engine, chosen

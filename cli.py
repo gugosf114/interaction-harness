@@ -28,10 +28,8 @@ from storage import (Store, history_messages, atomic_json,
                      confirmed_execution, successful_execution, execution_message)
 
 
-# History budget per engine, in characters. Measured live on 2026-11-11: claude-opus-5-5 accepts
-# 1,000,000 input tokens; gpt-6.1-sol accepted 380,000 and refused 950,000. Each budget leaves room
-# for the 128,000-token answer and the system pages, at about 3 characters per token.
-HISTORY_CHARS_DEFAULT = {'anthropic': 2400000, 'openai': 650000}
+# Full conversation history is kept and sent. Provider limits never become a guessed character cap.
+HISTORY_CHARS_DEFAULT = {'anthropic': None, 'openai': None}
 
 def native(request):
     if request.get('op') == 'exec': phase('Running a command', request.get('command', ''))
@@ -55,7 +53,7 @@ def run_chat(args, model):
 
 
 def main(argv=None, *, literal=False):
-    parser=argparse.ArgumentParser(description='Direct answers, bounded memory, optional confirmed Termux execution.')
+    parser=argparse.ArgumentParser(description='Direct answers, full session memory, optional confirmed Termux execution.')
     parser.epilog='Screen: in an approved --loop command, screen snap or look PATH attaches the file to the next model turn. Run card screen for targets and commands.'
     parser.epilog+=' Stamp: /off stamp and /on stamp switch the operator_rules_stamp record that follows the request on every call. Type either one in a chat or as the whole question.'
     parser.add_argument('--engine',choices=ALL_ENGINES,default=os.environ.get('DEFAULT_ENGINE','openai'))
@@ -69,8 +67,8 @@ def main(argv=None, *, literal=False):
     group.add_argument('--new',action='store_true',help='Fresh isolated turn (default); its ID becomes available to --continue.')
     group.add_argument('-c','--continue',dest='continuing',action='store_true')
     group.add_argument('--session',metavar='NAME')
-    parser.add_argument('--turns',type=int,default=100000,help='Exchanges kept in the session (1–1000000). The character budget is the real limit.')
-    parser.add_argument('--history-chars',type=int,default=None,help='Maximum prior-history characters sent to the model (0–4000000). Default: 2400000 on anthropic, 650000 on openai, sized to each model window measured live on 2026-11-11.')
+    parser.add_argument('--turns',type=int,default=None,help='Legacy flag, ignored. All exchanges are kept; use /rewind or session cut to remove turns.')
+    parser.add_argument('--history-chars',type=int,default=None,help='Legacy flag, ignored. Full history is sent; use /rewind or session cut to remove turns.')
     parser.add_argument('--no-normalize',action='store_true',help='Send exact typed input without phonetic substitutions.')
     parser.add_argument('-x','--exec',dest='execute',action='store_true',help='Ask y/N before running the returned command in native Termux.')
     parser.add_argument('--exec-timeout',type=int,default=3600)
@@ -95,10 +93,9 @@ def main(argv=None, *, literal=False):
     knobs_mod.validate(parser,args)
     if args.engine not in set(ALL_ENGINES): parser.error('DEFAULT_ENGINE must be one of: '+', '.join(ALL_ENGINES)+'.')
     if not 1<=args.timeout<=3600: parser.error('--timeout must be between 1 and 3600 seconds.')
-    if not 1<=args.turns<=1000000: parser.error('--turns must be between 1 and 1000000.')
+    if args.turns is not None and not 1<=args.turns<=1000000: parser.error('--turns must be between 1 and 1000000.')
     args._history_chars_default = args.history_chars is None
-    if args.history_chars is None: args.history_chars=HISTORY_CHARS_DEFAULT.get(args.engine,650000)
-    if not 0<=args.history_chars<=4000000: parser.error('--history-chars must be between 0 and 4000000.')
+    if args.history_chars is not None and not 0<=args.history_chars<=4000000: parser.error('--history-chars must be between 0 and 4000000.')
     if not 1<=args.exec_timeout<=86400: parser.error('--exec-timeout must be between 1 and 86400.')
     if not 1<=args.max_turns<=1000: parser.error('--max-turns must be between 1 and 1000.')
     if args.yes and not (args.execute or args.loop):parser.error('--yes requires --exec or --loop.')
@@ -209,7 +206,7 @@ def main(argv=None, *, literal=False):
                                       native_tool_evidence=api_tools_cli.native_evidence(last_exchange if args.loop else latest),
                                       knobs=knobs_mod.from_args(args))
                 store.finish(row_id,reply,events)
-                exchange={'raw_input':current_raw,'normalized_input':current,'reply':reply.model_dump(),'engine':args.engine,'model':model}
+                exchange={'history_row':row_id,'history_timestamp':store.db.execute('SELECT timestamp FROM history WHERE id=?',(row_id,)).fetchone()[0],'raw_input':current_raw,'normalized_input':current,'reply':reply.model_dump(),'engine':args.engine,'model':model}
                 if literal and step==1: exchange['literal_input']=True
                 if args.loop and step==1:exchange['loop_context']=loop_context['content']
                 metadata=turn_metadata(events);exchange.update(metadata)

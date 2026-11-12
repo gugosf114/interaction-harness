@@ -144,7 +144,7 @@ class ToolTests(SessionCase):
             return subprocess.CompletedProcess(cmd, 0, '', '')
         path, size = st.export_pdf(self.state, 's', str(target), run=fake)
         self.assertEqual((path, size), (str(target), 13))
-        self.assertIn('weasyprint', seen['cmd'])
+        self.assertTrue(any(Path(part).name == 'weasyprint' for part in seen['cmd']))
         self.assertIn('&lt;b&gt;bold&lt;/b&gt; &amp; more', seen['html'])
         self.assertEqual(st.export_pdf.__defaults__[0], None)
         self.assertEqual(st.DOWNLOADS, '/sdcard/Download')

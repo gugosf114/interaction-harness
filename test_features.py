@@ -81,23 +81,23 @@ class Features(unittest.TestCase):
         _,_,_,api=self.call(['--session','alpha','second'])
         self.assertEqual(api.call_args.kwargs['history'][0]['content'],'first')
 
-    def test_session_keeps_six_exchanges_database_keeps_all(self):
+    def test_legacy_turn_count_keeps_all_exchanges(self):
         for i in range(8): self.call(['--session','rolling','--turns','6',f'turn {i}'])
         data=json.loads((self.state/'sessions/rolling.json').read_text())
-        self.assertEqual(len(data['turns']),6)
-        self.assertEqual(data['turns'][0]['raw_input'],'turn 2')
+        self.assertEqual(len(data['turns']),8)
+        self.assertEqual(data['turns'][0]['raw_input'],'turn 0')
         self.assertEqual(len(self.rows()),8)
 
     def test_custom_turn_limit(self):
         for i in range(4): self.call(['--session','small','--turns','2',str(i)])
-        self.assertEqual(len(json.loads((self.state/'sessions/small.json').read_text())['turns']),2)
+        self.assertEqual(len(json.loads((self.state/'sessions/small.json').read_text())['turns']),4)
 
-    def test_history_budget_keeps_whole_exchanges(self):
+    def test_legacy_history_budget_keeps_all_exchanges(self):
         exchanges=[{'normalized_input':'x'*20,'reply':reply().model_dump()} for _ in range(6)]
-        self.assertEqual(history_messages(exchanges,10),[])
+        self.assertEqual(len(history_messages(exchanges,10)),12)
         result=history_messages(exchanges,600)
         self.assertEqual(len(result)%2,0)
-        self.assertLessEqual(sum(len(m['content']) for m in result),600)
+        self.assertEqual(len(result),12)
 
     def test_session_path_traversal_is_rejected(self):
         code,out,err,_=self.call(['--session','../../escape','hello'])

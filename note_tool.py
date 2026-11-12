@@ -12,6 +12,7 @@ An existing note is never overwritten. Standard library only: it runs in native 
 from __future__ import annotations
 
 from datetime import datetime
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -94,13 +95,18 @@ def add(name: str, text: str, place: Path | None = None, today: datetime | None 
     with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
         stream.write(note_text(name, text, today))
     line = pointer(name, text, today)
-    current = index.read_text(encoding='utf-8')
-    addition = ('' if current.endswith('\n') or not current else '\n')
-    if not any(row.rstrip() == SECTION for row in current.splitlines()):
-        addition += f'\n{SECTION}\n'
-    # One appended write, so a note written at the same moment by another session is not lost.
-    with open(index, 'a', encoding='utf-8') as stream:
+    # Lock the existing inode, then read and append. Two notes share one heading,
+    # and an appended human entry is kept instead of restoring an older index copy.
+    with open(index, 'a+', encoding='utf-8') as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX)
+        stream.seek(0)
+        current = stream.read()
+        addition = ('' if current.endswith('\n') or not current else '\n')
+        if not any(row.rstrip() == SECTION for row in current.splitlines()):
+            addition += f'\n{SECTION}\n'
         stream.write(addition + line + '\n')
+        stream.flush()
+        os.fsync(stream.fileno())
     return path, line
 
 

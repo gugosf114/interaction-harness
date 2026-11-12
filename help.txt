@@ -49,13 +49,9 @@ options:
                         available to --continue.
   -c, --continue
   --session NAME
-  --turns TURNS         Exchanges kept in the session (1–1000000). The
-                        character budget is the real limit.
+  --turns TURNS         Legacy flag, ignored. All exchanges are kept; use /rewind or session cut.
   --history-chars HISTORY_CHARS
-                        Maximum prior-history characters sent to the model
-                        (0–4000000). Default: 2400000 on anthropic, 650000 on
-                        openai, sized to each model window measured live on
-                        2026-11-11.
+                        Legacy flag, ignored. Full history is sent to the model.
   --no-normalize        Send exact typed input without phonetic substitutions.
   -x, --exec            Ask y/N before running the returned command in native
                         Termux.

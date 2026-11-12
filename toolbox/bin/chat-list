@@ -4,6 +4,9 @@ chat-tail ID [N] : the last N messages of one session (this file is linked under
 import json, os, sys, time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from display_redaction import redact
+
 HOME = Path('/data/data/com.termux/files/home')
 CLAUDE = Path(os.environ.get('CHAT_CLAUDE_DIR', '/data/data/com.termux/files/usr/var/lib/proot-distro/containers/debian/rootfs/root/.claude/projects/-root'))
 CODEX = Path(os.environ.get('CHAT_CODEX_DIR', str(HOME / '.codex/sessions')))
@@ -19,7 +22,20 @@ def sessions():
 
 
 def clean(text):
-    return ' '.join(str(text).split())
+    return ' '.join(redact(text).split())
+
+
+def injected(text):
+    return text.startswith(('# AGENTS.md', '<system-reminder>', '<environment_context>',
+        '<user_instructions>', '<permissions instructions>', '<task-notification>',
+        '<local-command-caveat>', '<command-name>', '<ide_opened_file>', '<ide_selection>',
+        '[SYSTEM NOTIFICATION', 'UserPromptSubmit hook'))
+
+
+def result_text(content):
+    if isinstance(content, list):
+        return clean(' '.join(x.get('text', '') for x in content if isinstance(x, dict) and x.get('type') in ('text', 'output_text')))
+    return clean(content or '')
 
 
 def messages(kind, lines):
@@ -42,31 +58,52 @@ def messages(kind, lines):
                     continue
                 if b.get('type') == 'text':
                     t = clean(b.get('text', ''))
-                    if t and not t.startswith('<') and not t.startswith('[SYSTEM NOTIFICATION') and not t.startswith('UserPromptSubmit hook'):
+                    if t and not injected(t):
                         yield ts, who, t
                 elif b.get('type') == 'tool_use':
                     i = b.get('input') or {}
-                    yield ts, 'Claude', '[ran ' + str(b.get('name')) + ': ' + clean(i.get('description') or i.get('command') or i.get('file_path') or '')[:160] + ']'
+                    yield ts, 'Claude', '[requested ' + str(b.get('name')) + ': ' + clean(i.get('command') or i.get('description') or i.get('file_path') or '') + ']'
+                elif b.get('type') == 'tool_result':
+                    status = 'error' if b.get('is_error') else 'returned'
+                    yield ts, 'Tool', '[result ' + str(b.get('tool_use_id', '')) + ' ' + status + '] ' + result_text(b.get('content'))
         else:
             p = o.get('payload') or {}
-            if p.get('type') == 'message' and p.get('role') in ('user', 'assistant'):
+            if p.get('type') == 'message' and p.get('role') in ('user', 'assistant') and p.get('channel') not in ('analysis', 'summary'):
                 t = clean(' '.join(x.get('text', '') for x in p.get('content', []) if isinstance(x, dict)))
-                if t and not t.startswith('<') and not t.startswith('# AGENTS.md'):
+                if t and not injected(t):
                     yield ts, ('George' if p['role'] == 'user' else 'Codex'), t
             elif p.get('type') in ('function_call', 'custom_tool_call', 'local_shell_call'):
-                yield ts, 'Codex', '[ran ' + str(p.get('name') or 'command') + ': ' + clean(p.get('input') or p.get('arguments') or '')[:160] + ']'
+                yield ts, 'Codex', '[requested ' + str(p.get('name') or 'command') + ': ' + clean(p.get('input') or p.get('arguments') or p.get('action') or '') + ']'
+            elif p.get('type') in ('function_call_output', 'custom_tool_call_output', 'local_shell_call_output'):
+                yield ts, 'Tool', '[result ' + str(p.get('call_id', '')) + '] ' + result_text(p.get('output'))
 
 
-def head_lines(path, size=400000):
-    with open(path, 'rb') as f:
-        return f.read(size).decode('utf-8', 'replace').split('\n')[:-1]
+def head_lines(path):
+    with open(path, encoding='utf-8', errors='replace') as stream:
+        yield from stream
 
 
-def tail_lines(path, size=4000000):
-    with open(path, 'rb') as f:
-        f.seek(0, 2); end = f.tell(); f.seek(max(0, end - size))
-        lines = f.read().decode('utf-8', 'replace').split('\n')
-    return lines[1:] if end > size else lines
+def reverse_lines(path, chunk_size=65536):
+    """Read complete JSON lines from the tail, however large a tool/image record is."""
+    with open(path, 'rb') as stream:
+        stream.seek(0, 2)
+        position=stream.tell(); pending=b''
+        while position:
+            size=min(chunk_size,position);position-=size;stream.seek(position)
+            parts=(stream.read(size)+pending).split(b'\n')
+            pending=parts[0]
+            for line in reversed(parts[1:]):
+                if line:yield line.decode('utf-8','replace')
+        if pending:yield pending.decode('utf-8','replace')
+
+
+def last_messages(kind,path,count):
+    found=[]
+    for line in reverse_lines(path):
+        for item in reversed(list(messages(kind,[line]))):
+            found.append(item)
+            if len(found)==count:return list(reversed(found))
+    return list(reversed(found))
 
 
 def main(argv):
@@ -79,12 +116,18 @@ def main(argv):
         if not hits:
             print('chat-tail: no session matches ' + want, file=sys.stderr); return 1
         kind, sid, path = hits[0]
-        found = list(messages(kind, tail_lines(path)))[-count:]
+        if count < 1:
+            print('chat-tail: N must be at least 1.',file=sys.stderr);return 2
+        if len(hits)>1:
+            print('chat-tail: several sessions match; use a longer id.',file=sys.stderr);return 1
+        found = last_messages(kind, path, count)
         print(f'{kind} {sid} | last write {time.strftime("%m-%d %H:%M", time.localtime(path.stat().st_mtime))} | {len(found)} messages')
         for ts, who, text in found:
-            print(f'{ts} {who}: {text[:700]}')
+            print(f'{ts} {who}: {text}')
         return 0
-    count = int(argv[1]) if len(argv) > 1 else 15
+    count = int(argv[1]) if len(argv) > 1 else None
+    if count is not None and count<1:
+        print('chat-list: N must be at least 1.',file=sys.stderr);return 2
     for kind, sid, path in sessions()[:count]:
         first = next((t for _, who, t in messages(kind, head_lines(path)) if who == 'George'), '')
         st = path.stat()
@@ -93,4 +136,6 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    raise SystemExit(main(sys.argv))
+    try: raise SystemExit(main(sys.argv))
+    except ValueError:
+        print('Count must be a whole number.',file=sys.stderr);raise SystemExit(2)

@@ -1,6 +1,6 @@
 # Interaction harness
 
-A native Termux command with OpenAI and Anthropic backends, a shared four-field reply schema, a local display gate, six-exchange sessions, SQLite recall, confirmed shell execution, and Android dictation.
+A native Termux command with OpenAI and Anthropic backends, a shared four-field reply schema, a local display gate, full-history sessions, SQLite recall, confirmed shell execution, and Android dictation.
 
 ## Quick use
 
@@ -36,7 +36,7 @@ In an existing Bash window, load the new aliases once with `. ~/.bashrc`. New Ba
 
 Launching either shortcut with no question opens a continuous chat. Type a message at `> ` and press Enter. The same session stays attached to every turn. Type `exit` or `quit` to leave; Ctrl-D also leaves. No `-c` is needed between messages. Prompts go to stderr; stdout remains answer-and-command text only. There is no greeting banner.
 
-Each launch starts a new session unless you use `george -c`, `g1 -c`, or `--session NAME`. The existing rolling six-exchange window and SQLite history apply to chat mode. API/gate errors are shown briefly and the next input remains available. Exit returns the last turn's status; Ctrl-C returns 130.
+Each launch starts a new session unless you use `george -c`, `g1 -c`, or `--session NAME`. Full session history and SQLite history apply to chat mode. API/gate errors are shown briefly and the next input remains available. Exit returns the last turn's status; Ctrl-C returns 130.
 
 ```sh
 george --session audit
@@ -83,7 +83,7 @@ The preprocessor applies these explicit mappings before the API call:
 
 The default and `--new` start an isolated session with no prior exchanges. After a successful turn it becomes the most recent active session, so `-c` / `--continue` can pick it up. `--session NAME` creates or reopens a named session. Names accept 1–64 letters, digits, underscores, and hyphens. The three session-selection flags are mutually exclusive.
 
-Files live at `state/sessions/<id>.json`. By default the session keeps every exchange (up to 100,000); `--turns N` sets a smaller window (1–1,000,000). The API receives at most 2,400,000 characters of prior history on Anthropic and 650,000 on OpenAI, keeping whole exchanges; `--history-chars N` changes that cap (up to 4,000,000). The two defaults were sized to each model's window, measured in live calls on 2026-11-11. The current input limit is 1,000,000 characters. Oversized input is rejected before it can become a truncated instruction.
+Files live at `state/sessions/<id>.json`. Every exchange stays in the session and is sent to the model. `--turns N` and `--history-chars N` remain accepted as legacy flags but have no trimming effect. Old saved provider summaries are ignored when replaying history. Only `/rewind` and `session cut` remove live exchanges; their rows stay in `history.db`. There is no automatic history squeeze or compaction. A provider context limit returns its error with the saved conversation intact. The current input limit is 1,000,000 characters. Oversized input is rejected before it can become a truncated instruction.
 
 The exact frozen prefix and shared schema always come first. History and the new request follow them. Session writes are atomic and each session is locked during a turn, including any execution confirmation. Failed API calls are logged but do not add an assistant exchange or replace the most recent successful session.
 
@@ -127,7 +127,7 @@ george --chat --loop --session maintenance
 
 The default ceiling is five model turns, including the final answer. `--max-turns N` accepts 1-50. A command on the last permitted turn can run after approval, then the loop stops with exit code 3 and a `loop_limit` record. A null execution payload finishes the loop. A declined command stops immediately without another model call. API or gate failures also stop the loop. Nonzero command results and timeouts are returned to the model so it can diagnose or repair the step within the original request. On normal completion, the last executed command's exit status is returned; a later successful command clears an earlier failure. A task that issues no commands returns 0. Existing bounded format-correction retries remain inside each model turn.
 
-Each model turn has its own SQLite row and usage metrics. Approved results are saved with that turn. The original goal and latest execution observation remain available even with `--turns 1` or `--history-chars 0`. These required loop inputs are additional to the optional older-history budget. At most 8,000 characters from each output stream are included in model feedback. A longer stream keeps its first 2,000 characters and its end, where errors and tracebacks usually are; a marker states how many characters were left out of the middle, and the stream is named in the truncation field. The complete captured output remains in the local record. The ordinary native capture limit still applies.
+Each model turn has its own SQLite row and usage metrics. Approved results are saved with that turn. The original goal and latest execution observation remain available even with `--turns 1` or `--history-chars 0`. All earlier exchanges remain available too. At most 400,000 characters from each output stream are included in model feedback. A longer stream keeps its first 100,000 characters and its end, where errors and tracebacks usually are; a marker states how many characters were left out of the middle, and the stream is named in the truncation field. The complete captured output remains in the local record. The ordinary native capture limit still applies.
 
 `--chat --loop` starts a fresh bounded agent run for each typed message while retaining the chosen session. `-y` applies to that whole invocation. A recalled answer is never executed. Without `--loop`, `--exec` still performs just one command and returns.
 
@@ -137,7 +137,7 @@ Each model turn has its own SQLite row and usage metrics. Approved results are s
 ~/interaction-harness/harness --recall "permission mode"
 ```
 
-`state/history.db` stores every model turn, including failures: ID, timestamp, engine, session ID, raw input, normalized input, cleaned input, intent, answer, command payload, total tokens, cache-read tokens, model, status, error, and execution result. It also records total input tokens, output tokens, cache-creation tokens, the number of requests with cache reads, and API latency in milliseconds. Counters and latency include corrective attempts; native execution time and launcher overhead are separate. OpenAI input tokens already include cached input; Anthropic uncached input, cache reads, and cache creation are summed for the common total. Old databases migrate in place. Previously unrecorded metrics remain NULL. SQLite FTS5 searches raw input, cleaned input, answers, and commands. Recall uses no API, returns up to five matching saved replies through the display gate, and never executes a saved command. Session trimming does not delete the history database.
+`state/history.db` stores every model turn, including failures: ID, timestamp, engine, session ID, raw input, normalized input, cleaned input, intent, answer, command payload, total tokens, cache-read tokens, model, status, error, and execution result. It also records total input tokens, output tokens, cache-creation tokens, the number of requests with cache reads, and API latency in milliseconds. Counters and latency include corrective attempts; native execution time and launcher overhead are separate. OpenAI input tokens already include cached input; Anthropic uncached input, cache reads, and cache creation are summed for the common total. Old databases migrate in place. Previously unrecorded metrics remain NULL. SQLite FTS5 searches raw input, cleaned input, answers, and commands. Recall uses no API, returns up to five matching saved replies through the display gate, and never executes a saved command. Explicit rewind and cut do not delete the history database.
 
 ## Dictation
 
@@ -151,7 +151,7 @@ This uses `termux-speech-to-text` and Android's speech recognizer through Termux
 
 ## Frozen prefix and caching
 
-`prefix_block.txt` is read-only and its SHA-256 digest is pinned in `harness.py`. A changed prefix stops before any API request. Version 4 is the page for a general working partner; see *First page and rules stamp*. The prefix stays byte-identical between requests until an intentional version change. OpenAI receives a stable cache key; Anthropic receives a cache breakpoint at the end of the frozen system prefix. In loop mode every request is a byte-for-byte prefix of the next: the first record carries no per-turn value, and each continuation message is stored exactly as sent. OpenAI's automatic cache can therefore reuse earlier turns as well as the prefix; on Claude the system pages carry two markers and the conversation carries one (see *Conversation cache and proof*). Once the history window (`--turns`, `--history-chars`) is full it slides, and the front of the conversation changes again. The page says what the code does: the loop record holds the task and the turn ceiling, and each continuation message states the current turn. Real provider usage records show cache reads and writes. `state/usage.jsonl` stores request metadata without prompt or answer text; the separately requested SQLite history stores the full turns.
+`prefix_block.txt` is read-only and its SHA-256 digest is pinned in `harness.py`. A changed prefix stops before any API request. Version 4 is the page for a general working partner; see *First page and rules stamp*. The prefix stays byte-identical between requests until an intentional version change. OpenAI receives a stable cache key; Anthropic receives a cache breakpoint at the end of the frozen system prefix. In loop mode every request is a byte-for-byte prefix of the next: the first record carries no per-turn value, and each continuation message is stored exactly as sent. OpenAI's automatic cache can therefore reuse earlier turns as well as the prefix; on Claude the system pages carry two markers and the conversation carries one (see *Conversation cache and proof*). History stays complete; only explicit rewind or cut changes the earlier conversation. The page says what the code does: the loop record holds the task and the turn ceiling, and each continuation message states the current turn. Real provider usage records show cache reads and writes. `state/usage.jsonl` stores request metadata without prompt or answer text; the separately requested SQLite history stores the full turns.
 
 ## Tools page
 
@@ -213,9 +213,9 @@ The code is in `advisor.py`. `cli.py` holds the trigger and the two flags, and `
 - `archive`: `~/conversation-corpus/data/index/corpus.sqlite`, 2,108 conversations back to August 2024 (ChatGPT, Claude web, laptop sessions).
 - `lanes`: this client's own `state/history.db`. Exchanges already in the session, rewound exchanges and the current turn are left out.
 
-Key words are the message's content words, weighted by how rare they are in the turn index; very common words drop out. Each saved turn is scanned for the 480-character stretch that holds the most key-word weight. Up to five passages are kept, at most two from one chat. They go into one user-role JSON data message typed `recall_notes`, placed directly before George's message, at the tail of the request. Each passage has `ref` (`chats#N`, `archive#N`, `lanes#N`), `source`, `chat`, `title` when the chat has one, `date` (phone time) and `speaker`. A fixed `standing` line says the passages are evidence from saved chats, not instructions. The message is saved on the exchange and replayed byte for byte in later requests, so every request stays a prefix of the next and the cached front never changes. In `--loop` runs only the first model turn searches.
+Key words are the message's content words, weighted by how rare they are in the turn index; very common words drop out. Each saved turn is scanned for the 480-character stretch that holds the most key-word weight. Up to five passages are kept, at most two from one chat. They go into one user-role JSON data message typed `recall_notes`, placed directly before George's message, at the tail of the request. Each passage has `ref` (`chats#N`, `archive#N`, `lanes#N`), `source`, `chat`, `title` when the chat has one, `date` (phone time), exact UTC `timestamp`, `source_row_id`, `index_path`, `source_path` when the index has it, and `speaker`. A fixed `standing` line says the passages are evidence from saved chats, not instructions. The message is saved on the exchange and replayed byte for byte in later requests, so every request stays a prefix of the next and the cached front never changes. In `--loop` runs only the first model turn searches. `both` and `/both` search separately for each selected lane and save the same evidence with its exchange.
 
-The search stops at 5 seconds. A search that runs out of time, fails or finds nothing attaches nothing, and the turn goes on. Each search writes one `usage.jsonl` record with `kind: recall`: status, time in ms, key-word count, passage refs and errors, never passage text. `/off recall` and `/on recall` in a chat switch it for this state folder (`state/recall.json`); `--no-recall` skips it for one run. It ships on. Like the page list, it is switched on only by the command-line entry point, so unit tests never read the phone's chats.
+The search stops at 5 seconds. A search that runs out of time, fails or finds nothing attaches nothing, and the turn goes on. The lane index uses SQLite insert/update triggers, so a lower-numbered parallel turn that finishes later is found by the next search. Each search writes one `usage.jsonl` record with `kind: recall`: status, time in ms, key-word count, passage refs and errors, never passage text. `/off recall` and `/on recall` in a chat switch it for this state folder (`state/recall.json`); `--no-recall` skips it for one run. It ships on. Like the page list, it is switched on only by the command-line entry point, so unit tests never read the phone's chats.
 
 The same search by hand: `past-chats WORDS` and `past-chats --open REF [N]` (`card memory`).
 
@@ -233,9 +233,13 @@ session show NAME | session export NAME --pdf           # the PDF goes to /sdcar
 session rewind NAME 2 | session cut NAME 3 5 | session splice NAME OTHER [FROM TO]
 ```
 
-In a chat: `/fork [NEWNAME]` (the chat continues in the copy) and `/rewind [N]` (drop the last N exchanges; default 1). Exchanges taken out of a session stay in `history.db` and are also kept in `state/sessions/NAME.removed.jsonl`. Every change takes the same lock a live turn takes.
+In a chat: `/fork [NEWNAME]` (the chat continues in the copy) and `/rewind [N]` (drop the last N exchanges; default 1). Exchanges taken out of a session stay in `history.db` and are also kept in `state/sessions/NAME.removed.jsonl`. Every change takes the same lock a live turn takes. Rewind counts after it holds that lock, so it includes a turn that finished while it waited. Forks and splices deep-copy nested records. Rewound row IDs and older fingerprints travel with a fork. An existing empty session is never reseeded from the golden session.
 
 Code: `recall_notes.py`, `recall_cli.py`, `session_tools.py`, `note_tool.py`; commands `toolbox/bin/session`, `sessions`, `note`, `past-chats`; card `lanes`. Tests: `test_recall_notes.py`, `test_session_tools.py`, `test_note_tool.py`.
+
+**Other model chats.** `chat-list` lists every Claude Code and Codex session file, newest first; `[N]` narrows the list. `chat-tail ID [N]` prints the last public messages and actual commands. Codex analysis, summary and encrypted reasoning records are skipped. Tail reading scans complete records until it has N public messages, even past large image or tool records. Recognizable credentials are hidden in displays and recall excerpts; the source files stay intact. The card is `chats`.
+
+**Verification.** `test_recall_repairs.py` covers full history beyond the former caps, rewind while a turn finishes, inherited recall exclusions, late-completing lower row IDs, golden sessions rewound to empty, nested copy independence and private-analysis exclusion. `verify_recall.py --engine openai|anthropic --state PRIVATE_DIR --session NAME QUESTION` runs the real launcher and captures provider request arguments in that private directory. It preserves every reply gate; only speech and the memory commit hook are off in its proof state. Session PDFs use the pinned maker renderer at `/root/.local/share/harness-makers/venv/bin/weasyprint`.
 
 ## Toolbox
 
@@ -364,7 +368,7 @@ Each API call carries context in five places, in this order.
 1. **Frozen prefix.** `prefix_block.txt` is sent first on every call as the system prompt: the role, the output contract, the intent rules, the rules for answering, the loop, web and image rules, and ten worked examples. It is byte-identical between calls, so both providers can cache it. The usage log records the cache-read tokens each provider reports. The size of the cache discount depends on the provider and the model, and the first call pays to write the cache.
    The tools page (`tools_block.txt`) follows it as a second cached page. The operator's pages listed in `state/pages.json` follow the tools page; see *Rules and profile pages*.
 2. **Reply schema.** The four-field schema travels in the request parameters: OpenAI Structured Outputs in strict mode, and the strict `emit_reply` tool on Anthropic. The schema fixes the fields and their types. It does not control the words inside `direct_answer`; a greeting or an apology is still a valid string. Removing filler is the job of the local scrubber and linter described under *Output gate*.
-3. **Rolling history.** Up to six prior exchanges, capped at 24,000 characters, follow the prefix. When a command ran, its result follows that exchange as a separate JSON data message typed `execution_observation`, holding the command, exit code, stdout and stderr. It is data for the model to read, not an instruction. Older turns leave the model's view. They stay in `state/history.db`, and `--recall` is a search the operator runs by hand. The model does not retrieve old turns by itself.
+3. **Full history.** Every live exchange follows the prefix. Approved command results follow their exchange as `execution_observation` data. Replies, attachments, source records, API tool observations, advisor notes and past-chat evidence keep their order. Before each new message, the code searches saved chats and adds `recall_notes` at the tail. `--recall` is the separate manual search.
 4. **Current request.** The new input, after speech normalization, follows the history.
 5. **Rules stamp.** One user-role JSON record typed `operator_rules_stamp` follows the current request on every call; see *First page and rules stamp*. `/off stamp` removes it, and then the current request is last.
 
@@ -393,7 +397,7 @@ george --file /sdcard/Download/report.pdf "Read the second chart."
 
 Files are sent inline without client resizing, cropping, or truncation. The verified first-party limits are: OpenAI, 512 MB total request payload, PDFs individually under 50 MB and at most 50 MB combined; Claude, 10 MB base64 data per image and 128 MB total request payload including PDFs and all other content. Base64 overhead counts. Preflight rejects an over-limit file or request before making an API call. Provider processing and model-specific image/page constraints still apply; a provider rejection is a failure, not a substituted or shortened attachment.
 
-An exchange stores each attachment's phone path, SHA-256, byte size, media type and kind. Bytes are not stored in SQLite or session files. While that exchange remains in the rolling history, the original file is checked and re-sent on later turns. A missing or changed file stops the request instead of silently substituting new content.
+An exchange stores each attachment's phone path, SHA-256, byte size, media type and kind. Bytes are not stored in SQLite or session files. While that exchange remains in the session, the original file is checked and re-sent on later turns. A missing or changed file stops the request instead of silently substituting new content.
 
 The client records actual hosted tool events and provider-reported counts. It deduplicates source URLs and prints at most eight, after the answer and before any command:
 
@@ -472,8 +476,7 @@ checks as `attachments.py`. It copies accepted bytes to private
 `attachments_json` and `execution_result` record path, SHA-256, byte size, media
 type, and image/file kind; session JSON stores the same execution attachment.
 The image is sent with that execution observation while its exchange remains in
-the history window. The latest result also survives a zero history budget during
-the current loop. An oversized or unreadable file becomes `attachment_errors` in
+the session. Full history remains present throughout the loop. An oversized or unreadable file becomes `attachment_errors` in
 the next observation; the loop can recover. Snap rejects all-black frames, missing
 targets, and timeouts with distinct one-line errors and nonzero exits. Output
 images are published only after validation, so a failed capture cannot attach a
