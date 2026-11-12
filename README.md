@@ -652,6 +652,23 @@ Code: `corrections.py`, `lessons.py`, `lessons_cli.py`; the command is `toolbox/
 - Habit: the answer ended with a planted sign-off. `/wrong Stop adding sign-off lines…` made the lane print `card lessons` and run `rule add … --row 2 --action strip_sentence`. In a new session asked to end with the same sentence, the gate cut it; the turn's `rules_fired` names the rule and the judge passed the reply.
 - The test lesson and the test rule were removed when each case ended.
 
+### The lane changes its own code
+
+A lane has a shell and GitHub, so it can edit the harness. Two commands and one card make that a first-class move.
+
+```sh
+self-clone [DIR]                         # a working copy at the tip of main; default ~/harness-self
+self-update [--dir DIR] 'COMMIT MESSAGE'
+```
+
+`self-update` commits the working copy, rebases it onto `origin/main`, runs the full suite, pushes to `main`, and fast-forwards the live folder. It refuses only when a test fails; then nothing is pushed. A push that loses a race is rebased, tested and pushed again. When the live folder ends at the very commit the suite passed on, the code there is the code that was tested; when more landed in between, or there was nothing to land, the suite runs once in the live folder too. It ends with the line the lane passes on: type `exit`, then reopen the chat with `-c`.
+
+Exit codes: 0 landed, or nothing to land; 1 a test failed; 2 wrong use; 3 the rebase hit a conflict; 4 git or GitHub refused a step; 5 the change is on main and in the live folder and the suite fails there.
+
+`card self` gives the lane the whole move: clone, read, exact edits, a test, `self-update`, tell George. A habit that no pattern can hold goes into `habit_checks.py`, as a sentence in `CUT_SENTENCES` or a function in `CHECKS`, with its test in `test_habit_checks.py`.
+
+Code: `self_update.py`; the commands are `toolbox/bin/self-clone` and `toolbox/bin/self-update`. Tests: `test_self_update.py`, `test_habit_checks.py`.
+
 ## Always on
 
 A lane used to exist only while a Termux window was open. `agentd` is a service that runs without one. It takes tasks from several doors, runs each as a background job, and tells George the result. The code is in `agentd/`. Each job runs the existing `harness` command as a subprocess; the request code is unchanged.
@@ -964,7 +981,7 @@ Tests: `test_extra_lanes.py` (every lane, every knob, and `both`, all with fakes
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool test_agentd test_agentd_doors test_lane_mods test_gate_rules test_judge test_google_accounts test_tools_default_on test_first_page test_stamp test_live_findings test_extra_lanes test_lessons test_corrections'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool test_agentd test_agentd_doors test_lane_mods test_gate_rules test_judge test_google_accounts test_tools_default_on test_first_page test_stamp test_live_findings test_extra_lanes test_lessons test_corrections test_self_update test_habit_checks'
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes

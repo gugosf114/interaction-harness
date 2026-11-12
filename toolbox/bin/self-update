@@ -1,0 +1,9 @@
+#!/data/data/com.termux/files/usr/bin/python
+"""self-update [--dir DIR] 'COMMIT MESSAGE' : test, push and pull a change to the harness's own code. See: card self"""
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+import self_update  # noqa: E402
+
+raise SystemExit(self_update.main_update())
