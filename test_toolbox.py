@@ -17,7 +17,7 @@ INDEX_LINE = re.compile(r'^- ([a-z0-9-]+): .+ Print: card ([a-z0-9-]+)$')
 FAMILIES = ['files', 'documents', 'phone', 'mcp-see', 'mcp-touch', 'mcp-apps', 'phone-settings', 'phone-hardware', 'shizuku',
             'devices', 'screen', 'phone-browser', 'laptop', 'yana-phone', 'tv', 'voice', 'alerts', 'timers',
             'calls', 'models', 'sessions', 'memory', 'mail', 'calendar', 'drive', 'money', 'bakery', 'cloud', 'github',
-            'agent-scripts', 'agent-box', 'programs', 'boot', 'chats', 'lanes', 'usage']
+            'agent-scripts', 'agent-box', 'programs', 'boot', 'chats', 'lanes', 'usage', 'lessons']
 CONTROLS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
 KEY_SHAPES = [re.compile(pattern) for pattern in (
     r'sk-[A-Za-z0-9_-]{16,}', r'AIza[0-9A-Za-z_-]{20,}', r'gh[pousr]_[A-Za-z0-9]{20,}', r'xox[abprs]-[A-Za-z0-9-]{10,}',

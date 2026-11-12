@@ -578,6 +578,7 @@ After a reply passes the local gate, a second model on the other engine reads it
 - Fail: the working model gets one corrective retry. Its first reply and the judge's reason ride at the tail of the request, so the cached front is unchanged. The second reply is judged too and is shown whatever the verdict. George never gets an empty screen because of the judge.
 - A corrected reply that fails the local gate, or an API error on the retry: the first reply is shown.
 - A judge error, a timeout, a refusal, or an answer that is not the strict JSON: the reply passes through.
+- The judge has 120 seconds (`JUDGE_SECONDS` in `reply_judge.py`), or the lane's `--timeout` when that is lower. Past it the reply is shown unjudged and the saved record says `timeout`. Measured live on Nov 11, 2026: 36 verdicts took 2 to 44 seconds; one, at `max` effort, took 223 seconds on a one-line answer the working model had produced in 12.
 
 **Saved with the turn.** Every verdict and reason goes into `history.db` (column `gate_json`, key `judge`) and into the session exchange (`judge`). Rules that cut or rejected something are saved the same way (`rules_fired`). The judge's own usage goes to `judge.jsonl` next to the usage log, with no packet or reason text; the turn's token counts stay those of the working model.
 
@@ -618,6 +619,38 @@ rule test [NAME] [--text 'WORDS']
 A habit that no regular expression can express is a check in code: `habit_checks.py` holds `CUT_SENTENCES` (whole sentences cut wherever they stand) and `CHECKS` (functions that return a reason for the corrective retry). The gate runs both after the data rules.
 
 Code: `gate_rules.py`, `gate_rules_cli.py`, `habit_checks.py`, `gate_admin.py`; the command is `toolbox/bin/rule`. Tests: `test_gate_rules.py`. The unit tests never read the real rules file: it is switched on only by the command-line entry point (`second_gate.switch_on`), like the page list.
+
+### Corrections become lessons
+
+`/wrong WORDS`, typed in a chat (or as the whole question with `-c` or `--session NAME`), does two things.
+
+1. It saves a correction case as its own row in `history.db`, status `correction`: the previous request, the previous answer, and George's words. One line on stderr names the row.
+2. It turns the line into a loop run on the same lane. The lane sorts the correction into a bin and acts:
+   - **A fact** ("the repo is X", "Yana answers that mailbox"): `lesson add --row N 'THE FACT'` appends one dated line to `state/lessons.md`. That file is the last page in `state/pages.json`, so every later call carries it, in every session and on both lanes.
+   - **A habit** (a kind of sentence or move to stop): `rule add NAME --row N …` with the corrected answer's sentences as the bad sentences. The gate applies the rule from the next reply.
+   - **A habit no regular expression can express**: the lane writes the check in code. See *The lane changes its own code*.
+
+Every lesson and rule names the history row that caused it. `lesson add` and `rule add` refuse (exit 1) when that row does not exist, and they write what they added back onto the correction row (`gate_json.outcomes`). `--recall` does not show correction rows.
+
+```sh
+lesson add --row N 'ONE PLAIN SENTENCE'
+lesson list
+lesson drop NUMBER
+```
+
+- The page keeps a three-line heading and one line per fact: `- 2026-11-11 (row 41): The fact.`
+- `lesson add` puts the page last on the page list, after any page listed later by hand. `lesson drop` of the last line takes the page off the list, because an empty page stops every call.
+- A line that would break the page limits in *Rules and profile pages* is refused and nothing is written.
+- Only the last page changes when a lesson is added, so the pages before it are still read from cache.
+
+Code: `corrections.py`, `lessons.py`, `lessons_cli.py`; the command is `toolbox/bin/lesson`; the lane's card is `toolbox/cards/lessons.md`. Tests: `test_corrections.py`, `test_lessons.py`.
+
+**Live proof (Nov 11, 2026).** `verify_second_gate.py --case fact` and `--case habit`, once on each lane, through the real launcher with `--effort max --loop -y` and an isolated state folder. All four runs exited 0.
+
+- Fact: the lane said it did not know a made-up code word. `/wrong the code word for build X is Y` saved row 2 with status `correction`, and the lane ran `lesson add --row 2 '…'`. A new session, with the past-chat search off, stated the code word.
+- Cache: with the lessons page last, after `rules` and `profile`, the second new-session call read 14,986 tokens from cache on Claude and wrote none; on GPT-6.1 Sol it read 11,466 of 11,469 input tokens.
+- Habit: the answer ended with a planted sign-off. `/wrong Stop adding sign-off lines…` made the lane print `card lessons` and run `rule add … --row 2 --action strip_sentence`. In a new session asked to end with the same sentence, the gate cut it; the turn's `rules_fired` names the rule and the judge passed the reply.
+- The test lesson and the test rule were removed when each case ended.
 
 ## Always on
 
@@ -922,7 +955,7 @@ Tests: `test_extra_lanes.py` (every lane, every knob, and `both`, all with fakes
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool test_agentd test_agentd_doors test_lane_mods test_gate_rules test_judge test_google_accounts test_tools_default_on test_first_page test_stamp test_live_findings test_extra_lanes'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool test_agentd test_agentd_doors test_lane_mods test_gate_rules test_judge test_google_accounts test_tools_default_on test_first_page test_stamp test_live_findings test_extra_lanes test_lessons test_corrections'
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes

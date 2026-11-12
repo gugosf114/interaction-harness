@@ -8,6 +8,7 @@ import sys
 
 import harness as h
 import advisor
+import corrections
 import reply_judge
 import recall_cli
 import stamp
@@ -192,6 +193,8 @@ def main(argv=None):
     if switched is not None:return switched
     # /on stamp and /off stamp as the whole question: flip the switch, no model call.
     if args.text and stamp.is_switch(' '.join(args.text)):return stamp.run_switch(' '.join(args.text),h.STATE)
+    corrected=corrections.typed(args,model)  # /wrong WORDS saves the correction case and becomes a loop task for this lane
+    if corrected is not None:return corrected
     store=None; row_id=None; events=[]; reply=None; execution=None;second=reply_judge.Second()
     try:
         store=Store(h.STATE)

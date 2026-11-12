@@ -159,6 +159,9 @@ add|show|list (card memory).
 Second gate, typed in a chat:
   /off judge, /on judge The judge on the other engine reads each reply before
                         it is shown; a fail gives one corrective retry.
+  /wrong WORDS          Save a correction of the last answer. The lane turns
+                        it into a lessons line (a fact) or a gate rule (a
+                        habit).
 
 More lanes, in the shell (README: More lanes):
   g2 "QUESTION"         Gemini (gemini-4-carbon). Hosted Google Search on.
@@ -172,6 +175,11 @@ More lanes, in the shell (README: More lanes):
   both --lanes a,b,c "QUESTION"
                         Pick the lane set. In a chat: /both QUESTION.
 Second gate, typed in the shell (a lane can type them too; see card lessons):
+  lesson add --row N 'ONE PLAIN SENTENCE'
+                        Add a fact to the lessons page; every later call
+                        carries it.
+  lesson list           The lessons, numbered.
+  lesson drop NUMBER    Remove one lesson.
   rule add NAME --row N --action strip_sentence|reject --pattern 'REGEX' --bad 'SENTENCE'
                         Add a gate rule. Refused unless it matches its own bad
                         sentences and no known-good sentence.

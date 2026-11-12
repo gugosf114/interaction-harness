@@ -1,0 +1,10 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# lesson add|list|drop ... : the lessons page, state/lessons.md, carried on every call. See: card lessons
+# The work is done by lessons_cli.py on the Debian side, where the harness's Python lives.
+here=$(dirname "$(readlink -f "$0")")
+root=$(dirname "$(dirname "$here")")
+# This checkout's own Python environment when it has one, else Debian's python3: the code uses the standard library only.
+run='p="$1/.venv/bin/python"; [ -x "$p" ] || p=python3; s="$1/$2"; shift 2; exec "$p" -B "$s" "$@"'
+[ -e /etc/debian_version ] && exec sh -c "$run" sh "$root" lessons_cli.py "$@"
+# From native Termux, go through the bridge.
+exec proot-distro login debian -- env HARNESS_STATE_DIR="${HARNESS_STATE_DIR:-}" sh -c "$run" sh "$root" lessons_cli.py "$@"

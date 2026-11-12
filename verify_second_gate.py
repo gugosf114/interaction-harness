@@ -13,7 +13,8 @@ judge   A planted wrong-question reply stands in for the working model's first r
         This case imports the client, so it runs on the Debian side; from native Termux it goes through the bridge.
 fact    Through this checkout's real launcher, --effort max --loop -y, isolated HARNESS_STATE_DIR: a question,
         then /wrong with a fact, then a new session that must state the fact. The new-session question is
-        asked twice; the second call's cache read is recorded with the lessons page in place.
+        asked twice, with the past-chat search off; the second call's cache read is recorded with the lessons
+        page in place.
 habit   The same way: an answer that ends with a sign-off, /wrong, then a new session whose reply must lose
         the sign-off. fact and habit start the launcher, so they run in native Termux.
 self    The lane changes the harness's own code: it is told to add --sentence to CUT_SENTENCES in
@@ -161,12 +162,13 @@ def case_fact(args, folder, env):
     chat = launch(args, env, ['--chat', '--session', 'fact-case'],
                   f'{question}\n/wrong the code word for {build} is {marker}\nexit\n')
     listing = tool(env, 'lesson', 'list')
-    first = launch(args, env, ['--new', question])
-    second = launch(args, env, ['--new', question])
+    # The past-chat search is off for the new sessions, so the lessons page is the only place the fact can come from.
+    first = launch(args, env, ['--new', '--no-recall', question])
+    second = launch(args, env, ['--new', '--no-recall', question])
     history = rows(folder / 'runtime' / 'history.db')
     usage = events(folder / 'runtime' / 'usage.jsonl')
     case = next((row for row in history if row['status'] == 'correction'), None)
-    last_two = [event for event in usage if event.get('status') == 'accepted'][-2:]
+    last_two = [event for event in usage if event.get('status') == 'accepted' and 'prefix_sha256' in event][-2:]  # the working model's turns
     lesson_lines = [line for line in listing['stdout'].splitlines() if marker in line]
     cleanup = []
     for line in reversed(lesson_lines):

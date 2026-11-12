@@ -8,6 +8,8 @@ The parts:
   gate_rules.py     the operator's gate rules kept as data (state/gate_rules.json) and the `rule` command
   habit_checks.py   habits no regular expression can express, written as checks in code
   reply_judge.py    the judge on the other engine, with one corrective retry
+  corrections.py    /wrong WORDS: a correction becomes a lessons line or a gate rule
+  lessons.py        the lessons page (state/lessons.md), listed last in state/pages.json
 """
 from pathlib import Path
 
