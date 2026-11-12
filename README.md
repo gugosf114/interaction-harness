@@ -155,16 +155,61 @@ This uses `termux-speech-to-text` and Android's speech recognizer through Termux
 
 ## Tools page
 
-`tools_block.txt` tells the model what this phone has: `gh` signed in, `git`, `rg`, `jq`, `curl`, `python`, the bridge to the Debian side, the read-only mail reader, and the Termux phone commands. It is sent on every call right after the frozen prefix, on both engines, and both providers cache it.
+`tools_block.txt` tells the model what this phone has: `gh` signed in, `git`, `rg`, `jq`, `curl`, `python`, the bridge to the Debian side, the mail reader and reply sender, George's memory notes, the search over past chats, and the Termux phone commands. It is sent on every call right after the frozen prefix, on both engines, and both providers cache it.
 
 It is plain text and the operator can edit it. It is not hash-pinned. Rules: at most 8,000 characters, no control characters. An empty or missing file sends nothing and the harness works as before. The page grants no permission; every command still needs approval. Each usage record stores the page's SHA-256 as `tools_sha256`. Keep it to tools that were checked on the phone, because the model will propose what the page lists.
+
+## Rules and profile pages
+
+`george` and `g1` used to start every call knowing nothing about the operator. Each call now carries the operator's own pages, read from the files he already keeps. Git holds the mechanism only. The text of the pages never enters the repository.
+
+**The list.** `state/pages.json` in this installation. Git ignores `state/`. Each entry has a `label`, an absolute `path`, and an optional `sections` list of exact heading lines:
+
+```json
+[
+  {"label": "rules", "path": "/absolute/path/rules.md", "sections": ["## First heading", "## Second heading"]},
+  {"label": "profile", "path": "/absolute/path/profile.md"}
+]
+```
+
+- Without `sections` the whole file is sent. With `sections`, only those sections are sent, in the order listed. A section runs from its heading line to the next line that starts with `## `.
+- The text is sent word for word. Only blank space at the two ends of a page is dropped.
+- The files are read on every call. An edit to a source file reaches the model on the next call, and that page's cache entry starts over.
+- Order on both engines: frozen prefix, tools page, then the listed pages in list order. Each page is its own system page.
+
+**Limits.** Each is checked before any API call and ends the run with one short error (exit code 2). Nothing is ever cut to fit.
+
+- A page file that is missing or unreadable.
+- A named heading that is not found, or that appears more than once.
+- Control characters in a page.
+- A single page over 20,000 characters, or all listed pages together over 40,000 characters.
+- An empty page.
+- A malformed list: not a JSON list, a key other than `label`, `path`, `sections`, a bad or repeated label, a path that is not absolute.
+
+**No list, no change.** With `state/pages.json` missing or empty, the request holds the frozen prefix and the tools page only, exactly as before this feature.
+
+**Usage log.** Each usage record has a `pages` field: the label and SHA-256 of every page sent, in order. Page text is never written to the usage log. Page text is not stored in `history.db` or in session files either, because it is not part of a turn.
+
+**Cache markers on Claude.** Anthropic allows four `cache_control` markers in one request. With listed pages, the system pages use two: one at the end of the tools page and one at the end of the last page sent. Without listed pages the layout is unchanged: one marker on the prefix and one on the tools page. `pages.anthropic_system()` builds this. Any code that builds the Anthropic `system` parameter must call it, so the count stays at two.
+
+**Where the list is switched on.** `harness.PAGES_FILE` is `None` when the module is imported. Only the command-line entry point, the `__main__` block at the bottom of `harness.py`, sets it to `state/pages.json` in the installation folder, next to the saved keys. `HARNESS_STATE_DIR` does not move it. The unit tests import the module, so they never read the installation's real list. `test_pages.py` points the list at temporary folders.
+
+**On this phone (Nov 11, 2026).** Two entries. `rules` is five sections of `/root/.claude/CLAUDE.md`. `profile` is the whole of `/root/.claude/projects/-root/memory/who-george-is.md`. Sizes from the providers' own usage numbers:
+
+| Page | Characters | Claude Opus 5.5 tokens | GPT-6.1 Sol tokens |
+|---|---|---|---|
+| `rules` | 6,089 | 1,947 | 1,283 |
+| `profile` | 6,130 | 2,389 | 1,619 |
+| both | 12,219 | 4,336 | 2,902 |
+
+Added cost per call for both pages, at list prices on that date: on Claude, $0.0009 when read from cache and $0.0217 on the call that writes the cache; on GPT-6.1 Sol, $0.0003 cached and $0.0058 uncached. On Claude the second call of a session read 9,772 tokens from cache: the reply tool, the prefix, the tools page and both pages. On GPT-6.1 Sol the second call read 6,173 of 6,746 input tokens from cache.
 
 ## Where context goes
 
 Each API call carries context in four places, in this order.
 
 1. **Frozen prefix.** `prefix_block.txt` is sent first on every call as the system prompt: the operator contract, the observation/action rules, the speech hints, and the worked examples. It is byte-identical between calls, so both providers can cache it. The usage log records the cache-read tokens each provider reports. The size of the cache discount depends on the provider and the model, and the first call pays to write the cache.
-   The tools page (`tools_block.txt`) follows it as a second cached page.
+   The tools page (`tools_block.txt`) follows it as a second cached page. The operator's pages listed in `state/pages.json` follow the tools page; see *Rules and profile pages*.
 2. **Reply schema.** The four-field schema travels in the request parameters: OpenAI Structured Outputs in strict mode, and the strict `emit_reply` tool on Anthropic. The schema fixes the fields and their types. It does not control the words inside `direct_answer`; a greeting or an apology is still a valid string. Removing filler is the job of the local scrubber and linter described under *Output gate*.
 3. **Rolling history.** Up to six prior exchanges, capped at 24,000 characters, follow the prefix. When a command ran, its result follows that exchange as a separate JSON data message typed `execution_observation`, holding the command, exit code, stdout and stderr. It is data for the model to read, not an instruction. Older turns leave the model's view. They stay in `state/history.db`, and `--recall` is a search the operator runs by hand. The model does not retrieve old turns by itself.
 4. **Current request.** The new input, after speech normalization, is the last message.
@@ -180,7 +225,7 @@ Each API call carries context in four places, in this order.
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages'
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes

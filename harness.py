@@ -20,6 +20,7 @@ if __name__ == '__main__' and sys.executable.startswith('/data/data/com.termux/f
     launcher = Path(__file__).resolve().parent / 'launch.py'
     os.execv(sys.executable, [sys.executable, '-B', str(launcher), 'harness.py', *sys.argv[1:]])
 
+from pages import PageError, anthropic_system, read_pages
 from openai import (
     OpenAI, APIConnectionError, APIStatusError, APITimeoutError,
     AuthenticationError, PermissionDeniedError, RateLimitError,
@@ -298,6 +299,21 @@ def load_tools() -> str | None:
     return text
 
 
+# The operator's page list. Only the command-line entry point at the bottom of this file sets it.
+# A plain import, which is what the unit tests do, leaves it off, so tests never read the real list.
+PAGES_FILE: Path | None = None
+
+
+def load_pages() -> list:
+    """The operator's extra pages (state/pages.json), in listed order. Empty when the list is off, missing or empty."""
+    if PAGES_FILE is None:
+        return []
+    try:
+        return read_pages(PAGES_FILE)
+    except PageError as exc:
+        raise HarnessError(str(exc)) from exc
+
+
 def load_key(engine='openai') -> str:
     if engine not in {'openai','anthropic'}: raise HarnessError('Unknown engine.')
     variable = 'OPENAI_API_KEY' if engine == 'openai' else 'ANTHROPIC_API_KEY'
@@ -393,9 +409,11 @@ def request_reply(
             client = OpenAI(api_key=load_key(engine), base_url='https://api.openai.com/v1', timeout=timeout, max_retries=0)
         else:
             client = anthropic.Anthropic(api_key=load_key(engine), base_url='https://api.anthropic.com', timeout=timeout, max_retries=0)
-    # Stable pages first (frozen prefix, then the tools page) so provider caches keep hitting.
+    # Stable pages first so provider caches keep hitting: frozen prefix, tools page, then the operator's pages.
     tools_page = load_tools()
-    system_pages = [prefix] + ([tools_page] if tools_page else [])
+    base_pages = [prefix] + ([tools_page] if tools_page else [])
+    extra_pages = load_pages()
+    system_pages = base_pages + [page.text for page in extra_pages]
     messages = [
         *({'role': 'system', 'content': page} for page in system_pages),
         *(history or []),
@@ -410,6 +428,7 @@ def request_reply(
                 'engine':engine,
             'prefix_sha256': PREFIX_SHA256, 'attempt': attempt,
             'tools_sha256': hashlib.sha256(tools_page.encode('utf-8')).hexdigest() if tools_page else None,
+            'pages': [{'label': page.label, 'sha256': page.sha256} for page in extra_pages],
             'input_chars': len(raw_input), 'status': 'pending',
         }
         try:
@@ -424,7 +443,7 @@ def request_reply(
                 response = client.messages.create(
                     model=model, max_tokens=MAX_OUTPUT_TOKENS,
                     thinking={'type':'adaptive'}, output_config={'effort':effort},
-                    system=[{'type':'text','text':page,'cache_control':{'type':'ephemeral'}} for page in system_pages],
+                    system=anthropic_system(system_pages, len(base_pages)),
                     messages=messages[len(system_pages):],
                     tools=[{'name':'emit_reply','description':'Required final response channel for every user request. Call this tool exactly once with the final four-field interaction reply. Do not return the object as ordinary text. This tool returns data and never executes a command.','input_schema':schema,'strict':True}],
                     tool_choice={'type':'auto','disable_parallel_tool_use':True},
@@ -508,4 +527,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == '__main__':
+    # cli.py imports this file as the module `harness`. Switch the operator's page list on there.
+    # It sits in this installation's state folder, next to the saved keys; HARNESS_STATE_DIR does not move it.
+    import harness as _client
+    _client.PAGES_FILE = _client.ROOT / 'state' / 'pages.json'
     raise SystemExit(main())
