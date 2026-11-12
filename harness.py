@@ -30,6 +30,7 @@ import anthropic
 from senses import TurnSenses, SensesError
 from attachments import AttachmentError
 from lookup_gate import violation as lookup_violation, source_block, urls
+from choice_check import violation as choice_violation
 
 ROOT = Path(__file__).resolve().parent
 PREFIX_SHA256 = '73d3ce09d43431650591b9ff9c9eb7e5fe3def714e0a49eebdfd7c8fd2fd2854'
@@ -371,6 +372,10 @@ def validate_reply(raw: str, input_text: str | None = None, *, execution_confirm
                         '(approved, exit code 0) directly precedes it.')
     if reply.execution_payload is not None and '```' in reply.execution_payload:
         raise GateError('Execution payload must be plain command text, without Markdown fences.')
+    # The choice check (choice_check.py): an instruction is carried out, not answered with a request for leave.
+    reason = choice_violation(answer, request_context or input_text)
+    if reason:
+        raise GateError(reason)
     return reply
 
 
