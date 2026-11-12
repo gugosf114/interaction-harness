@@ -1,0 +1,96 @@
+#!/data/data/com.termux/files/usr/bin/python
+"""chat-list [N] : the newest AI chat sessions saved on this phone, newest first.
+chat-tail ID [N] : the last N messages of one session (this file is linked under both names)."""
+import json, os, sys, time
+from pathlib import Path
+
+HOME = Path('/data/data/com.termux/files/home')
+CLAUDE = Path(os.environ.get('CHAT_CLAUDE_DIR', '/data/data/com.termux/files/usr/var/lib/proot-distro/containers/debian/rootfs/root/.claude/projects/-root'))
+CODEX = Path(os.environ.get('CHAT_CODEX_DIR', str(HOME / '.codex/sessions')))
+
+
+def sessions():
+    out = []
+    if CLAUDE.is_dir():
+        out += [('claude', p.stem, p) for p in CLAUDE.glob('*.jsonl')]
+    if CODEX.is_dir():
+        out += [('codex', p.stem.split('-', 6)[-1] if p.stem.startswith('rollout-') else p.stem, p) for p in CODEX.rglob('*.jsonl')]
+    return sorted(out, key=lambda s: s[2].stat().st_mtime, reverse=True)
+
+
+def clean(text):
+    return ' '.join(str(text).split())
+
+
+def messages(kind, lines):
+    """Yield (time, who, text) for what was typed, said and run. Hidden thinking is skipped."""
+    for line in lines:
+        try:
+            o = json.loads(line)
+        except ValueError:
+            continue
+        ts = str(o.get('timestamp', ''))[11:16]
+        if kind == 'claude':
+            if o.get('isSidechain') or o.get('type') not in ('user', 'assistant'):
+                continue
+            m = o.get('message') or {}
+            who = 'George' if m.get('role') == 'user' else 'Claude'
+            c = m.get('content')
+            parts = [{'type': 'text', 'text': c}] if isinstance(c, str) else (c if isinstance(c, list) else [])
+            for b in parts:
+                if not isinstance(b, dict):
+                    continue
+                if b.get('type') == 'text':
+                    t = clean(b.get('text', ''))
+                    if t and not t.startswith('<') and not t.startswith('[SYSTEM NOTIFICATION') and not t.startswith('UserPromptSubmit hook'):
+                        yield ts, who, t
+                elif b.get('type') == 'tool_use':
+                    i = b.get('input') or {}
+                    yield ts, 'Claude', '[ran ' + str(b.get('name')) + ': ' + clean(i.get('description') or i.get('command') or i.get('file_path') or '')[:160] + ']'
+        else:
+            p = o.get('payload') or {}
+            if p.get('type') == 'message' and p.get('role') in ('user', 'assistant'):
+                t = clean(' '.join(x.get('text', '') for x in p.get('content', []) if isinstance(x, dict)))
+                if t and not t.startswith('<') and not t.startswith('# AGENTS.md'):
+                    yield ts, ('George' if p['role'] == 'user' else 'Codex'), t
+            elif p.get('type') in ('function_call', 'custom_tool_call', 'local_shell_call'):
+                yield ts, 'Codex', '[ran ' + str(p.get('name') or 'command') + ': ' + clean(p.get('input') or p.get('arguments') or '')[:160] + ']'
+
+
+def head_lines(path, size=400000):
+    with open(path, 'rb') as f:
+        return f.read(size).decode('utf-8', 'replace').split('\n')[:-1]
+
+
+def tail_lines(path, size=4000000):
+    with open(path, 'rb') as f:
+        f.seek(0, 2); end = f.tell(); f.seek(max(0, end - size))
+        lines = f.read().decode('utf-8', 'replace').split('\n')
+    return lines[1:] if end > size else lines
+
+
+def main(argv):
+    name = Path(argv[0]).name
+    if name == 'chat-tail':
+        if len(argv) < 2:
+            print('usage: chat-tail ID [N]   (ID is any part of a session id from chat-list)', file=sys.stderr); return 2
+        want, count = argv[1], int(argv[2]) if len(argv) > 2 else 20
+        hits = [s for s in sessions() if want in s[1] or want in s[2].name]
+        if not hits:
+            print('chat-tail: no session matches ' + want, file=sys.stderr); return 1
+        kind, sid, path = hits[0]
+        found = list(messages(kind, tail_lines(path)))[-count:]
+        print(f'{kind} {sid} | last write {time.strftime("%m-%d %H:%M", time.localtime(path.stat().st_mtime))} | {len(found)} messages')
+        for ts, who, text in found:
+            print(f'{ts} {who}: {text[:700]}')
+        return 0
+    count = int(argv[1]) if len(argv) > 1 else 15
+    for kind, sid, path in sessions()[:count]:
+        first = next((t for _, who, t in messages(kind, head_lines(path)) if who == 'George'), '')
+        st = path.stat()
+        print(f'{time.strftime("%m-%d %H:%M", time.localtime(st.st_mtime))}  {kind:6} {sid[:8]}  {st.st_size // 1024:>6} KB  {first[:70]}')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main(sys.argv))

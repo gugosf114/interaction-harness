@@ -49,6 +49,7 @@ The families
 - agent-box: the always-on box and its job queue, and the laptop's helpers. Print: card agent-box
 - programs: public tunnels, speech files, a browser library, file checkers, a network scan and other programs. Print: card programs
 - boot: what starts when the phone boots, and how to check and restart each piece. Print: card boot
+- chats: read what George's other AI sessions (Claude Code, Codex) are saying and doing right now. Print: card chats
 
 Built in, no command needed
 - Web search and reading a public web page are done by the provider's own tools in this client.
