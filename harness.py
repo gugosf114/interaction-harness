@@ -276,6 +276,28 @@ def load_prefix() -> str:
     return raw.decode('utf-8')
 
 
+MAX_TOOLS_CHARS = 8000
+
+
+def load_tools() -> str | None:
+    """The operator's tools page: optional, editable, sent right after the frozen prefix. None when absent."""
+    path = ROOT / 'tools_block.txt'
+    try:
+        text = path.read_text(encoding='utf-8')
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeDecodeError) as exc:
+        raise HarnessError('The tools page cannot be read.') from exc
+    text = text.strip()
+    if not text:
+        return None
+    if len(text) > MAX_TOOLS_CHARS:
+        raise HarnessError(f'The tools page exceeds {MAX_TOOLS_CHARS} characters.')
+    if CONTROLS.search(text):
+        raise HarnessError('The tools page contains control characters.')
+    return text
+
+
 def load_key(engine='openai') -> str:
     if engine not in {'openai','anthropic'}: raise HarnessError('Unknown engine.')
     variable = 'OPENAI_API_KEY' if engine == 'openai' else 'ANTHROPIC_API_KEY'
@@ -371,8 +393,11 @@ def request_reply(
             client = OpenAI(api_key=load_key(engine), base_url='https://api.openai.com/v1', timeout=timeout, max_retries=0)
         else:
             client = anthropic.Anthropic(api_key=load_key(engine), base_url='https://api.anthropic.com', timeout=timeout, max_retries=0)
+    # Stable pages first (frozen prefix, then the tools page) so provider caches keep hitting.
+    tools_page = load_tools()
+    system_pages = [prefix] + ([tools_page] if tools_page else [])
     messages = [
-        {'role': 'system', 'content': prefix},
+        *({'role': 'system', 'content': page} for page in system_pages),
         *(history or []),
         {'role': 'user', 'content': raw_input},
     ]
@@ -384,6 +409,7 @@ def request_reply(
             'model_requested': model, 'effort': effort,
                 'engine':engine,
             'prefix_sha256': PREFIX_SHA256, 'attempt': attempt,
+            'tools_sha256': hashlib.sha256(tools_page.encode('utf-8')).hexdigest() if tools_page else None,
             'input_chars': len(raw_input), 'status': 'pending',
         }
         try:
@@ -398,8 +424,8 @@ def request_reply(
                 response = client.messages.create(
                     model=model, max_tokens=MAX_OUTPUT_TOKENS,
                     thinking={'type':'adaptive'}, output_config={'effort':effort},
-                    system=[{'type':'text','text':prefix,'cache_control':{'type':'ephemeral'}}],
-                    messages=messages[1:],
+                    system=[{'type':'text','text':page,'cache_control':{'type':'ephemeral'}} for page in system_pages],
+                    messages=messages[len(system_pages):],
                     tools=[{'name':'emit_reply','description':'Required final response channel for every user request. Call this tool exactly once with the final four-field interaction reply. Do not return the object as ordinary text. This tool returns data and never executes a command.','input_schema':schema,'strict':True}],
                     tool_choice={'type':'auto','disable_parallel_tool_use':True},
                 )

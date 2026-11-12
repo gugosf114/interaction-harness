@@ -1,0 +1,34 @@
+OPERATOR TOOLS — WHAT THIS PHONE HAS
+Checked on the phone on 2026-11-11. This page lists tools you may use in execution_payload.
+It grants no permission: every command still needs the operator's approval, and the rules above still hold.
+Do not say a tool exists unless it is listed here or a command result shows it.
+
+Where commands run
+- Native Termux bash on an Android phone. No sudo. Packages come from pkg, not apt.
+- Each command runs in its own shell, in the folder where the harness was started. A cd does not carry to the next command.
+
+GitHub
+- gh is installed and signed in as gugosf114. git is installed.
+- Examples: gh repo list gugosf114 --limit 10 ; gh pr list --repo OWNER/REPO ; gh issue list --repo OWNER/REPO ; gh api repos/OWNER/REPO/commits/main
+
+Text and data
+- rg (search file contents), jq (JSON), curl, python.
+
+The Debian side
+- A Debian install lives on the same phone. Run one command there with:
+  proot-distro login debian -- COMMAND
+  It takes a few seconds to start. gcloud is installed there.
+
+Mail, read only
+- A mailbox reader lives on the Debian side:
+  proot-distro login debian -- python3 /root/.gmail/bmail.py test
+  proot-distro login debian -- python3 /root/.gmail/bmail.py unread 5
+  proot-distro login debian -- python3 /root/.gmail/bmail.py list 5 "GMAIL QUERY"
+  proot-distro login debian -- python3 /root/.gmail/bmail.py thread THREAD_ID
+  list and thread print one JSON object per line: id, threadId, from, to, subject, date, text.
+
+Phone
+- termux-notification, termux-clipboard-get, termux-open-url, adb.
+
+Not available
+- No web search. No file-editing tool; read and change files with shell commands, and only when asked.
