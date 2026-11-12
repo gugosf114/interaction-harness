@@ -359,10 +359,50 @@ def engine_name(lane: Lane) -> str:
     return lane.engine
 
 
+def own_four_fields(text: str) -> Optional[str]:
+    """The direct_answer of a four-field object that a plain-text model wrote out itself, or None.
+
+    The first page teaches every model the four-field reply, so a plain-text lane sometimes types the
+    object as its answer: strict JSON, or with single quotes around the keys. Shown as it is, the operator
+    would read the braces and the field names. Only the answer is taken; a wrap lane still proposes no command.
+    """
+    import ast
+    body = text.strip()
+    if body.startswith('```'):
+        body = body.strip('`').strip()
+        if body[:4].lower() == 'json':
+            body = body[4:].strip()
+    if not (body.startswith('{') and body.endswith('}') and 'direct_answer' in body):
+        return None
+    data = None
+    try:
+        data = json.loads(body)
+    except ValueError:
+        try:
+            tree = ast.parse(body, mode='eval')
+            words = {'null': None, 'true': True, 'false': False}
+            for node in ast.walk(tree):
+                for name, child in list(ast.iter_fields(node)):
+                    items = child if isinstance(child, list) else [child]
+                    for index, item in enumerate(items):
+                        if isinstance(item, ast.Name) and item.id in words:
+                            constant = ast.copy_location(ast.Constant(words[item.id]), item)
+                            if isinstance(child, list):
+                                child[index] = constant
+                            else:
+                                setattr(node, name, constant)
+            data = ast.literal_eval(tree.body)
+        except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+            return None
+    answer = data.get('direct_answer') if isinstance(data, dict) else None
+    return answer.strip() if isinstance(answer, str) and answer.strip() else None
+
+
 def wrap_text(text: str, raw_input: str) -> str:
     """A plain-text lane's answer as the four-field observation."""
     import harness as h
     cleaned = text.replace('<think></think>', '').strip()
+    cleaned = own_four_fields(cleaned) or cleaned
     if not cleaned:
         raise LaneError('The lane returned an empty answer.')
     return json.dumps({'intent': 'observation', 'cleaned_input': raw_input[:h.MAX_INPUT_CHARS],

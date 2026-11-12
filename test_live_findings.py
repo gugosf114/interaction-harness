@@ -17,6 +17,9 @@
    as the operator's fourth core rule asks and the stamp repeats on every turn, was failed by the
    judge as an "unsolicited warning". The judge cannot see the operator's pages, so its prompt
    now says that such an idea is not an unasked limit.
+6. On the plain-text GLM lane the model typed the four-field object itself, with single quotes around
+   the keys, as the first page teaches, and the lane showed the whole object as the answer. The lane
+   now takes the direct_answer out of such an object.
 """
 import contextlib
 import io
@@ -122,6 +125,41 @@ class QuietDumpTests(unittest.TestCase):
             warnings.simplefilter('always')
             self.assertEqual(senses.dump(odd), {'item': 'oai-weather'})
         self.assertEqual(caught, [])
+
+
+class PlainTextLaneTests(unittest.TestCase):
+    """What the GLM lane printed live: {'intent': 'observation', ..., 'execution_payload': null}."""
+    LIVE = ("{'intent': 'observation', 'cleaned_input': 'Explain compound interest in three short sentences.', "
+            "'direct_answer': 'Your savings grow faster because interest pays extra interest.\\n\\nSmall early differences "
+            "become big adult amounts.', 'execution_payload': null}")
+
+    def wrapped(self, text):
+        import lane_base
+        return json.loads(lane_base.wrap_text(text, 'Explain compound interest.'))
+
+    def test_the_object_the_model_typed_live_gives_only_its_answer(self):
+        reply = self.wrapped(self.LIVE)
+        self.assertEqual(reply['direct_answer'], 'Your savings grow faster because interest pays extra interest.\n\n'
+                                                 'Small early differences become big adult amounts.')
+        self.assertEqual((reply['intent'], reply['execution_payload']), ('observation', None))
+        self.assertEqual(reply['cleaned_input'], 'Explain compound interest.')
+
+    def test_strict_json_and_a_fenced_object_are_read_the_same_way(self):
+        strict = json.dumps({'intent': 'action_request', 'cleaned_input': 'x', 'direct_answer': 'This lists the files.',
+                             'execution_payload': 'ls'})
+        for text in (strict, '```json\n' + strict + '\n```'):
+            reply = self.wrapped(text)
+            self.assertEqual(reply['direct_answer'], 'This lists the files.')
+            self.assertEqual((reply['intent'], reply['execution_payload']), ('observation', None), 'a wrap lane proposes no command')
+
+    def test_the_words_null_and_true_inside_the_answer_stay_as_written(self):
+        text = "{'intent': 'observation', 'cleaned_input': 'x', 'direct_answer': 'null means nothing; true means yes.', 'execution_payload': null}"
+        self.assertEqual(self.wrapped(text)['direct_answer'], 'null means nothing; true means yes.')
+
+    def test_plain_text_and_other_braces_are_left_alone(self):
+        for text in ('Interest earns interest.', '{"a": 1}', 'Use {braces} for a set.', "{'direct_answer': 5}",
+                     "{'direct_answer': __import__('os').system('true')}", '{direct_answer'):
+            self.assertEqual(self.wrapped(text)['direct_answer'], text)
 
 
 class JudgeSeesLookupsTests(unittest.TestCase):
