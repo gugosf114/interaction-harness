@@ -20,6 +20,7 @@ from openai import (OpenAI, APIConnectionError, APIStatusError, APITimeoutError,
                     AuthenticationError, PermissionDeniedError, RateLimitError)
 
 import harness as h
+import chat_screen
 from lookup_gate import violation as lookup_violation
 from storage import Store, atomic_json, clip_stream, now
 
@@ -291,7 +292,6 @@ def run(args, working_model):
             advice = request_advice(packet, engine=engine, model=model, effort=args.effort, timeout=args.timeout,
                                     asked=' '.join(part for part in (question, task) if part),
                                     log_path=args.usage_log, events=events)
-            import chat_screen
             sys.stdout.write(chat_screen.display_advice(LABEL.format(model=model), advice))
             sys.stdout.flush()
             session['turns'][-1].setdefault('advisor_notes', []).append(
@@ -306,12 +306,12 @@ def run(args, working_model):
     except KeyboardInterrupt:
         if store and row_id:
             store.finish(row_id, None, events, error='Stopped.', status='advisor_error')
-        print('Stopped.', file=sys.stderr)
+        chat_screen.error('Stopped.')
         return 130
     except (h.HarnessError, ValueError) as exc:
         if store and row_id:
             store.finish(row_id, None, events, error=str(exc), status='advisor_error')
-        print(str(exc), file=sys.stderr)
+        chat_screen.error(str(exc))
         return 2
     except Exception as exc:
         message = f'Unexpected advisor error ({type(exc).__name__}).'
@@ -320,7 +320,7 @@ def run(args, working_model):
                 store.finish(row_id, None, events, error=message, status='advisor_error')
             except Exception:
                 pass
-        print(message, file=sys.stderr)
+        chat_screen.error(message)
         return 2
     finally:
         if store:

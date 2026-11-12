@@ -462,7 +462,7 @@ def run_chat(args, model, cli):
             except EOFError: return last_status
             except KeyboardInterrupt:
                 screen.clear_phase(); screen.note('Stopped.', 'error'); last_status=130
-            except (ValueError,OSError) as exc:
+            except (ValueError,OSError,h.HarnessError) as exc:
                 screen.note(str(exc),'error'); last_status=2
     finally:
         screen.finish(); ACTIVE, chat_progress.listener, chat_progress.usage_listener = old_active, old_listener, old_usage

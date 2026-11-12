@@ -118,6 +118,11 @@ class ScreenTests(unittest.TestCase):
         self.assertEqual(code,2)
         self.assertIn('The phone clipboard did not keep the answer.',err)
         self.assertNotIn('Copied the last answer.',err)
+    def test_clipboard_bridge_error_keeps_the_chat_open(self):
+        with patch('cli.native',side_effect=h.HarnessError('Phone bridge failed.')):
+            code,_,err,request=self.chat('one\n/copy\ntwo\nquit\n')
+        self.assertEqual(code,0);self.assertEqual(request.call_count,2)
+        self.assertIn('Phone bridge failed.',err)
     def test_colors_turned_off_for_pipe_plain_or_no_color(self):
         for plain,no_color,tty in ((False,False,True),(True,False,True),(False,True,True),(False,False,False)):
             with patch('sys.stdout',TTY() if tty else io.StringIO()),patch('sys.stderr',TTY()),patch.dict(os.environ,{'NO_COLOR':''} if no_color else {},clear=True):
