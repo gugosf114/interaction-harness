@@ -34,6 +34,15 @@ Mail: send a reply
   To, Subject and threading are taken from that message. It prints one JSON object: sent_id, threadId, to, subject.
 - Send only when the operator asked for that reply to be sent.
 
+George's memory notes
+- Notes about George and his projects are files on the Debian side, in /root/.claude/projects/-root/memory/. The index is MEMORY.md: one line per note, with its file name.
+  proot-distro login debian -- cat /root/.claude/projects/-root/memory/MEMORY.md
+  proot-distro login debian -- cat /root/.claude/projects/-root/memory/NOTE_FILE.md
+
+Past chats
+- recall searches George's saved chats on the Debian side and prints the best matches, each with its date.
+  proot-distro login debian -- python3 /root/.claude/recall.py "bakery voicemail"
+
 Phone
 - termux-notification, termux-clipboard-get, termux-open-url, adb.
 
