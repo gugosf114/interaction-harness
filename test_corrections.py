@@ -102,7 +102,7 @@ class FactTests(Base):
         # The lane got the case as its loop task: the row, the request, the answer and George's words.
         task = client.calls[1]['input'][-1]['content']
         for part in ('history row 2', 'What is the code word for the build?', 'Nothing I can see names the code word.',
-                     'the code word for the build is marzipan-42', 'lesson add --row 2', 'rule add NAME --row 2', 'card self'):
+                     'the code word for the build is marzipan-42', 'lesson add --row 2', 'rule add NAME --row 2', 'card self', 'self-update --row 2'):
             self.assertIn(part, task)
         self.assertEqual(self.commands, ["lesson add --row 2 'The code word for the build is marzipan-42.'"])
         self.assertEqual([entry['row'] for entry in lessons.entries(self.config)], [2])

@@ -648,9 +648,9 @@ Code: `gate_rules.py`, `gate_rules_cli.py`, `habit_checks.py`, `gate_admin.py`; 
 2. It turns the line into a loop run on the same lane. The lane sorts the correction into a bin and acts:
    - **A fact** ("the repo is X", "Yana answers that mailbox"): `lesson add --row N 'THE FACT'` appends one dated line to `state/lessons.md`. That file is the last page in `state/pages.json`, so every later call carries it, in every session and on both lanes.
    - **A habit** (a kind of sentence or move to stop): `rule add NAME --row N …` with the corrected answer's sentences as the bad sentences. The gate applies the rule from the next reply.
-   - **A habit no regular expression can express**: the lane writes the check in code. See *The lane changes its own code*.
+   - **A habit no regular expression can express**: the lane writes the check in code and lands it with `self-update --row N`. See *The lane changes its own code*.
 
-Every lesson and rule names the history row that caused it. `lesson add` and `rule add` refuse (exit 1) when that row does not exist, and they write what they added back onto the correction row (`gate_json.outcomes`). `--recall` does not show correction rows.
+Every lesson and rule names the history row that caused it. `lesson add` and `rule add` refuse (exit 1) when that row does not exist, and they write what they added back onto the correction row (`gate_json.outcomes`). A code change does the same through `self-update --row N`: the commit message names the row, and the row gets the commit. `--recall` does not show correction rows.
 
 ```sh
 lesson add --row N 'ONE PLAIN SENTENCE'
@@ -678,10 +678,12 @@ A lane has a shell and GitHub, so it can edit the harness. Two commands and one 
 
 ```sh
 self-clone [DIR]                         # a working copy at the tip of main; default ~/harness-self
-self-update [--dir DIR] 'COMMIT MESSAGE'
+self-update [--dir DIR] [--row N] 'COMMIT MESSAGE'
 ```
 
 `self-update` commits the working copy, rebases it onto `origin/main`, runs the full suite, pushes to `main`, and fast-forwards the live folder. It refuses only when a test fails; then nothing is pushed. A push that loses a race is rebased, tested and pushed again. When the live folder ends at the very commit the suite passed on, the code there is the code that was tested; when more landed in between, or there was nothing to land, the suite runs once in the live folder too. It ends with the line the lane passes on: type `exit`, then reopen the chat with `-c`.
+
+`--row N` is for a change that a `/wrong` correction caused: the commit message ends with `Correction: history row N`, and the landed commit is written on that row (`gate_json.outcomes`, bin `code`).
 
 Exit codes: 0 landed, or nothing to land; 1 a test failed; 2 wrong use; 3 the rebase hit a conflict; 4 git or GitHub refused a step; 5 the change is on main and in the live folder and the suite fails there.
 

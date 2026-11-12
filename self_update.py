@@ -1,9 +1,11 @@
 """self-clone and self-update: a lane changes the harness's own code and lands it.
 
   self-clone [DIR]              make (or refresh) a working copy of the harness. Default DIR: ~/harness-self
-  self-update [--dir DIR] 'COMMIT MESSAGE'
+  self-update [--dir DIR] [--row N] 'COMMIT MESSAGE'
                                 commit the working copy's changes, rebase onto origin/main, run the full
                                 test suite, push to main, fast-forward the live folder.
+                                --row N names the /wrong correction that caused the change: the commit
+                                message names the row, and the landed commit is written on that history row.
 
 self-update refuses only when a test fails: then nothing is pushed. The live folder is the installation
 this command belongs to. When the live folder ends at the very commit the suite just passed on, the code
@@ -126,11 +128,25 @@ def clone(work=None, live=None, out=None, err=None) -> int:
         return 4
 
 
-def update(message: str, work=None, live=None, suite=run_suite, out=None, err=None) -> int:
+USAGE = "usage: self-update [--dir DIR] [--row N] 'COMMIT MESSAGE'"
+
+
+def note_row(row, landed, message, history=None, out=None) -> None:
+    """Write the landed commit on the correction's history row (gate_json.outcomes), next to lessons and rules."""
+    import gate_admin
+    found = gate_admin.history_row(row, history)
+    if not found or found['status'] != gate_admin.CORRECTION:
+        print(f'History row {row} is not a correction case; the commit was not written on it.', file=out or sys.stdout)
+        return
+    gate_admin.record_outcome(row, {'bin': 'code', 'commit': landed, 'message': message.strip(), 'date': gate_admin.today()}, history)
+    print(f'Written on history row {row}: commit {landed}.', file=out or sys.stdout)
+
+
+def update(message: str, work=None, live=None, suite=run_suite, out=None, err=None, row=None, history=None) -> int:
     out, err = out or sys.stdout, err or sys.stderr
     work, live = Path(work or DEFAULT_WORK).expanduser(), Path(live or ROOT)
     if not message or not message.strip():
-        print("usage: self-update [--dir DIR] 'COMMIT MESSAGE'", file=err)
+        print(USAGE, file=err)
         return 2
     if not is_work_tree(work):
         print(f'No working copy at {work}. Make one with: self-clone', file=err)
@@ -142,7 +158,8 @@ def update(message: str, work=None, live=None, suite=run_suite, out=None, err=No
         link_environment(work, live)
         git(work, 'add', '-A')
         if git(work, 'diff', '--cached', '--quiet', check=False).returncode:
-            git(work, *identity(work), 'commit', '--quiet', '-m', message.strip())
+            said = message.strip() + (f'\n\nCorrection: history row {row}' if row else '')
+            git(work, *identity(work), 'commit', '--quiet', '-m', said)
         landed = tested = None
         for attempt in range(1, 6):
             git(work, 'fetch', '--quiet', 'origin')
@@ -178,6 +195,8 @@ def update(message: str, work=None, live=None, suite=run_suite, out=None, err=No
         if tested and git(live, 'rev-parse', 'HEAD').stdout.strip() == tested:
             # The live folder holds exactly the commit the suite just passed on.
             print(f'Landed {landed} on main: {message.strip()}', file=out)
+            if row:
+                note_row(row, landed, message, history, out)
             print(f'The live folder is at {at}, the commit the suite passed on: {passed}, all passed.\n'
                   'Tell George: type exit, then reopen the chat with -c. The open chat runs the old code until then.', file=out)
             return 0
@@ -188,6 +207,8 @@ def update(message: str, work=None, live=None, suite=run_suite, out=None, err=No
             return 5
         if landed:
             print(f'Landed {landed} on main: {message.strip()}', file=out)
+            if row:
+                note_row(row, landed, message, history, out)
         else:
             print('Nothing to land: the working copy has no change on top of main.', file=out)
         print(f'The live folder is at {at}: {summary(output)}, all passed.\n'
@@ -200,13 +221,20 @@ def update(message: str, work=None, live=None, suite=run_suite, out=None, err=No
 
 def main_update(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    work = None
-    if argv[:1] == ['--dir'] and len(argv) >= 2:
-        work, argv = argv[1], argv[2:]
-    if len(argv) != 1:
-        print("usage: self-update [--dir DIR] 'COMMIT MESSAGE'", file=sys.stderr)
+    work = row = None
+    while len(argv) >= 2 and argv[0] in ('--dir', '--row'):
+        if argv[0] == '--dir':
+            work = argv[1]
+        elif argv[1].isdigit() and int(argv[1]) > 0:
+            row = int(argv[1])
+        else:
+            print(USAGE, file=sys.stderr)
+            return 2
+        argv = argv[2:]
+    if len(argv) != 1 or argv[0].startswith('--'):
+        print(USAGE, file=sys.stderr)
         return 2
-    return update(argv[0], work)
+    return update(argv[0], work, row=row)
 
 
 def main_clone(argv=None) -> int:

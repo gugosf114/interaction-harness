@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""self-update [--dir DIR] 'COMMIT MESSAGE' : test, push and pull a change to the harness's own code. See: card self"""
+"""self-update [--dir DIR] [--row N] 'COMMIT MESSAGE' : test, push and pull a change to the harness's own code. See: card self"""
 from pathlib import Path
 import sys
 

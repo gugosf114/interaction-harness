@@ -6,9 +6,11 @@ In chat, `/wrong WORDS` does two things.
   2. It turns the line into a loop task for the same lane. The lane sorts the correction into a bin and acts:
        a fact   ->  lesson add --row N 'THE FACT'          (state/lessons.md, on every later call)
        a habit  ->  rule add NAME --row N ...              (state/gate_rules.json, applied by the gate)
-       a habit no regular expression can express  ->  card self, and the check is written in code
+       a habit no regular expression can express  ->  card self: the check is written in code and landed
+                                                       with self-update --row N
 Every lesson and rule names the correction's history row. `lesson add` and `rule add` refuse without one,
-and they write what they added back onto that row (gate_json.outcomes).
+and they write what they added back onto that row (gate_json.outcomes). self-update --row N does the
+same for a code change: the commit message names the row and the row gets the commit.
 """
 from __future__ import annotations
 
@@ -49,7 +51,8 @@ Sort the correction into one bin, then run the command for that bin.
    rule add NAME --row {row} --action strip_sentence --pattern 'REGEX' --bad 'A SENTENCE FROM YOUR ANSWER THAT HE WANTS GONE'
    Take the --bad sentences from your own answer above. The command tests the rule first. It refuses a rule that misses one of its bad sentences or that matches a known-good sentence; then fix the pattern and run it again.
 
-3. A habit that no regular expression can express. Print `card self` and write the check in code.
+3. A habit that no regular expression can express. Print `card self`, write the check in code, and land it with:
+   self-update --row {row} 'ONE LINE THAT SAYS WHAT CHANGED'
 
 Pick the bin yourself. Nothing is added without --row {row}. When the command has exited 0, finish with one short line that says what was added."""
 

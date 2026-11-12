@@ -218,6 +218,56 @@ class UpdateTests(Base):
         self.assertIn('the suite fails in the live folder', err)
         self.assertEqual(self.tip(self.live), self.origin_tip())
 
+    def test_row_names_the_correction_in_the_commit_and_writes_the_commit_on_the_row(self):
+        import json
+        import sqlite3
+        import gate_admin
+        history = Path(self.tmp.name) / 'history.db'
+        db = sqlite3.connect(history)
+        db.execute('CREATE TABLE history (id INTEGER PRIMARY KEY, status TEXT, session_id TEXT, raw_input TEXT, '
+                   'normalized_input TEXT, cleaned_input TEXT, direct_answer TEXT, gate_json TEXT)')
+        db.execute("INSERT INTO history (id, status, gate_json) VALUES (1, 'accepted', NULL)")
+        db.execute("INSERT INTO history (id, status, gate_json) VALUES (2, ?, ?)", (gate_admin.CORRECTION, json.dumps({'corrects_row': 1, 'outcomes': []})))
+        db.commit()
+        db.close()
+        self.clone()
+        self.change()
+        out, err = io.StringIO(), io.StringIO()
+        code = self_update.update('fix: cut one more sign-off', self.work, self.live, suite=self.suite, out=out, err=err, row=2, history=history)
+        self.assertEqual((code, err.getvalue()), (0, ''))
+        self.assertEqual(git(self.origin, 'log', '-1', '--format=%B', 'main').split('\n'),
+                         ['fix: cut one more sign-off', '', 'Correction: history row 2'])
+        landed = git(self.origin, 'rev-parse', '--short', 'main')
+        self.assertIn(f'Written on history row 2: commit {landed}.', out.getvalue())
+        db = sqlite3.connect(history)
+        outcomes = json.loads(db.execute('SELECT gate_json FROM history WHERE id=2').fetchone()[0])['outcomes']
+        untouched = db.execute('SELECT gate_json FROM history WHERE id=1').fetchone()[0]
+        db.close()
+        self.assertEqual([(o['bin'], o['commit'], o['message']) for o in outcomes], [('code', landed, 'fix: cut one more sign-off')])
+        self.assertIsNone(untouched)
+
+    def test_a_row_that_is_not_a_correction_case_lands_the_change_and_says_so(self):
+        self.clone()
+        self.change()
+        out, err = io.StringIO(), io.StringIO()
+        code = self_update.update('fix: x', self.work, self.live, suite=self.suite, out=out, err=err, row=7,
+                                  history=Path(self.tmp.name) / 'missing.db')
+        self.assertEqual(code, 0)
+        self.assertIn('History row 7 is not a correction case', out.getvalue())
+        self.assertEqual(self.tip(self.live), self.origin_tip())
+
+    def test_the_command_line_takes_dir_and_row_in_any_order(self):
+        seen = []
+        real = self_update.update
+        self_update.update = lambda message, work=None, **options: seen.append((message, work, options.get('row'))) or 0
+        self.addCleanup(setattr, self_update, 'update', real)
+        self.assertEqual(self_update.main_update(['--row', '12', '--dir', '/x', 'fix: y']), 0)
+        self.assertEqual(self_update.main_update(['--dir', '/x', '--row', '12', 'fix: y']), 0)
+        self.assertEqual(self_update.main_update(['fix: y']), 0)
+        self.assertEqual(seen, [('fix: y', '/x', 12), ('fix: y', '/x', 12), ('fix: y', None, None)])
+        for bad in (['--row', 'abc', 'fix: y'], ['--row', '0', 'fix: y'], ['--row', '3'], ['fix: y', 'extra'], []):
+            self.assertEqual(self_update.main_update(bad), 2, bad)
+
     def test_wrong_use(self):
         self.assertEqual(self.update()[0], 2)                      # no working copy yet
         self.clone()

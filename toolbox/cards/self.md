@@ -18,6 +18,8 @@ The move, start to finish
   4. Add a test that fails without the change, in a test_*.py file in ~/harness-self. Run one test file:
        deb sh -c 'cd /data/data/com.termux/files/home/harness-self && .venv/bin/python -B -m unittest test_habit_checks'
   5. self-update 'fix: one line that says what changed'
+     After /wrong, name the correction's history row N:   self-update --row N 'fix: ...'
+       The commit message then names row N, and the landed commit is written on that row.
        Commits the working copy, rebases it onto main, runs the full suite, pushes to main,
        and fast-forwards the live folder.
        Works:     Landed abc1234 on main: ...

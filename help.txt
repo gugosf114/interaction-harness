@@ -181,9 +181,10 @@ Second gate, typed in the shell (a lane can type them too; see card lessons and 
   lesson list           The lessons, numbered.
   lesson drop NUMBER    Remove one lesson.
   self-clone [DIR]      A working copy of the harness code (~/harness-self).
-  self-update [--dir DIR] 'COMMIT MESSAGE'
+  self-update [--dir DIR] [--row N] 'COMMIT MESSAGE'
                         Test, push to main, fast-forward the live folder.
-                        Refuses only when a test fails.
+                        Refuses only when a test fails. --row N names the
+                        /wrong correction that caused the change.
   rule add NAME --row N --action strip_sentence|reject --pattern 'REGEX' --bad 'SENTENCE'
                         Add a gate rule. Refused unless it matches its own bad
                         sentences and no known-good sentence.
