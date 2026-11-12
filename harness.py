@@ -33,8 +33,8 @@ PREFIX_SHA256 = '73d3ce09d43431650591b9ff9c9eb7e5fe3def714e0a49eebdfd7c8fd2fd285
 DEFAULT_MODEL = 'gpt-6.1-sol'
 ANTHROPIC_MODEL = 'claude-opus-5-5'
 DEFAULT_EFFORT = 'high'
-MAX_OUTPUT_TOKENS = 8192
-MAX_INPUT_CHARS = 50000
+MAX_OUTPUT_TOKENS = 128000  # highest value both providers accepted in a live call on 2026-11-11
+MAX_INPUT_CHARS = 1000000
 STATE = Path(os.environ.get('HARNESS_STATE_DIR', str(ROOT / 'state'))).expanduser()
 
 

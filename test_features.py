@@ -159,7 +159,7 @@ class Features(unittest.TestCase):
         self.assertEqual(client.calls[0]['model'],'claude-opus-5-5')
         self.assertEqual(client.calls[0]['thinking'],{'type':'adaptive'})
         self.assertEqual(client.calls[0]['output_config'],{'effort':'high'})
-        self.assertEqual(client.calls[0]['max_tokens'],8192)
+        self.assertEqual(client.calls[0]['max_tokens'],h.MAX_OUTPUT_TOKENS)
 
     def test_anthropic_auto_choice_plain_text_is_regated(self):
         client=FakeClient([]); client.messages=client

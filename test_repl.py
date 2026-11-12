@@ -107,7 +107,7 @@ class ChatTests(unittest.TestCase):
         h.request_reply('Explain the mode.',client=client,log_path=self.root/'usage')
         self.assertEqual(client.calls[0]['model'],'gpt-6.1-sol')
         self.assertEqual(client.calls[0]['reasoning'],{'effort':'high'})
-        self.assertEqual(client.calls[0]['max_output_tokens'],8192)
+        self.assertEqual(client.calls[0]['max_output_tokens'],h.MAX_OUTPUT_TOKENS)
 
 
 if __name__=='__main__':unittest.main()
