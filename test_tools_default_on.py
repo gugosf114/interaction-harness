@@ -43,9 +43,11 @@ class DefaultOnTests(unittest.TestCase):
                 kinds = [t.get('type') for t in tools]
                 self.assertNotIn('file_search', kinds); self.assertNotIn('mcp', kinds); self.assertNotIn('mcp_toolset', kinds)
                 if engine == 'openai':
-                    self.assertIn('hosted_shell', s.unset)
-                    shells = [t for t in tools if t.get('type') == 'shell']
-                    self.assertEqual([t['environment']['type'] for t in shells], ['local'])
+                    self.assertEqual(s.unset & {'code_execution', 'shell', 'hosted_shell'}, {'shell', 'hosted_shell'})
+                    self.assertIn('code_interpreter', kinds); self.assertNotIn('shell', kinds)
+                    self.assertTrue({'custom', 'namespace'} <= set(kinds))
+                else:
+                    self.assertTrue({'code_execution_20260521', 'bash_20250124'} <= set(kinds))
                 self.assertIn('steps aside', s.listing('model'))
 
     def test_skills_and_file_search_stop_the_call_only_when_asked_by_flag(self):
@@ -62,8 +64,24 @@ class DefaultOnTests(unittest.TestCase):
             (state / 'tools.json').write_text(json.dumps({**{n: False for n in cfg.TOOLS}, 'shell': True, 'hosted_shell': True}))
             self.assertEqual(cfg.Settings(state, 'openai', {'hosted_shell': True}).unset, {'shell'})
             self.assertEqual(cfg.Settings(state, 'openai', {'shell': True}).unset, {'hosted_shell'})
+            self.assertEqual(cfg.Settings(state, 'openai').unset, {'hosted_shell'})
             with self.assertRaises(ValueError):
                 cfg.provider_tools(cfg.Settings(state, 'openai', {'shell': True, 'hosted_shell': True}), [])
+            (state / 'tools.json').write_text(json.dumps({**{n: False for n in cfg.TOOLS}, 'shell': True, 'code_execution': True}))
+            self.assertEqual(cfg.Settings(state, 'openai').unset, {'shell'})
+            self.assertEqual(cfg.Settings(state, 'openai', {'shell': True}).unset, {'code_execution'})
+            self.assertEqual(cfg.Settings(state, 'anthropic').unset, set())
+            with self.assertRaises(ValueError):
+                cfg.provider_tools(cfg.Settings(state, 'openai', {'shell': True, 'code_execution': True}), [])
+
+    def test_skills_that_are_set_up_keep_the_hosted_shell_on_openai(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp) / 'state'; state.mkdir()
+            (state / 'tools.json').write_text(json.dumps({**{n: n not in cfg.ALWAYS_OFF for n in cfg.TOOLS},
+                                                          'options': {'openai_skills': [{'type': 'skill_reference', 'skill_id': 's', 'version': '1'}]}}))
+            s = cfg.Settings(state, 'openai')
+            self.assertEqual(s.unset & {'code_execution', 'shell', 'hosted_shell'}, {'code_execution', 'shell'})
+            self.assertIn('skills', s.effective)
 
     def test_openai_remote_mcp_runs_without_asking(self):
         with tempfile.TemporaryDirectory() as tmp:

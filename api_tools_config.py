@@ -97,11 +97,17 @@ class Settings:
                  'file_search': bool(self.options['vector_store_ids']),
                  'mcp_remote': str(self.options['mcp_url']).startswith('https://')}
         self.unset = {name for name, ready in needs.items() if name in self.effective and not ready and name not in self.asked}
-        # OpenAI has one shell tool type. With both shells on, the one asked for by flag wins; with neither
-        # asked, skills need the hosted shell, and otherwise the phone's own shell stays.
-        if engine == 'openai' and {'shell', 'hosted_shell'} <= self.effective and not {'shell', 'hosted_shell'} <= self.asked:
-            hosted = 'hosted_shell' in self.asked or ('shell' not in self.asked and 'skills' in self.effective - self.unset)
-            self.unset.add('shell' if hosted else 'hosted_shell')
+        # OpenAI takes one of these three in a request: it answers "code_interpreter and shell with an
+        # OpenAI-managed container cannot be used together" for code execution with either shell, and it has
+        # one shell tool type. The one asked for by flag stays. With none asked, skills that are set up keep
+        # the hosted shell; otherwise code execution stays, and the phone's commands still run through the
+        # function and custom tools.
+        group = ('code_execution', 'shell', 'hosted_shell')
+        present = [name for name in group if name in self.effective]
+        chosen = [name for name in present if name in self.asked]
+        if engine == 'openai' and len(present) > 1 and len(chosen) < 2:
+            keep = chosen[0] if chosen else ('hosted_shell' if 'skills' in self.effective - self.unset and 'hosted_shell' in present else present[0])
+            self.unset.update(name for name in present if name != keep)
         self.effective -= self.unset
         if 'skills' in self.effective: self.effective.add('code_execution' if engine == 'anthropic' else 'hosted_shell')
         if 'programmatic' in self.effective:
@@ -133,8 +139,9 @@ class Settings:
                 status = {'skills': 'switched on; steps aside until a skill is listed in tools.json options',
                           'file_search': 'switched on; steps aside until vector_store_ids is set in tools.json options',
                           'mcp_remote': 'switched on; steps aside until an https mcp_url is set in tools.json options',
-                          'shell': 'switched on; steps aside for the hosted shell on this lane',
-                          'hosted_shell': 'switched on; steps aside for the local shell on this lane'}[name]
+                          'code_execution': 'switched on; steps aside: OpenAI takes one of code execution, shell, hosted shell',
+                          'shell': 'switched on; steps aside: OpenAI takes one of code execution, shell, hosted shell',
+                          'hosted_shell': 'switched on; steps aside: OpenAI takes one of code execution, shell, hosted shell'}[name]
             else: status = 'enabled' if self.on(name) else 'available to enable'
             lines.append(f'{flag_name(name)}: {state}; {"/".join(lanes)}; {purpose} {status}')
         return '\n'.join(lines)+'\n'
@@ -176,6 +183,8 @@ def provider_tools(settings, base, mcp_catalog=()):
     }
     if on('shell') and on('hosted_shell'):
         raise ValueError('Choose local shell or hosted shell for a request; OpenAI uses one shell tool type.')
+    if engine=='openai' and on('code_execution') and (on('shell') or on('hosted_shell')):
+        raise ValueError('Choose code execution or a shell for a request; OpenAI refuses the two together.')
     for name in TOOLS:
         if on(name) and name in specs[engine]:
             definition=copy.deepcopy(specs[engine][name])
