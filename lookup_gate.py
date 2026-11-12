@@ -4,7 +4,7 @@ import re
 URL=re.compile(r'https?://[^\s<>"\x27`]+',re.I)
 QUOTED=re.compile(r'```[\s\S]*?```|`[^`]*`|"[^"\n]*"|“[^”\n]*”|(?<!\w)\x27[^\x27\n]*\x27(?!\w)')
 CLAIM=re.compile(r'\b(?:I|we)(?:(?:[\x27’]ve| have))?(?:\s+(?:just|already|also|now|successfully))*\s+'
-                 r'(?:searched|browsed|fetched|looked\s+up|checked\s+(?:online|the\s+web|the\s+website|the\s+page))\b',re.I)
+                 r'(?:searched|browsed|fetched|looked\s+up|checked\s+(?:online|the\s+web(?:\s+page)?|the\s+website))\b',re.I)
 PASSIVE=re.compile(r'\b(?:web|online|internet)\s+(?:search|lookup)\s+(?:shows?|found|confirms?)\b|'
                    r'\b(?:after|having)\s+(?:searching|browsing|fetching|looking\s+up|checking\s+online)\b',re.I)
 DENIAL=re.compile(r'\b(?:no|not|never|cannot|can[\x27’]t|didn[\x27’]t|haven[\x27’]t|without|unknown|whether|if|may|might)\b',re.I)

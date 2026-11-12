@@ -190,6 +190,8 @@ class SensesTests(unittest.TestCase):
         self.assertIsNone(violation('I searched online.',{'total':1},[],''))
         self.assertIsNotNone(violation('After browsing, the answer is clear.',{'total':0},[],''))
         self.assertIsNotNone(violation("I've searched the site's contents.",{'total':0},[],''))
+        self.assertIsNone(violation('I checked the page in the attached PDF.',{'total':0},[],''))
+        self.assertIsNotNone(violation('I checked the web page.',{'total':0},[],''))
 
     def test_urls_need_source_request_or_history(self):
         text='Read '+U
