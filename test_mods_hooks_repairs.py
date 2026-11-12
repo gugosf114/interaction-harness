@@ -213,11 +213,13 @@ class Usage(unittest.TestCase):
             p=Path(folder)/'usage.jsonl'
             base={'engine':'openai','time_utc':(now-timedelta(hours=1)).isoformat(),'usage':{'input_tokens':10}}
             events=[{**base,'provider_response_ids':['r1','r2','r2']},
-                    {**base,'kind':'hook:voice'}, {**base,'time_utc':(now+timedelta(hours=1)).isoformat()}]
+                    {**base,'kind':'hook:voice'}, {**base,'time_utc':(now+timedelta(hours=1)).isoformat()},
+                    {**base,'engine':'vertex','model_requested':'claude-opus-5-5'}]
             p.write_text('\n'.join(map(json.dumps,events)))
             p.with_name('judge.jsonl').write_text(json.dumps({**base,'kind':'judge'}))
             totals=usage_meter.from_log(p,starts,now)['openai']['today']
             self.assertEqual((totals['calls'],totals['input']),(3,20))
+            self.assertEqual(usage_meter.from_log(p,starts,now)['anthropic']['today']['calls'],0)
 
     def test_anthropic_range_totals_include_requests(self):
         now=datetime(2026,11,12,12,tzinfo=timezone.utc);starts=usage_meter.window_starts(now)

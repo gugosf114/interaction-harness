@@ -77,6 +77,8 @@ def engine_of(event: dict) -> str | None:
     engine = event.get('engine')
     if engine in ('anthropic', 'openai'):
         return engine
+    if engine:
+        return None  # A Claude model billed through Vertex is not the Anthropic API account.
     model = str(event.get('model_requested') or event.get('model') or '')
     return 'anthropic' if model.startswith('claude') else 'openai' if model.startswith(('gpt', 'o')) else None
 
