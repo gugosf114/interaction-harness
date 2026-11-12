@@ -292,6 +292,26 @@ class DeepResearch(unittest.TestCase):
                 self.assertEqual(research.main(['question','--out',str(out),'--retries','0']),2)
             self.assertFalse(out.exists())
 
+    def test_retry_keeps_the_task_when_first_web_turn_failed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            calls = []
+            out = Path(tmp)/'report.md'
+            def run(argv, **kw):
+                calls.append(argv[-1])
+                with sqlite3.connect(Path(kw['env']['HARNESS_STATE_DIR'])/'history.db') as db:
+                    db.execute('CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY,engine TEXT,model TEXT,status TEXT,error TEXT,direct_answer TEXT,sources_json TEXT,lookup_counts_json TEXT)')
+                    if len(calls) == 1:
+                        db.execute('INSERT INTO history VALUES (1,?,?,?,?,?,?,?)',('anthropic','m','error','Claude web lookup failed: url_not_in_prior_context',None,'[]','{}'))
+                    else:
+                        db.execute('INSERT INTO history VALUES (2,?,?,?,?,?,?,?)',('anthropic','m','accepted',None,'# Answer\n\nFact (https://a.example/x)',json.dumps([{'url':'https://a.example/x','title':'A'}]),'{"total":2}'))
+                return subprocess.CompletedProcess(argv,2 if len(calls)==1 else 0)
+            with mock.patch.object(research,'HOME',tmp), mock.patch.object(research.subprocess,'run',side_effect=run), mock.patch('sys.stdout',io.StringIO()):
+                self.assertEqual(research.main(['What date was Daly City incorporated?','--out',str(out)]),0)
+            self.assertEqual(len(calls),2)
+            self.assertIn('What date was Daly City incorporated?',calls[1])
+            self.assertIn('url_not_in_prior_context',calls[1])
+            self.assertTrue(out.exists())
+
     def test_reads_the_runs_history(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = os.path.join(tmp, 'history.db')

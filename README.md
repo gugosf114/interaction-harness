@@ -1183,7 +1183,8 @@ Deep research runs this harness with `--loop -y`, max effort, up to 50 hosted
 lookups per model turn and up to 1,000 turns. It stops when the report is ready.
 `--engine openai|anthropic` chooses the lane. Each run has its own private state
 folder and log. Caller mod settings carry into the child; reply gates remain on.
-Failed web lookups can resume the same session. A failed run, a report with no
+Failed web lookups can resume the same session. Each retry carries the original
+question, including when the first failed turn left no saved exchange. A failed run, a report with no
 recorded sources, or a report citing none of those sources writes no output.
 Links are checked against the saved lookup sources. The report's Sources list
 contains the sources it cites; the complete lookup record stays in its database.

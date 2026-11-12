@@ -162,7 +162,9 @@ def main(argv):
         error = last_lookup_error(db)
         if run.returncode == 0 or not error:
             break
-        prompt = CONTINUE.format(error=error)
+        # An error on the first turn leaves no saved exchange to continue.
+        # Carry the original task on every retry, alongside the actual error.
+        prompt = PROMPT + args.question.strip() + '\n\n' + CONTINUE.format(error=error)
     if not db.is_file():
         print(f'The harness made no history (exit {run.returncode}). Log: {log}', file=sys.stderr)
         print(log.read_text(encoding='utf-8', errors='replace')[-1500:], file=sys.stderr)
