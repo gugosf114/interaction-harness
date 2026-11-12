@@ -33,6 +33,14 @@ def exchange(text='read', **fields):
 
 
 class Evidence(unittest.TestCase):
+    def test_native_saved_receipts_bypass_model_feedback_clipping(self):
+        raw='x'*200000+'MID_NATIVE_RECEIPT'+'y'*400000
+        turn=exchange(execution_result={'approved':True,'exit_code':0,'stdout':raw,'stderr':''},
+                      history_row=5,history_timestamp='2026-11-12T17:00:00+00:00')
+        messages=receipt_context.messages_from_turns([turn]);record=json.loads(messages[0]['content'])
+        self.assertEqual(len(record['result']['stdout']),len(raw))
+        self.assertTrue('MID_NATIVE_RECEIPT' in proof_marks.evidence(messages))
+        self.assertEqual(record['history_timestamp'],'2026-11-12T17:00:00+00:00')
     def test_interrupt_during_repair_closes_runtime(self):
         from senses import TurnSenses
         with tempfile.TemporaryDirectory() as folder,patch.object(h,'STATE',Path(folder)),patch.object(h,'MODS_ON',True):
