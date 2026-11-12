@@ -9,6 +9,10 @@ for f in "$here"/bin/*; do
   name=$(basename "$f")
   chmod +x "$f"
   if [ -e "$bin/$name" ] && [ ! -L "$bin/$name" ]; then
+    if [ "$name" = look ]; then
+      echo "harness-local look -> $f (the existing system look stays at $bin/$name)"
+      continue
+    fi
     echo "SKIPPED $name: $bin/$name exists and is not a link." >&2; status=1; continue
   fi
   ln -sfn "$f" "$bin/$name"

@@ -6,6 +6,7 @@ import shutil
 import signal
 import subprocess
 import tempfile
+from execution_images import read_receipts
 
 PREFIX = '/data/data/com.termux/files/usr'
 OUTPUT_LIMIT = 1048576
@@ -14,9 +15,11 @@ OUTPUT_LIMIT = 1048576
 def run_bounded(command, timeout=120):
     env = os.environ.copy()
     env.pop('LD_LIBRARY_PATH', None)
-    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+    env['PATH'] = str(Path(__file__).resolve().parent / 'toolbox/bin') + os.pathsep + env.get('PATH', '')
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err, tempfile.TemporaryFile() as receipts:
+        env['HARNESS_ATTACHMENT_FD'] = str(receipts.fileno())
         process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
-                                   env=env, start_new_session=True)
+                                   env=env, start_new_session=True, pass_fds=(receipts.fileno(),))
         timed_out = False
         try: code = process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -29,7 +32,7 @@ def run_bounded(command, timeout=120):
         truncated = len(output)>OUTPUT_LIMIT or len(error)>OUTPUT_LIMIT
         return {'exit_code':code,'stdout':output[:OUTPUT_LIMIT].decode(errors='replace'),
                 'stderr':error[:OUTPUT_LIMIT].decode(errors='replace'),
-                'timed_out':timed_out,'truncated':truncated}
+                'timed_out':timed_out,'truncated':truncated, **read_receipts(receipts)}
 
 
 def confirm():

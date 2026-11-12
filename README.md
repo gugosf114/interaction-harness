@@ -301,10 +301,93 @@ Verification: `python verify_senses.py --engine openai` and `python verify_sense
 
 Official references checked for this implementation: [OpenAI web tools](https://developers.openai.com/api/docs/guides/tools-web-search), [OpenAI images](https://developers.openai.com/api/docs/guides/images-vision), [OpenAI files](https://developers.openai.com/api/docs/guides/file-inputs), [Claude web search](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool), [Claude web fetch](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-fetch-tool), [Claude server tools](https://platform.claude.com/docs/en/agents-and-tools/tool-use/server-tools), [Claude images](https://platform.claude.com/docs/en/build-with-claude/vision), and [Claude PDF support](https://platform.claude.com/docs/en/build-with-claude/pdf-support).
 
+## Screen
+
+Both engines can see a picture returned by an approved command. Inside `--loop`,
+`screen snap` captures a PNG and attaches it to the next turn. `look PATH` does the
+same for an existing PNG, JPEG, WebP, GIF, or PDF. Every command still asks for
+`[Run command? (y/N)]` unless the operator chose `-y`. The four-field reply and all
+display, execution, lookup, and source gates still run.
+
+```sh
+screen snap [--target phone|hidden:NAME|laptop|yana] [--out PATH]
+screen size [--target TARGET]
+screen tap X Y [--target TARGET]
+screen swipe X1 Y1 X2 Y2 [MS] [--target TARGET]
+screen text 'WORDS' [--target TARGET]
+screen key KEYCODE [--target TARGET]
+look /sdcard/Download/picture.png
+
+g1 --loop "Take a picture of hidden screen work and tell me what app is showing."
+george --loop "Use look /sdcard/Download/order.pdf and read its delivery date."
+```
+
+Install with `sh toolbox/install.sh` after choosing this version for use. The
+installer links commands in `toolbox/bin`, including `screen`. This phone already
+has a real system binary named `look`; the installer keeps it and reports that
+the harness uses its own `look` from the toolbox. In a plain shell outside the
+harness, use `~/interaction-harness/toolbox/bin/look PATH` for this version.
+The native runner puts **this checkout's** toolbox first on PATH. Development
+copies therefore use their own commands and cards without changing installed
+links. Screen inspection uses Debian's installed Pillow; no new package is needed
+on this phone.
+
+The default target is George's visible phone. Input acts on that screen at once.
+`hidden:NAME` requires an existing hidden display; a missing or zero display id
+fails instead of using screen zero. `card phone` gives the lifecycle commands.
+For hidden captures, the driver matches the logical display's exact virtual
+`uniqueId` to SurfaceFlinger's capture id and uses `adb exec-out screencap -p -d ID`.
+This avoids the older hidden `shot` reader's "no frame" failure after its pending
+frames are consumed on a static screen. Ambiguous or missing mappings fail closed.
+Coordinates are pixels of the captured image at full size. `size` uses a fresh
+capture, so rotation is reflected in the dimensions. Android text supports
+printable ASCII; unsupported characters and literal `%s` return an error.
+Windows captures its primary desktop through a short-lived interactive PowerShell
+task; the task and its temporary files are removed. Windows input uses user32 and
+SendKeys. Its supported keys are ENTER, TAB, ESC, BACKSPACE, UP, DOWN, LEFT, RIGHT
+and their matching Android keycodes. Laptop input and all Yana operations remain
+**listed, not run** in this task's live proof. The driver implements them; tests
+check the generated commands. Visible-phone proof is capture only.
+
+The file-naming rule is an **inherited private receipt descriptor**. Only an
+explicit local `screen snap` or `look` process writes `{"path":"..."}` to that
+descriptor. The runner never scans stdout, stderr, web pages, log files, or model
+text for markers. An approved arbitrary shell program can intentionally use its
+inherited descriptor; the descriptor is not a sandbox against the approved shell.
+Outside a harness command, the toolbox's `look` just prints a path.
+
+After the command, the client applies the same signature, path, and provider-size
+checks as `attachments.py`. It copies accepted bytes to private
+`state/execution-attachments/<SHA-256>.<type>`. This prevents a later overwrite of
+`--out` or the original file from changing an earlier turn. SQLite's
+`attachments_json` and `execution_result` record path, SHA-256, byte size, media
+type, and image/file kind; session JSON stores the same execution attachment.
+The image is sent with that execution observation while its exchange remains in
+the history window. The latest result also survives a zero history budget during
+the current loop. An oversized or unreadable file becomes `attachment_errors` in
+the next observation; the loop can recover. Snap rejects all-black frames, missing
+targets, and timeouts with distinct one-line errors and nonzero exits. Output
+images are published only after validation, so a failed capture cannot attach a
+stale `--out` file.
+
+The frozen prefix is unchanged. The tools index is loaded once per request and
+has identical bytes for every turn of a session. Picture bytes are added at the
+execution observation, after the stable cached prefix. API image formats were
+checked against [OpenAI image inputs](https://developers.openai.com/api/docs/guides/images-vision)
+and [Claude image inputs](https://platform.claude.com/docs/en/build-with-claude/vision).
+
+`verify_screen.py --engine openai|anthropic --case app|search|phone|cache
+--state PATH --hidden NAME` uses the real launcher with isolated state. Its
+proof-only command check permits input solely on NAME; George's phone can only be
+captured, and Yana and laptop commands are excluded. Start the hidden screen and
+open Settings before the app/search cases; stop it after checks. Reports keep the
+exact query, exit code, command results, SQLite rows, and cache counters. Image
+answers must also be compared with their saved PNGs.
+
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card'
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes

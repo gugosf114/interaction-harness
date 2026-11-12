@@ -29,9 +29,13 @@ options:
                         available to --continue.
   -c, --continue
   --session NAME
-  --turns TURNS         Exchanges kept in the rolling session (1–50).
+  --turns TURNS         Exchanges kept in the session (1–1000000). The
+                        character budget is the real limit.
   --history-chars HISTORY_CHARS
-                        Maximum prior-history characters sent to the model.
+                        Maximum prior-history characters sent to the model
+                        (0–4000000). Default: 2400000 on anthropic, 650000 on
+                        openai, sized to each model window measured live on
+                        2026-11-11.
   --no-normalize        Send exact typed input without phonetic substitutions.
   -x, --exec            Ask y/N before running the returned command in native
                         Termux.
@@ -40,7 +44,7 @@ options:
                         completion or the turn ceiling; implies --exec.
   --max-turns MAX_TURNS
                         Maximum model turns per --loop task, including the
-                        final answer (1–50; default 5).
+                        final answer (1–1000; default 200).
   -y, --yes             Explicitly approve every command for this invocation;
                         requires --exec or --loop.
   --recall QUERY        Search local history without an API call.
@@ -51,3 +55,6 @@ options:
                         default 5).
   --image PATH          Attach PNG/JPEG/WebP/GIF bytes; repeatable.
   --file PATH           Attach PDF bytes; repeatable.
+
+Screen: in an approved --loop command, screen snap or look PATH attaches the
+file to the next model turn. Run card screen for targets and commands.

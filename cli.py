@@ -8,10 +8,11 @@ import sys
 
 import harness as h
 import senses_cli
+from execution_images import prepare_execution
 from lookup_gate import turn_metadata
 from phonetics import normalize
-from storage import (Store, history_messages, atomic_json, execution_observation,
-                     confirmed_execution, successful_execution)
+from storage import (Store, history_messages, atomic_json,
+                     confirmed_execution, successful_execution, execution_message)
 
 
 # History budget per engine, in characters. Measured live on 2026-11-11: claude-opus-5-5 accepts
@@ -80,6 +81,7 @@ def run_chat(args, model):
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description='Direct answers, bounded memory, optional confirmed Termux execution.')
+    parser.epilog='Screen: in an approved --loop command, screen snap or look PATH attaches the file to the next model turn. Run card screen for targets and commands.'
     parser.add_argument('--engine',choices=['openai','anthropic'],default=os.environ.get('DEFAULT_ENGINE','openai'))
     parser.add_argument('--model',default=None)
     parser.add_argument('--effort',choices=['low','medium','high','xhigh','max'],default=h.DEFAULT_EFFORT,help='Reasoning effort on either engine (default: high).')
@@ -170,14 +172,14 @@ def main(argv=None):
                     past.insert(0,{'role':'user','content':json.dumps({'client_mode':'agent_loop',
                         'original_task':cleaned,'max_turns':ceiling},ensure_ascii=False)})
                     if last_exchange is not None:
-                        observation={'role':'user','content':execution_observation(last_exchange)}
+                        observation=execution_message(last_exchange)
                         if observation not in past:past.append(observation)
                     # Only the command this reply answers can back a completion claim, and only if it exited 0.
                     supported=last_exchange is not None and successful_execution(last_exchange.get('execution_result'))
                 else:
                     latest=session['turns'][-1] if session['turns'] else None
                     supported=bool(latest and successful_execution(latest.get('execution_result')) and past
-                                   and past[-1]=={'role':'user','content':execution_observation(latest)})
+                                   and past[-1]==execution_message(latest))
                 reply=h.request_reply(current,engine=args.engine,model=model,effort=args.effort,timeout=args.timeout,
                                       log_path=args.usage_log,events=events,history=past,execution_confirmed=supported,
                                       request_context=cleaned,web=not args.no_web,web_max=args.web_max,attachments=turn_attachments)
@@ -192,6 +194,8 @@ def main(argv=None):
                 request={'op':'exec','command':reply.execution_payload,'timeout':args.exec_timeout}
                 if args.yes:request['auto_confirm']=True
                 execution=native(request)
+                execution=prepare_execution(execution,args.engine,h.STATE,
+                    [*past,{'attachments':turn_attachments}])
                 store.finish(row_id,reply,events,execution=execution)
                 exchange['execution_result']=execution
                 atomic_json(store.sessions/(sid+'.json'),session)

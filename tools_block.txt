@@ -21,6 +21,7 @@ The families
 - files: read a slice of a file, search, write a new file, make an exact-replace edit. Print: card files
 - documents: make a PDF from text, make a QR code, download a video, put a file in Downloads. Print: card documents
 - phone: screenshot, read texts, read the screen, adb, hidden screens. Print: card phone
+- screen: capture and see pictures in the next loop turn; tap, swipe, type and press keys on a named screen. Print: card screen
 - phone-browser: the signed-in Chrome on the phone; open a page as George and read its text. Print: card phone-browser
 - laptop: run a command on George's Windows laptop, copy files each way, start a long job there. Print: card laptop
 - yana-phone: reach Yana's phone. Print: card yana-phone

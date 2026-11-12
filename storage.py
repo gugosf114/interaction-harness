@@ -55,6 +55,13 @@ def execution_observation(exchange):
                        'command':exchange['reply']['execution_payload'],'result':result},ensure_ascii=False)
 
 
+def execution_message(exchange):
+    message = {'role': 'user', 'content': execution_observation(exchange)}
+    attached = exchange['execution_result'].get('attachments')
+    if attached: message['attachments'] = attached
+    return message
+
+
 def request_metrics(events):
     """Normalize provider counters; OpenAI's input already includes cache reads."""
     metrics=dict(tokens_used=0,cache_read_tokens=0,
@@ -172,7 +179,14 @@ class Store:
         fields.update(sources_json=json.dumps(metadata['sources']),lookup_counts_json=json.dumps(metadata['lookup_counts']))
         if reply:
             fields.update(reply.model_dump())
-        if execution is not None: fields['execution_result'] = json.dumps(execution)
+        if execution is not None:
+            fields['execution_result'] = json.dumps(execution)
+            if execution.get('attachments'):
+                old = self.db.execute('SELECT attachments_json FROM history WHERE id=?', (row_id,)).fetchone()
+                records = json.loads(old[0] or '[]')
+                for record in execution['attachments']:
+                    if record not in records: records.append(record)
+                fields['attachments_json'] = json.dumps(records)
         with self.db:
             self.db.execute('UPDATE history SET '+','.join(k+'=?' for k in fields)+' WHERE id=?', [*fields.values(),row_id])
 
@@ -238,7 +252,7 @@ def history_messages(exchanges, max_chars=24000):
         if exchange.get('sources'):
             pair.append({'role':'user','content':json.dumps({'type':'source_record','sources':exchange['sources']})})
         if exchange.get('execution_result') is not None:
-            pair.append({'role':'user','content':execution_observation(exchange)})
+            pair.append(execution_message(exchange))
         size = sum(len(p['content'])+len(json.dumps(p.get('attachments',[]))) for p in pair)
         if used + size > max_chars: break
         selected.insert(0,pair); used += size
