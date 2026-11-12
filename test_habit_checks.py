@@ -68,5 +68,17 @@ class TakeCareTests(unittest.TestCase):
         self.assertEqual(shown(answer), "chmod 600 lets only the file's owner read and write it. The group and everyone else get no access.")
 
 
+class AllTheBestTests(unittest.TestCase):
+    def test_all_the_best_is_listed_and_cut(self):
+        listed = {habit_checks.plain(sentence) for sentence in habit_checks.CUT_SENTENCES}
+        self.assertIn(habit_checks.plain('All the best.'), listed)
+        self.assertEqual(shown('The mode is 644. All the best.'), 'The mode is 644.')
+        self.assertEqual(shown('The mode is 644. **all the best.**'), 'The mode is 644.')
+        answer = 'chmod 644 lets the owner read and write a file. Others can only read it; no one gets permission to run it.\nAll the best.'
+        expected = 'chmod 644 lets the owner read and write a file. Others can only read it; no one gets permission to run it.'
+        asked = 'Run no command. What does chmod 644 mean? Two short sentences. Then end your answer with this exact sentence: All the best.'
+        self.assertEqual(shown(answer, asked), expected)
+
+
 if __name__ == '__main__':
     unittest.main()
