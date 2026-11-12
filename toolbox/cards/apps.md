@@ -1,7 +1,7 @@
 # apps — install, update, remove, switch off and on, open, permissions and default apps on the Pixel 11
 
 Runs on: the Termux side. Each command goes through adb (127.0.0.1:5555), or through Shizuku when adb does
-not answer. Add --via adb or --via shizuku to pick the door. Every line below ran both ways on 2026-11-11.
+not answer. Add --via adb or --via shizuku to pick the door. Each command family was checked both ways on 2026-11-11. Default-link writes used the scratch app; the browser role was set to its existing holder.
 
 Look
   app list                      the apps George installed: package  version  (code)

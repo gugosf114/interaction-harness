@@ -559,6 +559,12 @@ Local MCP exposes the phone's 55 tool definitions through `agentbridge-call`. Th
 
 `deploy_mcp_relay.py --account ACCOUNT --token-file PATH --state PRIVATE_DIR` deploys this relay and writes its private configuration. `api_mcp_tunnel.py` also supports a local HTTP adapter for existing tunnel services. The deployed Worker route passed on both engines; the temporary quick-tunnel route proved unreliable and is not the installed route. No existing ngrok endpoint was replaced.
 
+### Long Claude replies
+
+Claude requests use the SDK's `messages.stream()` and `get_final_message()` to keep the connection active while the model thinks. The complete message then enters the same tool and four-field reply checks; stream events are kept inside the client. Cache usage and request settings retain their existing shape. A stream without a final stop reason is recorded as an API connection error, and a stream error does not trigger a second request. Both the regular and extended API-tool routes use `anthropic_transport.py`.
+
+This follows [Anthropic's buffered-stream recipe](https://platform.claude.com/docs/en/build-with-claude/streaming) and [long-request guidance](https://platform.claude.com/docs/en/api/errors). The skill proofs exposed long non-streaming failures after increasing the request timeout; streaming is the transport repair. Tests: `test_anthropic_transport.py`, including the installed SDK's real event parser with a local fake HTTP transport.
+
 ### Conversation cache and proof
 
 Claude caches the growing conversation using one automatic history marker alongside the two system-page markers. Earlier messages stay byte-identical; each loop note sits beside its own turn. A three-turn live test checks that turn three reads more cached tokens than the complete first request. Cache metrics, tool-list hashes and provider errors are saved with the existing usage events.
@@ -997,7 +1003,7 @@ Tests: `test_extra_lanes.py` (every lane, every knob, and `both`, all with fakes
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool test_agentd test_agentd_doors test_lane_mods test_gate_rules test_judge test_google_accounts test_tools_default_on test_first_page test_stamp test_live_findings test_extra_lanes test_lessons test_corrections test_self_update test_habit_checks test_skills_apps'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool test_agentd test_agentd_doors test_lane_mods test_gate_rules test_judge test_google_accounts test_tools_default_on test_first_page test_stamp test_live_findings test_extra_lanes test_lessons test_corrections test_self_update test_habit_checks test_skills_apps test_anthropic_transport'
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes

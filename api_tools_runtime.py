@@ -282,7 +282,8 @@ class Runtime:
                     self.record('background',response.id,'success' if response.status=='completed' else 'failed',initial_status=initial,final_status=response.status)
             else:
                 endpoint=client.beta.messages if 'betas' in params else client.messages
-                response=endpoint.create(**params)
+                from anthropic_transport import complete_message
+                response=complete_message(endpoint,**params)
             senses.observe(response);self.observe(response)
             from api_tools_resources import fetch_output_files
             fetch_output_files(self,client,response)

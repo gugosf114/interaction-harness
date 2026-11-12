@@ -5,6 +5,7 @@ import json
 from types import SimpleNamespace
 
 from attachments import materialize, check_request_size
+from anthropic_transport import complete_message
 from lookup_gate import unique_sources
 from stamp import cache_before_stamp
 
@@ -147,7 +148,7 @@ class TurnSenses:
             self.paused_content=[]
             for continuation in range(9):
                 check_request_size(params,self.engine)
-                response=client.messages.create(**params);self.observe(response)
+                response=complete_message(client.messages,**params);self.observe(response)
                 content=dump(response.content)
                 if response.stop_reason!='pause_turn':
                     pending=set(self.call_kinds)-self.result_ids
