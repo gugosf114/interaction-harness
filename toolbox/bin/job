@@ -1,0 +1,8 @@
+#!/data/data/com.termux/files/usr/bin/python
+# job add [--lane L] "TASK" | list | show ID | stop ID | wait ID : hand a task to a lane; it runs in the background.
+import sys
+from pathlib import Path
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from agentd.cli import main
+raise SystemExit(main(['job', *sys.argv[1:]]))

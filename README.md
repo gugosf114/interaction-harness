@@ -579,10 +579,97 @@ A habit that no regular expression can express is a check in code: `habit_checks
 
 Code: `gate_rules.py`, `gate_rules_cli.py`, `habit_checks.py`, `gate_admin.py`; the command is `toolbox/bin/rule`. Tests: `test_gate_rules.py`. The unit tests never read the real rules file: it is switched on only by the command-line entry point (`second_gate.switch_on`), like the page list.
 
+## Always on
+
+A lane used to exist only while a Termux window was open. `agentd` is a service that runs without one. It takes tasks from several doors, runs each as a background job, and tells George the result. The code is in `agentd/`. Each job runs the existing `harness` command as a subprocess; the request code is unchanged.
+
+**A job** is a lane, a session name and a task in words. The lane's flags come from the `george`/`g1` shortcut block in `~/.bashrc` (a lane added there is a job lane at once), plus `lanes` in `state/agentd.json`. Every job runs with `--loop -y`. The task goes in on stdin. Each job has its own runner process and its own fresh session (`job-ID-xxxx`) unless `--session` names one. Jobs run in parallel with no cap. Every turn lands in `state/history.db` like any other turn, and `job show` reads it back from there.
+
+```sh
+job add "Check the battery and the Wi-Fi name."      # prints: job 7 queued on george (session job-7-1a2b)
+job add --lane g1 --session audit "Continue the audit."
+jobs                                                # one row per job: id, state, lane, door, time, task
+job show 7 [--full]                                 # the full answer and every command it ran (--full: each step and its output)
+job stop 7
+job wait 7                                          # waits, then prints the answer
+```
+
+`jobs` is also a bash builtin. `agentd install` adds `alias jobs='job list'` to `~/.bashrc`; in a window that was open before, run `. ~/.bashrc` once.
+
+**When a job ends** George gets a phone notification: title `LANE job ID STATE`, text the first line of the answer. While jobs run, one low pinned notification lists them, one per job. When spoken answers are on (`deb voice on`: the first line; `deb voice full`: the whole answer) the answer is spoken with `deb say`, one answer at a time. The switch is read from the same files `voice` writes.
+
+**The service.**
+
+```sh
+agentd install     # links the commands, ~/.termux/boot/20-agentd, phone timer 7742 (the keeper every 15 min), the jobs alias, and starts it
+agentd status      # service, keeper, page addresses, password, job counts, each door's state
+agentd start | stop | restart | log [N] | url | password
+```
+
+- `~/.termux/boot/20-agentd` links to `agentd/boot/20-agentd`. At boot it takes the wake lock and starts `agentd/keeper.sh`.
+- The keeper is the same shape as the phone's other keepers: one watch loop (a lock folder with its pid) that looks every 5 seconds and starts the service when it is not running. Phone timer 7742 (`timer-add`, put back after a reboot by `timers-ensure`) runs `keeper.sh tick` every 15 minutes, so a dead keeper comes back too.
+- The service holds `termux-wake-lock`. Killing it does not stop running jobs; when it comes back it picks up their results. A job whose runner died is marked `interrupted` and is not replayed.
+- `agentd stop` writes `state/agentd/STOPPED`; the keeper then does nothing until `agentd start`.
+- State: `state/agentd/queue.db` (the jobs), `state/agentd/jobs/ID/` (each job's stdout and stderr), `state/agentd/daemon.log`.
+
+**The doors.** Settings are in `state/doors.json`. The service fills in missing parts once: a web password, George's own number (from the phone's errand profile, `identity.phone`), and a voice-line key.
+
+| Door | How a task comes in | Where the answer goes |
+|---|---|---|
+| Folder | A text file dropped in `state/inbox/`. Optional first lines `lane: NAME` and `session: NAME`. | `state/outbox/NAME.answer.txt`. The dropped file moves to `state/inbox/taken/`. |
+| Text message | A text that starts with the keyword (`sms.keyword`, default `lane`): `lane g1 what is the battery`. Only from `sms.numbers`; `*` means anyone. Only texts that arrive after the service first looks count. | A text back to the sender: `g1 job 12 started.`, then `g1 job 12 done: ANSWER`. |
+| Telegram | George's bot is polled by the box bridge (`/root/agent-bridge/scripts/telegram_bridge.py`); its `/lane NAME TASK`, `/g1 TASK` and `/george TASK` post the task to this service over Tailscale. With `telegram.token` and `telegram.chat_ids` set, the door polls that bot itself. | The same Telegram chat. |
+| Voice line | On a call to 650-252-3543 the fast assistant's `lane_job(task, lane)` tool reaches the voice line's server, which passes it to `POST /vapi/tools` here (header `X-Line-Key`). | Into the same call, through the call's control address (`add-message`), as the line's own brain jobs report back. |
+| Clock | `state/schedule.json`, see below. | Notification, and speech when it is on. |
+| Events | `state/triggers.json`, see below. | Notification, and speech when it is on. |
+| Web page | The page, see below. | The page. |
+
+`state/schedule.json`:
+
+```json
+[
+  {"name": "morning", "at": "08:00", "lane": "george", "task": "Read my Berkeley inbox and list what needs me."},
+  {"name": "battery", "every_minutes": 30, "lane": "g1", "task": "Report the battery level."}
+]
+```
+
+`at` is the phone's local time; `days` (`["mon", ...]`) and `session` are optional. A new entry never fires for a time that already passed; an `every_minutes` entry first runs one period after it is seen. A time missed while the phone slept runs within the next hour. The service checks the clock every 20 seconds. Android's own timers (`termux-job-scheduler`) cannot fire at a time of day and run at most every 15 minutes, so they keep the service alive (timer 7742) and the service keeps the clock.
+
+`state/triggers.json`:
+
+```json
+[
+  {"name": "berkeley", "when": "mail", "mailbox": "berkeley", "match": "invoice", "task": "New mail:\n{text}\nTell me what it asks."},
+  {"name": "whatsapp", "when": "notification", "app": "com.whatsapp", "task": "Summarize: {text}"},
+  {"name": "yana", "when": "sms", "from": "+14155550100", "task": "Yana texted: {text}. Draft a reply."}
+]
+```
+
+`mail` reads the newest inbox mail of `berkeley` or `gmail` once a minute (`agentd/mail_new.py`, read-only). `notification` reads the shade through the phone's MCP server (`android_notification_list`) every 15 seconds; `app` is a package name or an app name. `sms` reads the text inbox. `match` is an optional phrase the event must hold. The template takes `{text}`, `{from}`, `{title}`, `{app}`, `{subject}` and `{mailbox}`. Only events that arrive after the service first looks count, and the service's own notifications never fire a rule.
+
+**The page.** The service serves a page on port 8377 (`port` in `state/agentd.json`), on every address of the phone: `http://127.0.0.1:8377/` here and `http://TAILSCALE-ADDRESS:8377/` from the laptop (`agentd url` prints both). Type a task, pick a lane, see the jobs, open one for its answer and commands, stop it. The password is `web.password` in `state/doors.json` (`agentd password` prints it); an empty value opens the page to anyone with the link. The page asks for it once and keeps it in a cookie; programs send it as `X-Agentd-Password` or `?password=`. JSON API: `GET /api/state`, `GET /api/jobs/ID`, `POST /api/jobs` `{"task", "lane", "session"}`, `POST /api/jobs/ID/stop`.
+
+```sh
+agentd tunnel              # cloudflared quick tunnel: prints https://NAME.trycloudflare.com/ and the password; Ctrl-C closes it
+agentd tunnel ngrok        # the same through George's ngrok account
+```
+
+**Talk.**
+
+```sh
+talk                       # speak, Enter ends the turn (60 s at most), hear the answer; say "stop" to end
+talk --lane g1 --seconds 30
+talk --clip /sdcard/Download/question.m4a --no-speak    # a recorded clip instead of the microphone
+```
+
+Each turn records with `termux-microphone-record` (AAC, `.m4a`), turns it into words with OpenAI's `POST /v1/audio/transcriptions` and model `gpt-transcribe`, hands the words to the lane as a job in one `talk-TIME` session that lasts the whole conversation, prints the answer and speaks it with `deb say`. The answer passes every harness gate. Why this road (checked Nov 11, 2026, in each provider's documentation): Anthropic's Claude API lists no audio input, speech-to-text, speech output or realtime voice feature. OpenAI's Realtime API (`gpt-realtime-2.1`, WebRTC or WebSocket) answers speech with its own model, so its answer would skip the four-field reply, the gates, the lane and `history.db`. The transcription endpoint takes the recorded file in one request (formats include m4a; up to 25 MB) and keeps the lane in the middle.
+
+Tests: `test_agentd.py` (queue, runner, service loop, web page, CLI) and `test_agentd_doors.py` (each door's parser and loop, the schedule, the trigger matcher, talk and the tunnel).
+
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool test_agentd test_agentd_doors'
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes

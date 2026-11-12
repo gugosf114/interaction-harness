@@ -1,0 +1,8 @@
+#!/data/data/com.termux/files/usr/bin/python
+# talk [--lane L] [--seconds N] [--clip FILE] : a spoken conversation with a lane. Say "stop" to end.
+import sys
+from pathlib import Path
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from agentd.cli import main
+raise SystemExit(main(['talk', *sys.argv[1:]]))

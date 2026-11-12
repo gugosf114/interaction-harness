@@ -165,3 +165,16 @@ Second gate, typed in the shell (a lane can type them too; see card lessons):
   rule test [NAME] [--text 'WORDS']
                         Test the stored rules again; show what the gate does
                         to WORDS.
+
+Always on, typed in the shell (README: Always on):
+  job add [--lane L] [--session NAME] "TASK"
+                        Queue a task on a lane; prints the job id at once. It
+                        runs in the background with --loop -y.
+  jobs [--all]          Every job with its state, one row each.
+  job show ID [--full]  The full answer and every command the job ran.
+  job stop ID | job wait ID
+  agentd status|start|stop|restart|log [N]|url|password|install
+  agentd tunnel [cloudflared|ngrok]
+                        Put the jobs page on a public address.
+  talk [--lane L] [--seconds N] [--clip FILE]
+                        A spoken conversation with a lane. Say "stop" to end.
