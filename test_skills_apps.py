@@ -89,7 +89,7 @@ class SkillCommandTests(unittest.TestCase):
         self.assertIn('card mail', self.skill('show', 'data:brief').stdout)
 
     def test_show_splits_a_long_skill_into_parts(self):
-        first = self.skill('show', 'long')
+        first = self.skill('show', 'long', '1')
         self.assertTrue(first.stdout.startswith('[part 1 of 3; next: skill show long 2]'))
         self.assertIn('[continues: skill show long 2]', first.stdout)
         last = self.skill('show', 'long', '3')
@@ -103,6 +103,7 @@ class SkillCommandTests(unittest.TestCase):
         self.assertEqual(result.returncode,0)
         self.assertEqual(result.stdout.count('word '),4000)
         self.assertNotIn('[part ',result.stdout)
+        self.assertEqual(self.skill('show','long').stdout,result.stdout)
 
     def test_short_names_resolve_only_when_unique(self):
         self.assertIn('SKILL legal:triage', self.skill('show', 'triage').stdout)
@@ -131,6 +132,14 @@ class SkillCommandTests(unittest.TestCase):
         self.assertEqual(done.stdout.split()[0], 'xlsx')
         self.assertEqual(self.skill('find', 'excel').stdout.split()[0], 'xlsx')
         self.assertEqual(self.skill('find', 'zzzqqq').returncode, 1)
+
+    def test_find_does_not_drop_matches_after_ten(self):
+        import contextlib,io
+        skill=load('skill')
+        rows=[{'name':f'sheet-{n}','description':'spreadsheet work','text':'','group':'claude'} for n in range(15)]
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(skill.cmd_find(rows,['spreadsheet']),0)
+        self.assertEqual(sum(line.startswith('sheet-') for line in out.getvalue().splitlines()),15)
 
     def test_wrong_use_exits_two(self):
         for args in ((), ('nope',), ('show',), ('files',), ('find',), ('list', 'a', 'b'), ('groups', 'x')):
@@ -239,10 +248,6 @@ class CardTests(unittest.TestCase):
         self.assertIn('skill show NAME and follow it', line)
         self.assertTrue(any(l.startswith('- apps: ') for l in index.splitlines()))
 
-
-if __name__ == '__main__':
-    unittest.main()
-
 class AddedCoverageTests(unittest.TestCase):
     def test_current_google_maps_and_exact_unknown_tool(self):
         import tempfile
@@ -255,6 +260,14 @@ class AddedCoverageTests(unittest.TestCase):
             self.assertIn('card calendar',result)
             self.assertIn('mcp__unknown__read',result)
             self.assertNotIn('no Drive connector',result)
+
+    def test_archived_skill_prints_its_actual_source(self):
+        import json
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            (root/'ORIGIN.json').write_text(json.dumps({'source':'/tmp/original-pack','copied':'2026-11-11'}))
+            notes=load('skill').lane_notes({'text':'Instructions','allowed':'','real_folder':root,'kind':'skill','plugin_dir':None,'folder':folder,'name':'archive:sample','group':'archive'})
+            self.assertIn('Archived skill copied from /tmp/original-pack on 2026-11-11',' '.join(notes))
 
     def test_domain_with_path_only_link_is_included(self):
         import contextlib,io
@@ -271,3 +284,23 @@ class AddedCoverageTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()) as out:
             self.assertEqual(app.cmd_default(Phone(),['example.com','de.test.app']),0)
         self.assertIn('de.test.app',out.getvalue())
+
+
+    def test_verifier_inherits_limits_and_resumes_saved_run(self):
+        import contextlib,io
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        import verify_skills_apps as verify
+        with tempfile.TemporaryDirectory() as folder, patch.object(verify.subprocess,'run',return_value=SimpleNamespace(returncode=0)) as call, contextlib.redirect_stdout(io.StringIO()):
+            verify.run('openai','apps',Path(folder))
+            command=call.call_args.args[0]
+            self.assertNotIn('--timeout',command)
+            self.assertNotIn('--max-turns',command)
+            self.assertNotIn('timeout',call.call_args.kwargs)
+            verify.run('openai','apps',Path(folder),resume=True)
+            self.assertIn('--continue',call.call_args.args[0])
+            self.assertEqual(len(list(Path(folder).glob('attempt-*/report.json'))),1)
+
+
+if __name__ == '__main__':
+    unittest.main()

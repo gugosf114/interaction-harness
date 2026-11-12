@@ -7,9 +7,9 @@ What a skill is
   its plugins, Codex, grok, Antigravity, his own projects and some Python packages.
 
 Before a job that matches a skill, print the skill and follow it.
-  skill find WORDS            the 10 best matches: name and purpose      skill find spreadsheet
-  skill show NAME --all       LANE NOTES first, then all instructions in one call      skill show xlsx --all
-  skill show NAME 2           a long skill comes in parts of 7,000 characters; the first line says how many
+  skill find WORDS            all matches, best first: name and purpose      skill find spreadsheet
+  skill show NAME             LANE NOTES first, then all instructions in one call      skill show xlsx
+  skill show NAME 2           read one 7,000-character part by choice; --all also prints the whole skill
   skill files NAME            its scripts and reference files, with the full path and how to run each
   skill list GROUP            every skill of one group, one line each      skill groups   the groups and folders
   skill list                  all skills; use GROUP or find to narrow the output

@@ -2,7 +2,7 @@
 """skill : George's skill packs (folders with a SKILL.md), for the API lanes.
 
   skill list [GROUP]      every skill: name and one-line purpose (GROUP: see skill groups)
-  skill show NAME [PART|--all]  the lane notes, then the skill's own instructions, in parts of 7,000 characters
+  skill show NAME [PART|--all]  all lane notes and instructions; PART optionally reads a 7,000-character part
   skill files NAME        the skill's scripts and reference files, with full paths and how to run each
   skill find WORDS        the skills that match the words, best first
   skill groups            where the skills live and how many each place holds
@@ -44,10 +44,16 @@ DEFAULT_ROOTS = [
     ('library', '/root/.mobilerun-venv/lib/python3.13/site-packages/pydantic_ai/.agents/skills', 'pydantic-ai:'),
     ('library', '/root/.mobilerun-venv/lib/python3.13/site-packages/phoenix/server/agents/prompts/skills', 'phoenix:'),
     ('library', '/root/wimline/nvenv/lib/python3.13/site-packages/typer/.agents/skills', 'typer:'),
+    ('claude-plugin', HOME + '/.claude/plugins', 'native-claude:'),
+    ('agy', HOME + '/.gemini/antigravity-cli/builtin/skills', 'native-agy:'),
+    ('project', HOME + '/llama.cpp/tools/ui/src/lib/components/app', 'llama-ui:'),
+    ('project', HOME + '/session-toolkit-job-apply/owner-agent/skills', 'owner-agent:'),
+    ('archive', HOME + '/.local/share/interaction-harness/skill-archives', 'archive:'),
 ]
 GROUP_WORDS = {
+    'archive': 'preserved unique packs from temporary folders, with original paths in ORIGIN.json',
     'claude': "George's Claude Code skills (installed)",
-    'claude-plugin': "skills of the plugins installed in George's Claude Code",
+    'claude-plugin': "skill and command packs in George's Claude plugin folders",
     'codex': "George's Codex skills",
     'codex-plugin': "skills of the plugins installed in George's Codex",
     'marketplace': 'skills of plugins in the downloaded plugin catalogs (on disk, not installed)',
@@ -228,6 +234,14 @@ CONNECTORS = [
 def lane_notes(skill):
     text = skill['text'] + ' ' + skill['allowed']
     notes = []
+    origin = skill['real_folder'] / 'ORIGIN.json'
+    if origin.is_file():
+        try:
+            record=json.loads(origin.read_text())
+            notes.append('Archived skill copied from ' + record['source'] + ' on ' + record['copied'] + '. '
+                         'Its supporting files were retained; ORIGIN.json records the source and hash.')
+        except (OSError,ValueError,KeyError):
+            pass
     has_files = any(p.is_file() and p.name != 'SKILL.md' for p in skill['real_folder'].rglob('*')) if skill['kind'] == 'skill' else False
     if has_files:
         notes.append(f"The skill's folder is {skill['folder']}. A path in the text such as scripts/x.py means "
@@ -335,7 +349,7 @@ def cmd_show(skills, args):
             'LANE NOTES (read these first: they turn the skill\'s tool names into this client\'s commands)']
     head += ['- ' + n for n in notes] or ['- none']
     whole = '\n'.join(head) + '\n\nTHE SKILL\n' + skill['text'].rstrip('\n') + '\n'
-    if len(args) == 2 and args[1] == '--all':
+    if len(args) == 1 or args[1] == '--all':
         sys.stdout.write(whole)
         return 0
     parts = [whole[i:i + PART] for i in range(0, len(whole), PART)] or ['']
@@ -428,7 +442,7 @@ def cmd_find(skills, args):
     if not scored:
         print('No skill matches: ' + ' '.join(args), file=sys.stderr)
         return 1
-    for _, s in scored[:10]:
+    for _, s in scored:
         print(f"{s['name']:<44} {purpose(s['description']) or '(no description)'}")
     print('Print one with: skill show NAME')
     return 0

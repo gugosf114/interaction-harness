@@ -12,9 +12,15 @@ import zipfile
 ROOT = Path(__file__).resolve().parent
 CASES = ('word', 'sheet', 'slides', 'review', 'research', 'apps')
 
-def run(engine, case, folder):
+def run(engine, case, folder, resume=False):
     folder = folder.resolve()
     folder.mkdir(parents=True, exist_ok=True)
+    if resume and (folder/'report.json').exists():
+        import shutil
+        prior=folder/('attempt-'+str(time.time_ns()))
+        prior.mkdir()
+        for name in ['report.json','stdout.txt','stderr.txt']:
+            if (folder/name).exists():shutil.copy2(folder/name,prior/name)
     state = folder / 'runtime'
     state.mkdir(exist_ok=True)
     # This job cannot write/commit canonical notes. Other display and judge gates stay on.
@@ -30,10 +36,10 @@ def run(engine, case, folder):
     }
     task=specs[case]+' Work through local execution_payload commands in the native loop. Python and document tools are on Debian (deb). Keep all new files inside '+str(folder)+'. Do not modify memory notes, accounts, installed apps or live source. Finish the actual file and inspect it before answering.'
     env = os.environ.copy(); env.pop('LD_LIBRARY_PATH',None); env['HARNESS_STATE_DIR']=str(state)
-    command=[str(ROOT/'harness'),'--engine',engine,'--effort','max','--loop','-y','--max-turns','24','--timeout','300',task]
+    command=[str(ROOT/'harness'),'--engine',engine,'--effort','max','--loop','-y',*(['--continue'] if resume else []),task]
     start=time.monotonic()
     with (folder/'stdout.txt').open('w') as stdout, (folder/'stderr.txt').open('w') as stderr:
-        done=subprocess.run(command,env=env,cwd=ROOT,stdout=stdout,stderr=stderr,timeout=2400)
+        done=subprocess.run(command,env=env,cwd=ROOT,stdout=stdout,stderr=stderr)
     rows=[]
     if (state/'history.db').exists():
         db=sqlite3.connect(state/'history.db'); db.row_factory=sqlite3.Row
@@ -63,6 +69,6 @@ def run(engine, case, folder):
     return report
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--engine',required=True,choices=['openai','anthropic']);p.add_argument('--case',required=True,choices=CASES);p.add_argument('--folder',type=Path);a=p.parse_args()
-    r=run(a.engine,a.case,a.folder or ROOT/'state/skills-apps/live'/a.engine/a.case)
+    p=argparse.ArgumentParser();p.add_argument('--engine',required=True,choices=['openai','anthropic']);p.add_argument('--case',required=True,choices=CASES);p.add_argument('--folder',type=Path);p.add_argument('--resume',action='store_true');a=p.parse_args()
+    r=run(a.engine,a.case,a.folder or ROOT/'state/skills-apps/live'/a.engine/a.case,resume=a.resume)
     raise SystemExit(0 if r['passed'] else 1)

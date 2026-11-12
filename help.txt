@@ -226,7 +226,7 @@ Rules stamp, typed at the > prompt or as the whole question (ships on):
 
 Skills and apps, typed in the shell (a lane types them too; card skills, card apps):
   skill find WORDS | skill show NAME [PART|--all] | skill files NAME | skill list [GROUP] | skill groups
-                        George's skill packs (256 on the phone): find one,
+                        George's skill packs (skill groups gives the count): find one,
                         print its instructions with lane notes first, list its
                         scripts.
   app list|info|perms|front|install|update|uninstall|disable|enable|stop|clear|open|grant|revoke|default ...
