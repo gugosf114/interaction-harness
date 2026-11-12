@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# page-click 'TEXT or CSS SELECTOR' : click the matching thing on the page opened by page-open.
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login --work-dir "$PWD" debian -- env "HARNESS_STATE_DIR=${HARNESS_STATE_DIR:-}" "PAGE_TAB_FILE=${PAGE_TAB_FILE:-}" "CDP_PORT=${CDP_PORT:-9335}" node "$here/../debian/page.cjs" click "$@"

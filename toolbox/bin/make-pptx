@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# make-pptx OUT.pptx [IN] : an outline (stdin or IN.md) to slides.
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login --work-dir "$PWD" debian -- python3 "$here/../debian/office.py" pptx "$@"

@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# laptop-click X Y [--right|--double] : click on George's Windows laptop screen at pixel X Y.
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login --work-dir "$PWD" debian -- python3 "$here/../debian/laptop-input.py" click "$@"

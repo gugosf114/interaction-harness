@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# publish FILE.html|FILE.md [NAME] | publish --list | publish --remove NAME : put a page on a public web address.
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login --work-dir "$PWD" debian -- python3 "$here/../debian/publish.py" "$@"

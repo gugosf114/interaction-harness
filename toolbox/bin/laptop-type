@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# laptop-type 'WORDS' : type WORDS on the laptop, into whatever has the focus.
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login --work-dir "$PWD" debian -- python3 "$here/../debian/laptop-input.py" type "$@"

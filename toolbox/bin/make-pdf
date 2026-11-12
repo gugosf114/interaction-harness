@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# make-pdf OUT.pdf [IN] : Markdown with headings, lists and tables (stdin or IN.md) to a PDF.
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login --work-dir "$PWD" debian -- python3 "$here/../debian/office.py" pdf "$@"

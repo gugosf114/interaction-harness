@@ -1115,3 +1115,113 @@ a real Termux PTY through three turns, a 12-line paste, a lane change, a call
 interrupt, clipboard round-trip, save and history across launches. Proof state
 turns off spoken output and the canonical-memory commit hook; reply gates and the
 judge stay on. The private report checks status numbers against SQLite.
+
+## Makers
+
+The maker commands use the same native shell as the lanes. Their cards are
+`pictures`, `office`, `research`, `web-hands`, `laptop-hands` and `publish`.
+`toolbox/hrun.py 'COMMAND' TIMEOUT_SECONDS` records a command's actual exit code.
+The four-field reply and all existing gates stay in place.
+
+```sh
+make-image "A blue ceramic teapot" /sdcard/Download/teapot.png
+make-image "Make the glaze red" /sdcard/Download/red.png --from /sdcard/Download/teapot.png
+make-image "A blue ceramic teapot" /sdcard/Download/google.png --engine gemini
+make-video "A teapot pouring tea" /sdcard/Download/tea.mp4
+printf '# Bread\n\n- Flour\n- Yeast\n- Crust\n' | make-docx /sdcard/Download/bread.docx
+printf '{"Prices":[["loaf",6]],"Stock":[["loaf",8]]}' | make-xlsx /sdcard/Download/bread.xlsx
+printf '# Bread\nA loaf\n# Dough\n- Flour\n- Water\n' | make-pptx /sdcard/Download/bread.pptx
+make-pdf /sdcard/Download/bread.pdf /path/to/bread.md
+read-doc /sdcard/Download/bread.docx
+deep-research "When was Daly City incorporated? Write a one-page report." --out /sdcard/Download/daly.pdf
+page-open https://example.com
+page-eval 'document.querySelector("h1").innerText'
+page-type 'input[name=search]' 'blue teapot'
+page-click 'Submit'
+page-wait 'Received!'
+page-shot /sdcard/Download/page.png
+page-close
+laptop-move 100 200
+laptop-click 100 200
+laptop-type 'Blue teapot'
+laptop-key ctrl+s
+publish /path/to/page.md teapot
+publish --list
+publish --remove teapot
+```
+
+Images use OpenAI `gpt-image-2.6-sunburst` at `quality=max`, `complexity=high`,
+with Gemini `gemini-3-pro-image` as the second engine. `--engine` chooses one.
+The default is 3840 by 2160, the documented 4K pixel ceiling for OpenAI;
+`--size WIDTHxHEIGHT` overrides it. Gemini uses the matching 4K size class. `--from` supplies an image to edit. PNG, JPEG and WebP output is decoded
+and saved in the format named by the output suffix. Paths under Downloads work.
+The OpenAI generation and edit routes return `data[].b64_json`; Google's
+Interactions API returns `steps[].content[]` image blocks. Keys stay in the
+private state files or environment. The Gemini fallback reads Secret Manager
+`gemini-api-key` in `bakers-agent` as `gugosf@gmail.com`.
+
+Video uses Gemini `gemini-omni-1.2-flash`, 15 seconds, 4K, 16:9 and native sound.
+`--seconds`, `--resolution`, `--aspect` and `--from` expose the provider controls.
+Its Interactions response supplies a video file URI; the command waits for that
+file to become ACTIVE and downloads it. The default live proof decoded as
+3840 by 2160 H.264 video, 15.04 seconds, with AAC audio. OpenAI's retired Videos
+endpoint returned HTTP 404 with an empty body. `--engine openai` prints that real
+provider result and exits 1.
+
+The office tools run on Debian. One idempotent installer,
+`deb bash ~/interaction-harness/toolbox/debian/makers-install.sh`, installs all
+23 pinned Python packages from `toolbox/makers-requirements.lock` into
+`/root/.local/share/harness-makers/venv`. This includes Word, Excel, PowerPoint,
+Markdown, PDF parsing and WeasyPrint 70.0. Each output is written atomically.
+Word preserves headings, lists, tables and inline styles. Excel accepts CSV,
+JSON rows or a JSON object with one key per sheet. Each Markdown heading starts
+a PowerPoint slide. PDF accepts headings, lists and tables; `text-pdf` now uses
+the same Markdown renderer while retaining its text-argument and stdin forms.
+`read-doc` identifies the actual file format and opens it with its parser.
+
+Deep research runs this harness with `--loop -y`, max effort, up to 50 hosted
+lookups per model turn and up to 1,000 turns. It stops when the report is ready.
+`--engine openai|anthropic` chooses the lane. Each run has its own private state
+folder and log. Caller mod settings carry into the child; reply gates remain on.
+Failed web lookups can resume the same session. A failed run, a report with no
+recorded sources, or a report citing none of those sources writes no output.
+Links are checked against the saved lookup sources. The report's Sources list
+contains the sources it cites; the complete lookup record stays in its database.
+`.pdf` and `.docx` destinations use the office renderer. The native runner now
+honors the existing CLI execution-timeout range through 86,400 seconds, so a
+long nested research job is not silently cut off at the old 600-second clamp.
+
+The web commands use signed-in Chrome Beta on the phone's hidden `web` display.
+Each harness state folder keeps its own selected tab; `PAGE_TAB_FILE` can name
+one explicitly. Opening a Chrome error page exits nonzero. The driver can reopen
+Chrome's hidden activity when its process survives but its debug socket does not.
+The live phone needed Chrome Beta's battery and background allowances restored:
+Android reported `BATTERY_SAVER|APP_BACKGROUND` for UID 10353. Its device-idle
+allowlist and `RUN_ANY_IN_BACKGROUND` / `RUN_IN_BACKGROUND` app operations now
+allow it to reach the network while hidden. Phone keyguard stays in place.
+
+Laptop input uses Unicode Windows SendInput in a temporary scheduled task with
+`LogonType Interactive`, the same desktop route used by the screen command.
+Each task and script is removed. A real Notepad scratch file received the exact
+text `Maker proof: blue teapot and warm bread.`, was saved, read back through SSH,
+and closed with Alt-F4. The scratch file was then deleted.
+
+Publishing uses the public `abrahamyants/harness-pages` repository. Markdown is
+rendered to HTML. The command waits for the exact new content to be fetched from
+GitHub Pages; removal waits for HTTP 404. The scratch page
+`maker-proof-nov12` reached HTTP 200 and was removed with a verified HTTP 404.
+A transient TLS handshake timeout on the first removal was recorded; the retry
+completed.
+
+Tests are in `test_makers.py`. `verify_makers.py --engine openai|anthropic --case
+image|word|research|browser` runs the four requested tasks through the real
+launcher and records files, command results, schema fields and exits. Its state
+disables only spoken output and the canonical-memory commit hook.
+
+Current API sources, checked November 12, 2026:
+[OpenAI image guide](https://developers.openai.com/api/docs/guides/image-generation),
+[Sunburst model](https://developers.openai.com/api/docs/models/gpt-image-2.6-sunburst),
+[OpenAI video status](https://developers.openai.com/api/docs/guides/video-generation),
+[Google image guide](https://aistudio.google.com/docs/image-generation),
+[Google video guide](https://aistudio.google.com/docs/video), and
+[Google Omni guide](https://aistudio.google.com/docs/omni).

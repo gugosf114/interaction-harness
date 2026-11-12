@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# make-video "PROMPT" OUT.mp4 [--seconds N] [--resolution R] [--aspect A] [--from IN.png] [--engine gemini|openai] : make a short video.
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login --work-dir "$PWD" debian -- python3 "$here/../debian/make-video.py" "$@"

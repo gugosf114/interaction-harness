@@ -1,0 +1,195 @@
+#!/data/data/com.termux/files/usr/bin/python
+"""deep-research "QUESTION" [--out FILE] [--engine openai|anthropic] [--web-max N] [--max-turns N] [--effort LEVEL] [--retries N]
+
+Runs this harness in a long loop (--loop -y) with web search and fetch, then writes the report with its sources.
+FILE ending in .pdf becomes a PDF (make-pdf), .docx a Word file (make-docx), anything else Markdown.
+Every link in the report is checked against the sources the harness recorded; a link that is not one of them is dropped.
+A model turn that ends on a failed web lookup loses that turn only: the run is continued in the same session, up to --retries times.
+The run's own state folder (history, usage, log) is kept and its path is printed.
+"""
+import argparse
+import datetime
+import json
+import os
+import re
+from pathlib import Path
+import sqlite3
+import subprocess
+import sys
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from lookup_gate import unique_sources, urls  # noqa: E402
+
+HOME = '/data/data/com.termux/files/home'
+USAGE = ('usage: deep-research "QUESTION" [--out FILE.pdf|FILE.docx|FILE.md] [--engine openai|anthropic] '
+         '[--web-max 2-50] [--max-turns 1-1000] [--effort low|medium|high|xhigh|max] [--retries N]')
+PROMPT = """Deep research task. Research the question below on the web, as thoroughly as it needs.
+Use web search and web fetch many times: find several independent sources, open the primary ones, and check each key fact in a second source.
+To go on to the next turn, put the command `true` in execution_payload; when the research is complete, set execution_payload to null.
+A page that cannot be fetched is skipped; use another source.
+Your final direct_answer is the report itself, in Markdown: a "# " title line, the short answer first, then the findings under "## " headings.
+Cite each fact with the URL of the page it came from, in parentheses. Use only URLs that your own lookups returned.
+Do not write a Sources section; the client adds the cited recorded sources.
+
+Question: """
+
+
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        print(message + '\n' + USAGE, file=sys.stderr)
+        raise SystemExit(2)
+
+
+def parse(argv):
+    parser = Parser(prog='deep-research', description='Research with this harness and write a sourced report.')
+    parser.add_argument('question')
+    parser.add_argument('--out')
+    parser.add_argument('--engine', choices=['openai', 'anthropic'])
+    parser.add_argument('--web-max', type=int, default=50)
+    parser.add_argument('--max-turns', type=int, default=1000)
+    parser.add_argument('--effort', choices=['low', 'medium', 'high', 'xhigh', 'max'], default='max')
+    parser.add_argument('--retries', type=int, default=6)
+    args = parser.parse_intermixed_args(argv)
+    if not args.question.strip():
+        parser.error('QUESTION is empty.')
+    if not 2 <= args.web_max <= 50:
+        parser.error('--web-max is 2 to 50.')
+    if not 0 <= args.retries <= 50:
+        parser.error('--retries is 0 to 50.')
+    if not 1 <= args.max_turns <= 1000:
+        parser.error('--max-turns is 1 to 1000.')
+    stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+    args.out = os.path.abspath(os.path.expanduser(args.out or f'/sdcard/Download/research-{stamp}.md'))
+    if not os.path.isdir(os.path.dirname(args.out)):
+        parser.error(f'The folder {os.path.dirname(args.out)} does not exist.')
+    args.stamp = stamp
+    return args
+
+
+CONTINUE = ('Continue the deep research task above from where it stopped. The last model turn ended with this error, '
+            'and its lookups were lost: {error}. Skip that page and go on.')
+
+
+def harness_command(args, prompt):
+    command = [str(ROOT / 'harness'), '--session', 'research', '--loop', '-y', '--web-max', str(args.web_max),
+               '--max-turns', str(args.max_turns), '--effort', args.effort]
+    if args.engine:
+        command += ['--engine', args.engine]
+    return command + [prompt]
+
+
+def read_run(db_path):
+    """(final answer, recorded sources, lookups, model turns, engine model) from the run's own history.db."""
+    with sqlite3.connect(db_path) as db:
+        db.row_factory = sqlite3.Row
+        rows = db.execute('SELECT * FROM history ORDER BY id').fetchall()
+    sources, lookups, answer, model = [], 0, None, None
+    for row in rows:
+        keys = row.keys()
+        sources.extend(json.loads(row['sources_json'] or '[]') if 'sources_json' in keys else [])
+        if 'lookup_counts_json' in keys and row['lookup_counts_json']:
+            lookups += int(json.loads(row['lookup_counts_json']).get('total') or 0)
+        if row['status'] == 'accepted' and row['direct_answer']:
+            answer, model = row['direct_answer'], f"{row['engine']} {row['model']}"
+    return answer, unique_sources(sources), lookups, len(rows), model
+
+
+def last_lookup_error(db_path):
+    """The error of the run's last model turn when it was a failed web lookup; those runs are continued."""
+    if not Path(db_path).is_file():
+        return None
+    with sqlite3.connect(db_path) as db:
+        row = db.execute('SELECT status, error FROM history ORDER BY id DESC LIMIT 1').fetchone()
+    if row and row[0] == 'error' and row[1] and 'web lookup failed' in row[1]:
+        return row[1]
+    return None
+
+
+def keep_recorded_links(answer, sources):
+    """Every URL in the report must be a recorded source. Others are cut out. Returns (text, dropped)."""
+    recorded = {s['url'] for s in sources} | {s['url'].rstrip('/') for s in sources}
+    dropped = sorted(u for u in urls(answer) if u not in recorded and u.rstrip('/') not in recorded)
+    for url in sorted(dropped, key=len, reverse=True):
+        answer = answer.replace(f'({url})', '').replace(url, '')
+    return answer, dropped
+
+
+def report(answer, sources):
+    cited = urls(answer)
+    sources = [s for s in sources if s['url'].rstrip('/') in {u.rstrip('/') for u in cited}]
+    for number, source in enumerate(sources, 1):
+        # Keep a report readable on paper. The URL remains the actual PDF link
+        # target; its full source receipt remains in history.db.
+        address = source['url']
+        answer = re.sub(r'(?<!\])\(' + re.escape(address) + r'\)',
+                        lambda m: f'([{number}](<{address}>))', answer)
+    lines = [answer.strip(), '', '## Sources', '']
+    for number, source in enumerate(sources, 1):
+        title = source['title'].replace('[', r'\[').replace(']', r'\]')
+        lines.append(f'{number}. [{title}](<{source["url"]}>)')
+    return '\n'.join(lines) + '\n'
+
+
+def write(out, text):
+    maker = {'.pdf': 'make-pdf', '.docx': 'make-docx'}.get(Path(out).suffix.lower())
+    if not maker:
+        Path(out).write_text(text, encoding='utf-8')
+        return 0, ''
+    done = subprocess.run([str(ROOT / 'toolbox/bin' / maker), out], input=text, capture_output=True, text=True)
+    return done.returncode, (done.stderr or done.stdout).strip()
+
+
+def main(argv):
+    args = parse(argv)
+    parent = Path(HOME) / 'tmp' / 'deep-research'
+    parent.mkdir(parents=True, exist_ok=True)
+    state = Path(tempfile.mkdtemp(prefix=args.stamp+'-', dir=parent))
+    # Child runs inherit the caller's explicit mod choices, including proof-only
+    # disabling of the canonical-memory hook. Every reply gate stays enabled.
+    inherited = Path(os.environ.get('HARNESS_STATE_DIR', ROOT / 'state')) / 'mods.json'
+    if inherited.is_file():
+        (state / 'mods.json').write_bytes(inherited.read_bytes())
+    log = state / 'run.log'
+    env = {**os.environ, 'HARNESS_STATE_DIR': str(state)}
+    db = state / 'history.db'
+    prompt = PROMPT + args.question.strip()
+    for attempt in range(1 + args.retries):
+        with open(log, 'a', encoding='utf-8') as handle:
+            handle.write(f'=== attempt {attempt + 1}\n'); handle.flush()
+            run = subprocess.run(harness_command(args, prompt), env=env, stdin=subprocess.DEVNULL, stdout=handle, stderr=subprocess.STDOUT)
+        error = last_lookup_error(db)
+        if run.returncode == 0 or not error:
+            break
+        prompt = CONTINUE.format(error=error)
+    if not db.is_file():
+        print(f'The harness made no history (exit {run.returncode}). Log: {log}', file=sys.stderr)
+        print(log.read_text(encoding='utf-8', errors='replace')[-1500:], file=sys.stderr)
+        return run.returncode or 1
+    answer, sources, lookups, turns, model = read_run(db)
+    if run.returncode or not answer or not sources or not lookups:
+        print(f'The harness gave no accepted report (exit {run.returncode}). Log: {log}', file=sys.stderr)
+        print(log.read_text(encoding='utf-8', errors='replace')[-1500:], file=sys.stderr)
+        return run.returncode or 1
+    answer, dropped = keep_recorded_links(answer, sources)
+    if not urls(answer):
+        print(f'The report cited no recorded source. Log: {log}', file=sys.stderr)
+        return 1
+    rendered = report(answer, sources)
+    (state / 'report.md').write_text(rendered, encoding='utf-8')
+    (state / 'sources.json').write_text(json.dumps(sources, ensure_ascii=False, indent=2)+'\n')
+    code, said = write(args.out, rendered)
+    if code != 0:
+        print(said, file=sys.stderr)
+        return code
+    print(f'{args.out}  {os.path.getsize(args.out)} bytes  sources: {len(sources)}  lookups: {lookups}  '
+          f'model turns: {turns}  {model}  harness exit {run.returncode}')
+    if dropped:
+        print('links dropped, not a recorded source: ' + ' '.join(dropped))
+    print(f'run folder: {state}')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main(sys.argv[1:]))

@@ -54,7 +54,7 @@ def handle(request):
         if approved is None: return {'error':'Command approval requires an interactive Termux terminal.'}
         if not approved: return {'approved':False,'exit_code':0,'stdout':'','stderr':''}
         result = run_bounded([PREFIX+'/bin/bash','--noprofile','--norc','-c',command],
-                             timeout=max(1,min(600,int(request.get('timeout',120)))))
+                             timeout=max(1,min(86400,int(request.get('timeout',120)))))
         return {'approved':True, **result}
     if operation == 'listen':
         binary = shutil.which('termux-speech-to-text')

@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# laptop-key KEY[+KEY...] : press a key or a combination on the laptop, such as enter, ctrl+s, alt+f4, win+r.
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login --work-dir "$PWD" debian -- python3 "$here/../debian/laptop-input.py" key "$@"

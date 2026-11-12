@@ -62,3 +62,10 @@ The families
 Built in, no command needed
 - Web search and reading a public web page are done by the provider's own tools in this client.
 - George's core rules and his profile already ride on every call.
+
+- pictures: make or edit a picture, make a short video with sound. Print: card pictures
+- office: make Word, Excel, PowerPoint and PDF files from text; read the text out of them. Print: card office
+- research: a long web research run that writes a report file with its sources, PDF too. Print: card research
+- web-hands: click, type, wait, run JavaScript and take pictures on any website in George's signed-in phone Chrome. Print: card web-hands
+- laptop-hands: mouse clicks, typed words and key presses on George's Windows laptop screen. Print: card laptop-hands
+- publish: put an HTML or Markdown file on a public web address and get the link. Print: card publish

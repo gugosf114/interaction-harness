@@ -252,3 +252,25 @@ Chat screen:
   /service-tier TIER            Change service tier; off clears.
   A paste stays whole. A trailing backslash continues a line.
   Up/Down recall messages across launches. Ctrl-C stops the current turn.
+
+
+Makers, typed in the shell (a lane types them too; README: Makers):
+  make-image "PROMPT" OUT.png [--size WxH] [--from IN.png] [--engine openai|gemini]
+                        Make or edit a picture (card pictures).
+  make-video "PROMPT" OUT.mp4 [--seconds N] [--resolution R]
+                        Make a short video with sound (card pictures).
+  make-docx OUT.docx [IN.md] | make-xlsx OUT.xlsx [IN...] | make-pptx OUT.pptx [IN.md]
+  make-pdf OUT.pdf [IN.md] | read-doc FILE
+                        Word, Excel, PowerPoint and PDF files (card office).
+  deep-research "QUESTION" [--out FILE.pdf]
+                        A long web research run; a report with its sources
+                        (card research).
+  page-open URL | page-click 'TEXT' | page-type 'FIELD' 'WORDS' | page-wait 'TEXT'
+  page-eval 'JS' | page-shot OUT.png | page-close
+                        Hands on any website in the signed-in phone Chrome
+                        (card web-hands).
+  laptop-click X Y | laptop-move X Y | laptop-type 'WORDS' | laptop-key KEY
+                        Mouse and keyboard on the Windows laptop (card
+                        laptop-hands).
+  publish FILE [NAME] | publish --list | publish --remove NAME
+                        A page on a public web address (card publish).

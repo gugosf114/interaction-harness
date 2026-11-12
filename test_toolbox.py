@@ -18,6 +18,7 @@ FAMILIES = ['files', 'documents', 'phone', 'mcp-see', 'mcp-touch', 'mcp-apps', '
             'devices', 'screen', 'phone-browser', 'laptop', 'yana-phone', 'tv', 'voice', 'alerts', 'timers',
             'calls', 'models', 'sessions', 'memory', 'mail', 'calendar', 'drive', 'money', 'bakery', 'cloud', 'github',
             'agent-scripts', 'agent-box', 'programs', 'boot', 'chats', 'lanes', 'usage', 'lessons', 'self', 'skills', 'apps']
+FAMILIES += ["pictures", "office", "research", "web-hands", "laptop-hands", "publish"]
 CONTROLS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
 KEY_SHAPES = [re.compile(pattern) for pattern in (
     r'sk-[A-Za-z0-9_-]{16,}', r'AIza[0-9A-Za-z_-]{20,}', r'gh[pousr]_[A-Za-z0-9]{20,}', r'xox[abprs]-[A-Za-z0-9-]{10,}',
@@ -162,6 +163,8 @@ class CommandTests(unittest.TestCase):
     def test_every_command_file_is_runnable(self):
         for folder in ('bin', 'debian'):
             for path in (BOX / folder).iterdir():
+                if not path.is_file():
+                    continue
                 with self.subTest(file=path.name):
                     self.assertTrue(path.stat().st_mode & stat.S_IXUSR)
                     self.assertTrue(path.read_text(encoding='utf-8').startswith('#!'))
@@ -173,7 +176,7 @@ class CommandTests(unittest.TestCase):
             for _ in range(2):
                 done = run('sh', str(BOX / 'install.sh'), env=env)
                 self.assertEqual(done.returncode, 0, done.stderr)
-            names = sorted(path.name for path in (BOX / 'bin').iterdir())
+            names = sorted(path.name for path in (BOX / 'bin').iterdir() if path.is_file())
             self.assertEqual(sorted(path.name for path in (Path(tmp) / 'bin').iterdir()), names)
             self.assertTrue(all((Path(tmp) / 'bin' / name).is_symlink() for name in names))
             (Path(tmp) / 'bin' / 'deb').unlink()

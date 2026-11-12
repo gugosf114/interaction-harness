@@ -1,47 +1,18 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""text-pdf OUT.pdf TEXT... : make a PDF that holds TEXT. With no TEXT, the text is read from stdin.
-
-The page is drawn by weasyprint on the Debian side. OUT.pdf must be a path both sides can see:
-under the Termux home folder or under /sdcard. Prints the path and the size in bytes.
-"""
-import html
-import os
+"""text-pdf OUT.pdf TEXT...: Markdown or text to PDF, also accepts stdin."""
 import subprocess
 import sys
-import tempfile
-
-HOME = '/data/data/com.termux/files/home'
-
+from pathlib import Path
 
 def main(argv):
     if len(argv) < 2:
-        print('usage: text-pdf OUT.pdf TEXT...   (or pipe the text in)', file=sys.stderr)
+        print('usage: text-pdf OUT.pdf TEXT... (or pipe Markdown in)', file=sys.stderr)
         return 2
-    out = os.path.abspath(os.path.expanduser(argv[1]))
-    if not out.lower().endswith('.pdf'):
+    if not argv[1].lower().endswith('.pdf'):
         print('OUT must end in .pdf', file=sys.stderr)
         return 2
     text = ' '.join(argv[2:]) if len(argv) > 2 else sys.stdin.read()
-    if not text.strip():
-        print('No text given.', file=sys.stderr)
-        return 2
-    os.makedirs(HOME + '/tmp', exist_ok=True)
-    page = ('<html><head><meta charset="utf-8"><style>@page{size:Letter;margin:1in}'
-            'body{font-family:DejaVu Sans,sans-serif;font-size:12pt;white-space:pre-wrap}</style></head><body>'
-            + html.escape(text) + '</body></html>')
-    with tempfile.NamedTemporaryFile('w', suffix='.html', dir=HOME + '/tmp', delete=False, encoding='utf-8') as handle:
-        handle.write(page)
-    try:
-        run = subprocess.run(['proot-distro', 'login', 'debian', '--', 'weasyprint', '-q', handle.name, out],
-                             capture_output=True, text=True, stdin=subprocess.DEVNULL)
-    finally:
-        os.unlink(handle.name)
-    if run.returncode != 0 or not os.path.isfile(out):
-        sys.stderr.write((run.stderr or run.stdout or 'weasyprint failed.')[-600:].strip() + '\n')
-        return run.returncode or 1
-    print(f'{out}  {os.path.getsize(out)} bytes')
-    return 0
-
+    return subprocess.run([str(Path(__file__).resolve().parent / 'make-pdf'), argv[1]], input=text, text=True).returncode
 
 if __name__ == '__main__':
     raise SystemExit(main(sys.argv))

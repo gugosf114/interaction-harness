@@ -6,6 +6,7 @@ here=$(dirname "$(readlink -f "$0")")
 bin=${PREFIX:-/data/data/com.termux/files/usr}/bin
 status=0
 for f in "$here"/bin/*; do
+  [ -f "$f" ] || continue
   name=$(basename "$f")
   chmod +x "$f"
   if [ -e "$bin/$name" ] && [ ! -L "$bin/$name" ]; then
