@@ -201,6 +201,8 @@ No temperature is sent. Both providers refuse one on these models (checked live,
 - One row goes into `history.db` with status `advisor` (or `advisor_error`), the advising engine and model, `/advisor QUESTION` as the input, the advice, and the token usage. `--recall` does not show advisor rows. One `usage.jsonl` record with `kind: advisor` holds the sizes and the usage, and no packet or advice text.
 - `/advisor` does not make the working model speak. George's next message does.
 
+**Live proof (Nov 11, 2026).** Once on each lane, through the real launcher with `--effort max --loop -y` and an isolated state folder: a loop task that ends in a failing `ls` (exit 2), then `/advisor`, then one more question. On `george`, gpt-6.1-sol answered in two bullets under the label, and Claude's next answer restated the note. On `g1`, claude-opus-5-5 answered in three bullets, and GPT's next answer restated the note. Both chats exited 0. The working lane's next call still read its cache: 13,939 tokens on Claude and 10,749 on GPT. The advisor call used 501 input and 459 output tokens on GPT, and 635 input and 1,815 output tokens on Claude.
+
 The code is in `advisor.py`. `cli.py` holds the trigger and the two flags, and `storage.py` holds `advisor_note`. Tests: `test_advisor.py`.
 
 ## Toolbox
