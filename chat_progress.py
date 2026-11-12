@@ -3,6 +3,7 @@ import json
 
 listener = None
 usage_listener = None
+response_listener = None
 
 def record_usage(event):
     if usage_listener is not None: usage_listener(event)
@@ -20,6 +21,8 @@ def watching():
 def public_event(event):
     """Accept only named tool/status metadata from the providers' stream events."""
     kind = getattr(event, 'type', '')
+    if kind == 'response.created' and response_listener is not None:
+        response_listener('openai', getattr(getattr(event, 'response', None), 'id', None))
     if kind.startswith('response.web_search_call.'):
         phase('Searching the web')
     elif kind in ('response.output_item.added', 'response.output_item.done'):

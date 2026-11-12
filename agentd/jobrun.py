@@ -91,6 +91,7 @@ def run(job_id, paths=None) -> int:
         return 0
     command = [*config.harness_command(settings), *table[job['lane']], '--session', job['session']]
     env = dict(os.environ)
+    env['HARNESS_SPEECH_OWNER'] = 'agentd'
     env['PATH'] = config.TERMUX_BIN + os.pathsep + env.get('PATH', '')
     if paths.state != config.state_dir():
         env['HARNESS_STATE_DIR'] = str(paths.state)  # an explicit state folder; otherwise the harness resolves it as usual

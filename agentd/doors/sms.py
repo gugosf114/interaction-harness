@@ -80,5 +80,5 @@ class SmsDoor(Door):
         if not number:
             return 'no number'
         if not self.daemon.phone.sms_send(number, reply_text(job)):
-            raise DeliveryError('termux-sms-send failed')
+            raise DeliveryError('termux-sms-send failed: ' + getattr(self.daemon.phone, 'last_error', ''))
         return f'texted {number}'

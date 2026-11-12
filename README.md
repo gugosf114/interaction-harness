@@ -701,7 +701,7 @@ Code: `self_update.py`; the commands are `toolbox/bin/self-clone` and `toolbox/b
 
 A lane used to exist only while a Termux window was open. `agentd` is a service that runs without one. It takes tasks from several doors, runs each as a background job, and tells George the result. The code is in `agentd/`. Each job runs the existing `harness` command as a subprocess; the request code is unchanged.
 
-**A job** is a lane, a session name and a task in words. The lane's flags come from the `george`/`g1` shortcut block in `~/.bashrc` (a lane added there is a job lane at once), plus `lanes` in `state/agentd.json`. Every job runs with `--loop -y`. The task goes in on stdin. Each job has its own runner process and its own fresh session (`job-ID-xxxx`) unless `--session` names one. Jobs run in parallel with no cap. Every turn lands in `state/history.db` like any other turn, and `job show` reads it back from there.
+**A job** is a lane, a session name and a task in words. The lane's flags come from the `george`/`g1` shortcut block in `~/.bashrc` (a lane added there is a job lane at once), plus `lanes` in `state/agentd.json`. Every job runs with `--loop -y`. The task goes in on stdin. Each job has its own runner process and its own fresh session (`job-ID-xxxx`) unless `--session` names one. Jobs run in parallel with no cap. Jobs that name the same session wait for one another, so their saved answers and commands stay separate. Repeated voice webhooks with the same call and tool id reuse the first job. Every turn lands in `state/history.db` like any other turn, and `job show` reads it back from there.
 
 ```sh
 job add "Check the battery and the Wi-Fi name."      # prints: job 7 queued on george (session job-7-1a2b)
@@ -714,7 +714,7 @@ job wait 7                                          # waits, then prints the ans
 
 `jobs` is also a bash builtin. `agentd install` adds `alias jobs='job list'` to `~/.bashrc`; in a window that was open before, run `. ~/.bashrc` once.
 
-**When a job ends** George gets a phone notification: title `LANE job ID STATE`, text the first line of the answer. While jobs run, one low pinned notification lists them, one per job. When spoken answers are on (`deb voice on`: the first line; `deb voice full`: the whole answer) the answer is spoken with `deb say`, one answer at a time. The switch is read from the same files `voice` writes.
+**When a job ends** George gets a phone notification: title `LANE job ID STATE`, text the first line of the answer. While jobs run, one low pinned notification lists them, one per job. A failed notification stays pending and is retried; Android error text is saved in the service log. The service owns job speech, so the lane does not play a second copy. When spoken answers are on (`deb voice on`: the first line; `deb voice full`: the whole answer) the answer is spoken with `deb say`, one answer at a time. `job show` and the web answer also include recorded API tool actions. The switch is read from the same files `voice` writes.
 
 **The service.**
 
@@ -727,6 +727,7 @@ agentd start | stop | restart | log [N] | url | password
 - `~/.termux/boot/20-agentd` links to `agentd/boot/20-agentd`. At boot it takes the wake lock and starts `agentd/keeper.sh`.
 - The keeper is the same shape as the phone's other keepers: one watch loop (a lock folder with its pid) that looks every 5 seconds and starts the service when it is not running. Phone timer 7742 (`timer-add`, put back after a reboot by `timers-ensure`) runs `keeper.sh tick` every 15 minutes, so a dead keeper comes back too.
 - The service holds `termux-wake-lock`. Killing it does not stop running jobs; when it comes back it picks up their results. A job whose runner died is marked `interrupted` and is not replayed.
+- `job stop` sends Ctrl-C through the native launcher. Jobs use the existing buffered transport; a background OpenAI request is cancelled at the provider. Public request ids are saved under `state/agentd/requests/`, and the provider cancellation receipt stays in `usage.jsonl`. No stream text or private thinking is shown.
 - `agentd stop` writes `state/agentd/STOPPED`; the keeper then does nothing until `agentd start`.
 - State: `state/agentd/queue.db` (the jobs), `state/agentd/jobs/ID/` (each job's stdout and stderr), `state/agentd/daemon.log`.
 
@@ -736,8 +737,8 @@ agentd start | stop | restart | log [N] | url | password
 |---|---|---|
 | Folder | A text file dropped in `state/inbox/`. Optional first lines `lane: NAME` and `session: NAME`. | `state/outbox/NAME.answer.txt`. The dropped file moves to `state/inbox/taken/`. |
 | Text message | A text that starts with the keyword (`sms.keyword`, default `lane`): `lane g1 what is the battery`. Only from `sms.numbers`; `*` means anyone. Only texts that arrive after the service first looks count. | A text back to the sender: `g1 job 12 started.`, then `g1 job 12 done: ANSWER`. |
-| Telegram | George's bot is polled by the box bridge (`/root/agent-bridge/scripts/telegram_bridge.py`); its `/lane NAME TASK`, `/g1 TASK` and `/george TASK` post the task to this service over Tailscale. With `telegram.token` and `telegram.chat_ids` set, the door polls that bot itself. | The same Telegram chat. |
-| Voice line | On a call to 650-252-3543 the fast assistant's `lane_job(task, lane)` tool reaches the voice line's server, which passes it to `POST /vapi/tools` here (header `X-Line-Key`). | Into the same call, through the call's control address (`add-message`), as the line's own brain jobs report back. |
+| Telegram | The existing `telegram_bridge.py` loads `telegram_lane.py`; `/lane NAME TASK`, `/g1 TASK` and `/george TASK` post to this phone over Tailscale. `telegram.mode: "bridge"` keeps its existing poller. The saved token returns results from this service. Without bridge mode, a configured token and chat list use direct polling. | The same Telegram chat. |
+| Voice line | On a call to 650-252-3543 the personal fast assistant's `lane_job(task, lane)` tool reaches this phone's `POST /vapi/tools` with its own `X-Line-Key`. `agentd wire-voice` installs the tool and starts its own Cloudflare tunnel. The daemon restores the tunnel and updates that tool's address if it changes. The existing brain tools keep their own routes. | Into the same call: context is added silently, then Vapi `say` reads the exact gated answer. A finished call keeps its result in the queue. |
 | Clock | `state/schedule.json`, see below. | Notification, and speech when it is on. |
 | Events | `state/triggers.json`, see below. | Notification, and speech when it is on. |
 | Web page | The page, see below. | The page. |
@@ -770,6 +771,8 @@ agentd start | stop | restart | log [N] | url | password
 ```sh
 agentd tunnel              # cloudflared quick tunnel: prints https://NAME.trycloudflare.com/ and the password; Ctrl-C closes it
 agentd tunnel ngrok        # the same through George's ngrok account
+agentd wire-voice           # install and maintain the personal line's lane_job tool
+agentd wire-telegram SCRIPT [PHONE_URL]  # install the adapter in an existing Telegram bridge
 ```
 
 **Talk.**
@@ -780,9 +783,15 @@ talk --lane g1 --seconds 30
 talk --clip /sdcard/Download/question.m4a --no-speak    # a recorded clip instead of the microphone
 ```
 
-Each turn records with `termux-microphone-record` (AAC, `.m4a`), turns it into words with OpenAI's `POST /v1/audio/transcriptions` and model `gpt-transcribe`, hands the words to the lane as a job in one `talk-TIME` session that lasts the whole conversation, prints the answer and speaks it with `deb say`. The answer passes every harness gate. Why this road (checked Nov 11, 2026, in each provider's documentation): Anthropic's Claude API lists no audio input, speech-to-text, speech output or realtime voice feature. OpenAI's Realtime API (`gpt-realtime-2.1`, WebRTC or WebSocket) answers speech with its own model, so its answer would skip the four-field reply, the gates, the lane and `history.db`. The transcription endpoint takes the recorded file in one request (formats include m4a; up to 25 MB) and keeps the lane in the middle.
+Each turn records with `termux-microphone-record` (AAC, `.m4a`), turns it into words with OpenAI's `POST /v1/audio/transcriptions` and model `gpt-transcribe`, hands the words to the lane as a job in one `talk-TIME` session that lasts the whole conversation, prints the answer and speaks it with `deb say`. The answer passes every harness gate. Why this road (checked Nov 11, 2026, in each provider's documentation): Anthropic's current API inventory has no documented native audio or realtime speech endpoint. OpenAI's Realtime API (`gpt-realtime-2.1`, WebRTC or WebSocket) answers speech with its own model, so its answer would skip the four-field reply, the gates, the lane and `history.db`. The transcription endpoint takes the recorded file in one request (formats include m4a; up to 25 MB) and keeps the lane in the middle.
 
-Tests: `test_agentd.py` (queue, runner, service loop, web page, CLI) and `test_agentd_doors.py` (each door's parser and loop, the schedule, the trigger matcher, talk and the tunnel).
+The recorded-clip path reports a failed playback as a failure. Ctrl-C asks the active talk job to stop.
+
+**Phone proof, November 12, 2026.** Both lanes completed parallel jobs and recorded-clip conversations. Folder, two-minute clock, notification trigger, Tailscale page and public page jobs returned real results. A live Vapi WebSocket call sent recorded audio, ran a g1 job, and returned audio saying the exact answer. OpenAI transcription of that returned audio confirmed it. A real OpenAI background job returned provider status `cancelled` after `job stop`, with local exit 130. Private receipts are in `~/work-always-on-nov12/state/always-proof/`.
+
+Speech references: [OpenAI transcription](https://developers.openai.com/api/docs/guides/speech-to-text), [Claude API inventory](https://platform.claude.com/docs/en/api/overview), [Vapi WebSocket transport](https://docs.vapi.ai/calls/websocket-transport), and [Vapi exact-text speech](https://docs.vapi.ai/calls/call-features).
+
+Tests: `test_agentd_repairs.py` (restart, delivery, cancellation metadata and bridge regressions), `test_agentd.py` (queue, runner, service loop, web page, CLI) and `test_agentd_doors.py` (each door's parser and loop, the schedule, the trigger matcher, talk and the tunnel).
 
 ## Mods and hooks
 

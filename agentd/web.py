@@ -58,7 +58,8 @@ def job_detail(paths, job) -> dict:
     view = job_view(job)
     view['turns'] = [{'answer': row.get('direct_answer'), 'command': row.get('execution_payload'),
                       'result': {key: (row.get('execution_result') or {}).get(key) for key in ('approved', 'exit_code', 'timed_out', 'stdout', 'stderr')}
-                      if row.get('execution_result') else None, 'status': row.get('status'), 'error': row.get('error')}
+                      if row.get('execution_result') else None, 'api_tool_uses': row.get('api_tool_uses', []),
+                      'status': row.get('status'), 'error': row.get('error')}
                      for row in turns(paths, job)]
     return view
 

@@ -185,8 +185,10 @@ class VoiceTests(Base):
         self.assertNotIn('K', ' '.join(calls[0][0]))
         self.assertEqual(calls[1][0], ['https://phone.vapi.ai/x/control'])
         self.assertEqual(calls[1][1]['type'], 'add-message')
-        self.assertTrue(calls[1][1]['triggerResponseEnabled'])
+        self.assertFalse(calls[1][1]['triggerResponseEnabled'])
         self.assertIn('It is 80 percent.', calls[1][1]['message']['content'])
+        self.assertEqual(calls[2][1]['type'], 'say')
+        self.assertEqual(calls[2][1]['content'], 'It is 80 percent.')
 
     def test_ended_call_and_no_call(self):
         daemon = self.daemon()

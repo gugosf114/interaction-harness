@@ -32,6 +32,19 @@ class Phone:
     def __init__(self, run=None):
         # Test seam: AGENTD_NO_PHONE=1 makes every phone command a no-op.
         self.run = run or (no_phone if os.environ.get('AGENTD_NO_PHONE') == '1' else run_command)
+        self.last_error = ''
+
+    def checked(self, argv, timeout=60, input_text=None):
+        code, out, err = self.run(argv, timeout, input_text=input_text)
+        error = ''
+        try:
+            data = json.loads(out)
+            if isinstance(data, dict):
+                error = str(data.get('error') or '')
+        except ValueError:
+            pass
+        self.last_error = error or ((err or out).strip() if code else '')
+        return code == 0 and not error
 
     # --- notifications -------------------------------------------------------------------------------------
     def notify(self, ident, title, content, *, ongoing=False, action=None, priority='high', sound=False):
@@ -43,7 +56,7 @@ class Phone:
             argv.append('--sound')
         if action:
             argv.extend(['--action', action])
-        return self.run(argv, 30)[0] == 0
+        return self.checked(argv, 30)
 
     def remove_notification(self, ident):
         return self.run([TERMUX_BIN + '/termux-notification-remove', str(ident)], 30)[0] == 0
@@ -65,7 +78,7 @@ class Phone:
         return parse_voice_state(out) if code == 0 else 'off'
 
     def say(self, text):
-        return self.run([*DEB, 'say', text], 600)[0] == 0
+        return self.checked([*DEB, 'say', text], 600)
 
     # --- texts ---------------------------------------------------------------------------------------------
     def sms_inbox(self, limit=40):
@@ -79,7 +92,8 @@ class Phone:
         return data if isinstance(data, list) else None
 
     def sms_send(self, number, text):
-        return self.run([TERMUX_BIN + '/termux-sms-send', '-n', number, text], 60)[0] == 0
+        """termux-sms-send exits 0 even when Android refuses; the refusal is a JSON "error" on stdout."""
+        return self.checked([TERMUX_BIN + '/termux-sms-send', '-n', number], 60, input_text=text)
 
     def own_number(self):
         """The SIM's own number, when Termux:API may read it. None otherwise."""

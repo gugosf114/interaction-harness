@@ -99,6 +99,12 @@ class VoiceDoor(Door):
 
     def poll(self):
         self.note = f'Vapi tool {TOOL} through the voice line server; key ' + ('found' if self.keys() else 'missing')
+        if self.daemon.door_conf('voice').get('bridge_enabled'):
+            from ..integrations import ensure_voice
+            try:
+                self.note = 'lane_job at ' + ensure_voice(self.daemon.paths)['server_url']
+            except Exception as exc:
+                self.note = 'voice wire failed: ' + str(exc)
 
     def keys(self) -> list:
         return [key for key in (line_key(), str(self.daemon.door_conf('voice').get('key') or '')) if key]
@@ -122,6 +128,7 @@ class VoiceDoor(Door):
             lane = str(args.get('lane') or '').strip() or None
             try:
                 job = self.daemon.add_job(task, lane=lane, door='voice',
+                                          source_id=f"{call.get('id')}:{ident}" if call.get('id') and ident else None,
                                           reply_to={'call_id': call.get('id'), 'control_url': (call.get('monitor') or {}).get('controlUrl')})
                 text = (f"Job {job['id']} is running on the {job['lane']} lane. Keep talking with George; "
                         'its answer will be sent into this call when it returns.')
@@ -141,7 +148,7 @@ class VoiceDoor(Door):
             raise DeliveryError('the Vapi key is missing')
         code, body = self.http_call([f'https://api.vapi.ai/call/{call_id}'], secret_header=f'Authorization: Bearer {key}')
         if code != 200:
-            raise DeliveryError(f'call lookup HTTP {code}')
+            raise DeliveryError(f'call lookup HTTP {code}: {body}')
         try:
             call = json.loads(body)
         except ValueError:
@@ -154,8 +161,12 @@ class VoiceDoor(Door):
         url = urlsplit(control or '')
         if url.scheme != 'https' or not url.hostname or not url.hostname.endswith('.vapi.ai'):
             return 'no control address'
-        code, _ = self.http_call([control], {'type': 'add-message', 'triggerResponseEnabled': True,
+        code, body = self.http_call([control], {'type': 'add-message', 'triggerResponseEnabled': False,
                                              'message': {'role': 'system', 'content': spoken_report(job)}})
         if code not in (200, 201, 202, 204):
-            raise DeliveryError(f'add-message HTTP {code}')
+            raise DeliveryError(f'add-message HTTP {code}: {body}')
+        code, body = self.http_call([control], {'type': 'say', 'content': answer_text(job),
+                                              'endCallAfterSpoken': False, 'interruptionsEnabled': True})
+        if code not in (200, 201, 202, 204):
+            raise DeliveryError(f'say HTTP {code}: {body}')
         return 'accepted by Vapi'

@@ -136,6 +136,10 @@ def ask_lane(paths, lane, session, text, timeout=None):
             time.sleep(0.5)
             job = queue.get(job['id'])
         return job
+    except KeyboardInterrupt:
+        if 'job' in locals():
+            queue.request_stop(job['id'])
+        raise
     finally:
         queue.close()
 
@@ -197,8 +201,9 @@ def main(argv=None, paths=None) -> int:
             answer = job.get('answer') or job.get('error') or 'No answer.'
             print(f"{lane}: {answer}", flush=True)
             code = 0 if job['state'] == 'done' else (job['exit_code'] or 1)
-            if not args.no_speak:
-                speak(answer)
+            if not args.no_speak and not speak(answer):
+                print('The answer was saved, but say failed to play it.', file=sys.stderr)
+                code = 2
     except KeyboardInterrupt:
         run([config.TERMUX_BIN + '/termux-microphone-record', '-q'], 15)
         return 130

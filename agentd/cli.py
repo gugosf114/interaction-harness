@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -73,6 +74,9 @@ def job_report(paths, job, full=False) -> str:
                 if text:
                     out.append(f'   --- {stream}')
                     out.extend('   ' + line for line in text.split('\n'))
+    api_runs = [use for row in rows for use in row.get('api_tool_uses', [])]
+    if api_runs:
+        out += ['', 'API tool runs:', json.dumps(api_runs, ensure_ascii=False, indent=2)]
     return '\n'.join(out) + '\n'
 
 
@@ -227,6 +231,31 @@ def cmd_agentd(argv, paths=None) -> int:
     if verb == 'tunnel':
         from .tunnel import tunnel
         return tunnel(rest, paths)
+    if verb == 'wire-voice':
+        from .integrations import voice
+        try:
+            result = voice(paths, rest[0] if rest else None)
+            print('Personal voice line: lane_job installed and read back from Vapi.')
+            print(result['server_url'])
+            return 0
+        except Exception as exc:
+            import urllib.error
+            detail = exc.read().decode('utf-8', 'replace') if isinstance(exc, urllib.error.HTTPError) else str(exc)
+            print('Voice door setup failed: ' + detail, file=sys.stderr)
+            return 1
+    if verb == 'wire-telegram':
+        from .integrations import telegram
+        if len(rest) not in (1, 2):
+            print('usage: agentd wire-telegram SCRIPT [PHONE_URL]', file=sys.stderr)
+            return 2
+        try:
+            result = telegram(rest[0], rest[1] if len(rest) > 1 else f'http://127.0.0.1:{config.port(config.load_settings(paths))}',
+                              config.load_doors(paths)['web']['password'])
+            print('Telegram lane adapter installed: ' + result['script'])
+            return 0
+        except (OSError, ValueError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
     if verb == 'password':
         from .status import password
         value = password(paths)
@@ -236,7 +265,7 @@ def cmd_agentd(argv, paths=None) -> int:
         from .status import urls
         print('\n'.join(urls(paths)))
         return 0
-    print('usage: agentd status | start | stop | restart | log [N] | url | password | tunnel [cloudflared|ngrok] | install',
+    print('usage: agentd status | start | stop | restart | log [N] | url | password | tunnel [cloudflared|ngrok] | install | wire-voice [PUBLIC_URL] | wire-telegram SCRIPT [PHONE_URL]',
           file=sys.stderr)
     return 2
 

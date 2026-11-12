@@ -42,6 +42,7 @@ class Daemon:
         self.stop = threading.Event()
         self.speech = stdqueue.Queue()
         self.delivery_tries = {}
+        self.notification_wait = {}
         self._status_shown = None
         self._lock_file = None
         self.serve_web = serve_web
@@ -97,12 +98,12 @@ class Daemon:
     def lanes(self):
         return config.lanes(self.settings)
 
-    def add_job(self, task, lane=None, session=None, door='cli', reply_to=None):
+    def add_job(self, task, lane=None, session=None, door='cli', reply_to=None, source_id=None):
         table = self.lanes()
         lane = lane or config.default_lane(self.settings, table)
         if lane not in table:
             raise ValueError(f'No lane named {lane}. Lanes: {", ".join(sorted(table))}.')
-        job = self.queue.add(lane, task, session=session, door=door, reply_to=reply_to)
+        job = self.queue.add(lane, task, session=session, door=door, reply_to=reply_to, source_id=source_id)
         self.log(f"job {job['id']} queued: lane {lane}, door {door}, session {job['session']}")
         return job
 
@@ -147,9 +148,17 @@ class Daemon:
     def finish_jobs(self):
         """For each job that ended: the notification, the spoken answer, and the answer back through its door."""
         for job in self.queue.to_notify():
-            self.phone.notify(f"agentd-job-{job['id']}", job_title(job), job_line(job),
-                              action=f"termux-open-url http://127.0.0.1:{config.port(self.settings)}/?job={job['id']}")
+            if time.time() < self.notification_wait.get(job['id'], 0):
+                continue
+            ok = self.phone.notify(f"agentd-job-{job['id']}", job_title(job), job_line(job),
+                                   action=f"termux-open-url http://127.0.0.1:{config.port(self.settings)}/?job={job['id']}")
+            if not ok:
+                self.log(f"job {job['id']}: notification failed: {getattr(self.phone, 'last_error', '')}")
+                self.notification_wait[job['id']] = time.time() + DELIVERY_GAP_SECONDS
+                continue
             self.queue.mark_notified(job['id'])
+            self.notification_wait.pop(job['id'], None)
+            self.log(f"job {job['id']}: notification posted")
             if job.get('answer') and job['door'] != 'talk':  # talk speaks its own answers
                 self.speech.put(job)
         doors = {door.name: door for door in self.doors}

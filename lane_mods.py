@@ -94,6 +94,8 @@ def spoken(text: str, full: bool) -> str:
 
 
 def speak(answer: str) -> None:
+    if os.environ.get('HARNESS_SPEECH_OWNER') == 'agentd':
+        return  # The job service serializes speech and reads George's existing voice switch.
     h = _h()
     line = spoken(answer, mod_switches.setting('voice-mode', h.STATE) != 'short')
     if not line or not os.path.exists(SAY):

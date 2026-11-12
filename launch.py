@@ -62,6 +62,7 @@ def main():
     values = {name: os.environ[name] for name in ('OPENAI_API_KEY','ANTHROPIC_API_KEY','DEFAULT_ENGINE','OPENAI_MODEL','ANTHROPIC_MODEL','HARNESS_STATE_DIR','NO_COLOR','GEMINI_API_KEY','GEMINI_MODEL','OPENROUTER_API_KEY','OPENROUTER_BASE_URL','OPENROUTER_MODEL','GLM_OPENAI_URL','GLM_MODEL','VERTEX_MODEL') if os.environ.get(name)}
     values['HARNESS_CALLER_CWD']=os.getcwd()
     if 'NO_COLOR' in os.environ: values['NO_COLOR']=os.environ['NO_COLOR']
+    if os.environ.get('HARNESS_SPEECH_OWNER') == 'agentd': values['HARNESS_SPEECH_OWNER']='agentd'
     parent_socket, child_socket = socket.socketpair()
     command = ['proot-distro', 'login', 'debian', '--', str(ROOT / '.venv/bin/python'),
                '-B', str(ROOT / 'bootstrap.py'), str(read_fd), str(child_socket.fileno()), *sys.argv[1:]]

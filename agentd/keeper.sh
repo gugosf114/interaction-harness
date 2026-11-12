@@ -14,12 +14,12 @@
 # ============================================================================
 P=/data/data/com.termux/files/usr/bin
 PATH="$P:$PATH"; export PATH
-HERE=$(dirname "$(readlink -f "$0")"); ROOT=$(dirname "$HERE")
+SELF=$(readlink -f "$0"); HERE=$(dirname "$SELF"); ROOT=$(dirname "$HERE")
 STATE="${HARNESS_STATE_DIR:-$ROOT/state}"; DIR="$STATE/agentd"; mkdir -p "$DIR"
 LOG="$DIR/keeper.log"; LOCK="$DIR/keeper.lock"; PIDF="$DIR/daemon.pid"; OFF="$DIR/STOPPED"
 PY="${AGD_PYTHON:-$P/python}"
 log(){ printf '[%s] %s\n' "$(date '+%F %T')" "$*" >>"$LOG"; }
-cmd_of(){ tr '\0' ' ' <"/proc/$1/cmdline" 2>/dev/null; }
+cmd_of(){ { tr '\0' ' ' <"/proc/$1/cmdline"; } 2>/dev/null; }
 daemon_alive(){ p=$(cat "$PIDF" 2>/dev/null); [ -n "$p" ] && cmd_of "$p" | grep -q 'agentd _daemon'; }
 loop_alive(){ p=$(cat "$LOCK/pid" 2>/dev/null); [ -n "$p" ] && cmd_of "$p" | grep -q 'agentd/keeper.sh watch'; }
 
@@ -41,8 +41,8 @@ case "${1:-tick}" in
     log "watch loop up"
     while [ ! -f "$OFF" ]; do once; sleep "${AGD_SEC:-5}"; done ;;
   tick)  [ -f "$OFF" ] && exit 0
-         loop_alive || { setsid sh "$0" watch </dev/null >/dev/null 2>&1 & } ;;
-  start) rm -f "$OFF"; exec sh "$0" tick ;;
+         loop_alive || { setsid sh "$SELF" watch </dev/null >/dev/null 2>&1 & } ;;
+  start) rm -f "$OFF"; exec sh "$SELF" tick ;;
   stop)
     : >"$OFF"
     p=$(cat "$LOCK/pid" 2>/dev/null); loop_alive && kill "$p" 2>/dev/null

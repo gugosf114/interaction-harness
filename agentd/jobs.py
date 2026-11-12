@@ -68,7 +68,7 @@ class Queue:
         job['reply_to'] = json.loads(job['reply_to']) if job.get('reply_to') else None
         return job
 
-    def add(self, lane, task, session=None, door='cli', reply_to=None):
+    def add(self, lane, task, session=None, door='cli', reply_to=None, source_id=None):
         task = (task or '').strip()
         if not task:
             raise JobError('A job needs a task.')
@@ -79,6 +79,11 @@ class Queue:
         with self._lock:
             self.db.execute('BEGIN IMMEDIATE')
             try:
+                source_key = 'incoming:' + door + ':' + str(source_id) if source_id else None
+                prior = self.kv_get(source_key) if source_key else None
+                if prior is not None:
+                    self.db.execute('COMMIT')
+                    return self.get(prior)
                 cursor = self.db.execute(
                     'INSERT INTO jobs(created,lane,session,task,door,reply_to) VALUES(?,?,?,?,?,?)',
                     (time.time(), lane, session or '', task, door, json.dumps(reply_to) if reply_to else None))
@@ -86,6 +91,8 @@ class Queue:
                 if session is None:
                     # A fresh session per job. The random tail keeps it apart from a session of an older queue file.
                     self.db.execute('UPDATE jobs SET session=? WHERE id=?', (f'job-{job_id}-{secrets.token_hex(2)}', job_id))
+                if source_key:
+                    self.kv_set(source_key, job_id)
                 self.db.execute('COMMIT')
             except BaseException:
                 self.db.execute('ROLLBACK')
@@ -117,7 +124,8 @@ class Queue:
         with self._lock:
             self.db.execute('BEGIN IMMEDIATE')
             try:
-                row = self.db.execute("SELECT id FROM jobs WHERE state='queued' ORDER BY id LIMIT 1").fetchone()
+                row = self.db.execute("SELECT id FROM jobs WHERE state='queued' AND session NOT IN "
+                                      "(SELECT session FROM jobs WHERE state IN ('starting','running')) ORDER BY id LIMIT 1").fetchone()
                 if row:
                     self.db.execute("UPDATE jobs SET state='starting' WHERE id=?", (row['id'],))
                 self.db.execute('COMMIT')
@@ -241,6 +249,9 @@ def turns(paths: Paths, job) -> list:
         db = sqlite3.connect(f'file:{paths.history}?mode=ro', uri=True, timeout=15)
         db.row_factory = sqlite3.Row
         try:
+            columns = {row[1] for row in db.execute('PRAGMA table_info(history)')}
+            if 'api_tool_uses_json' in columns:
+                query = query.replace('tokens_used FROM', 'tokens_used, api_tool_uses_json FROM')
             rows = [dict(row) for row in db.execute(query + ' ORDER BY id', values)]
         finally:
             db.close()
@@ -256,6 +267,10 @@ def turns(paths: Paths, job) -> list:
             row['execution_result'] = json.loads(row['execution_result']) if row['execution_result'] else None
         except ValueError:
             row['execution_result'] = None
+        try:
+            row['api_tool_uses'] = json.loads(row.pop('api_tool_uses_json', None) or '[]')
+        except ValueError:
+            row['api_tool_uses'] = []
     return rows
 
 

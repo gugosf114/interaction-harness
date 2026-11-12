@@ -3,4 +3,4 @@
 # ~/.termux/boot/20-agentd is a link to this file, so a git pull updates it.
 /data/data/com.termux/files/usr/bin/termux-wake-lock 2>/dev/null
 HERE=$(dirname "$(readlink -f "$0")")
-exec sh "$HERE/../keeper.sh" tick
+exec sh "$(dirname "$HERE")/keeper.sh" tick

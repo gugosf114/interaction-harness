@@ -203,6 +203,8 @@ Always on, typed in the shell (README: Always on):
   job stop ID | job wait ID
   agentd status|start|stop|restart|log [N]|url|password|install
   agentd tunnel [cloudflared|ngrok]
+  agentd wire-voice [PUBLIC_URL]              Install the personal line lane tool.
+  agentd wire-telegram SCRIPT [PHONE_URL]     Add lane commands to the existing bot bridge.
                         Put the jobs page on a public address.
   talk [--lane L] [--seconds N] [--clip FILE]
                         A spoken conversation with a lane. Say "stop" to end.

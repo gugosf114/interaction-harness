@@ -291,6 +291,64 @@ class PhoneTests(Base):
         self.assertEqual(parse_notification_list('CAUTION: data\n{"notifications":[{"title":"a"}],"count":1}'), [{'title': 'a'}])
         self.assertIsNone(parse_notification_list('nothing'))
 
+    def test_sms_send_sees_a_refusal_and_sends_text_on_stdin(self):
+        from agentd.phone import Phone
+        calls = []
+
+        def runner(argv, timeout=60, input_text=None):
+            calls.append((argv, input_text))
+            return 0, '{\n  "error": "Please grant the following permission to use this command: android.permission.SEND_SMS"\n}', ''
+
+        self.assertFalse(Phone(run=runner).sms_send('+14155550123', '-n looks like a flag'))
+        self.assertEqual(calls[0][0][-2:], ['-n', '+14155550123'])
+        self.assertEqual(calls[0][1], '-n looks like a flag')
+        self.assertTrue(Phone(run=lambda *a, **k: (0, '', '')).sms_send('+1', 'x'))
+
+
+class KeeperTests(Base):
+    """keeper.sh through a link, the way ~/.termux/boot/20-agentd starts it: one watch loop, and the service comes back."""
+
+    def test_one_loop_through_a_link_and_the_service_returns(self):
+        import subprocess
+        root = Path(__file__).resolve().parent
+        fake = Path(self.tmp.name) / 'fakepy'
+        # Stands in for python: `fakepy -B .../agentd _daemon` writes its pid and sleeps, like the service.
+        fake.write_text('#!/bin/sh\necho $$ > "$HARNESS_STATE_DIR/agentd/daemon.pid"\n'
+                        'exec python3 -c "import time; time.sleep(300)" agentd _daemon\n')
+        fake.chmod(0o755)
+        link = Path(self.tmp.name) / '20-agentd'
+        link.symlink_to(root / 'agentd' / 'boot' / '20-agentd')
+        env = {**os.environ, 'AGD_PYTHON': str(fake), 'AGD_SEC': '1'}
+        keeper = root / 'agentd' / 'keeper.sh'
+        try:
+            for _ in range(3):
+                subprocess.run(['sh', str(link)], env=env, timeout=30)
+                time.sleep(0.5)
+            time.sleep(2)
+            def read(path):
+                try:
+                    return path.read_bytes()
+                except OSError:
+                    return b''
+            mine = [p for p in Path('/proc').iterdir() if p.name.isdigit() and b'keeper.sh\x00watch' in read(p / 'cmdline')
+                    and str(self.state).encode() in read(p / 'environ')]
+            self.assertEqual(len(mine), 1)
+            first = int((self.paths.home / 'daemon.pid').read_text())
+            os.kill(first, 9)
+            deadline = time.time() + 15
+            while time.time() < deadline:
+                time.sleep(0.5)
+                try:
+                    now = int((self.paths.home / 'daemon.pid').read_text())
+                except (OSError, ValueError):
+                    continue
+                if now != first:
+                    break
+            self.assertNotEqual(now, first)
+        finally:
+            subprocess.run(['sh', str(keeper), 'stop'], env=env, timeout=30)
+        self.assertTrue((self.paths.home / 'STOPPED').exists())
+
 
 class CliTests(Base):
     def test_job_add_list_show(self):

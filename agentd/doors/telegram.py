@@ -61,6 +61,10 @@ class TelegramDoor(Door):
         conf = self.daemon.door_conf('telegram')
         token = str(conf.get('token') or '')
         chats = [str(chat) for chat in conf.get('chat_ids') or []]
+        if conf.get('mode') == 'bridge':
+            self.interval = 30
+            self.note = 'the existing Telegram bridge takes tasks; this service returns the answers'
+            return
         if not token:
             self.interval = 30
             self.note = 'through the box bridge (/lane, /g1, /george); no direct bot token in doors.json'
