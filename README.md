@@ -439,10 +439,82 @@ open Settings before the app/search cases; stop it after checks. Reports keep th
 exact query, exit code, command results, SQLite rows, and cache counters. Image
 answers must also be compared with their saved PNGs.
 
+## API tools
+
+`g1 --tools` and `george --tools` list every API tool, its default state, its provider, and any recorded provider refusal. There are 26 switches covering 39 provider/tool pairs. The final answer still passes through the same four-field schema and display gates. The frozen prefix is unchanged.
+
+```sh
+g1 --tools
+george --tools
+g1 --loop --shell "Run pwd and report the path."
+george --loop --memory "Save a note that the test shelf is blue."
+george --loop --memory --new "Read the saved shelf note."
+g1 --loop --mcp-local "List the last five notifications on my phone."
+g1 --loop --mcp-remote "List the last five notifications on my phone."
+george --loop --computer --computer-target hidden:NAME "Take a screenshot."
+g1 --files --file /path/to/document.pdf "Read this document."
+g1 --image-generation "Make a small blue circle."
+```
+
+Every flag has a `--no-NAME` form. Inside a chat, use `/tools`, `/on NAME`, or `/off NAME`. Chat switches are saved in `state/tools.json`; flags override that file for one launch. Use hyphens in flags and chat commands; the JSON keys use underscores. `--api-advisor` controls Anthropic's hosted advisor tool. The separate `--advisor` and `/advisor` commands remain the operator's review feature.
+
+Local actions use the existing native runner and command approval. Start with `--loop` or `--exec`; `-y` explicitly approves commands without a question. Tool requests, results, exit codes and attachment hashes are recorded in SQLite and session files. A discovery listing or approval is not a completed action. A failed latest action cannot borrow an older success. Tool-use claims require a matching receipt before display.
+
+| Switch | Provider | Default | Why |
+| --- | --- | --- | --- |
+| `--web-search` | openai, anthropic | on | Keeps the existing lookup behavior. |
+| `--web-fetch` | openai, anthropic | on | Keeps the existing lookup behavior. |
+| `--history-cache` | anthropic | on | Cuts repeated input without changing the answer. |
+| `--memory` | anthropic | off | Adds lasting notes across chats. |
+| `--code-execution` | openai, anthropic | off | Uses a paid hosted runtime. |
+| `--computer` | openai, anthropic | off | Can change the device. |
+| `--browser` | anthropic | off | Can act on signed-in websites. |
+| `--shell` | openai, anthropic | off | Can change files and devices. |
+| `--hosted-shell` | openai | off | Uses a paid hosted runtime. |
+| `--text-editor` | anthropic | off | Can change files. |
+| `--apply-patch` | openai | off | Can change files. |
+| `--mcp-local` | openai, anthropic | off | Exposes device actions to the model. |
+| `--mcp-remote` | openai, anthropic | off | Sends tool requests through a remote endpoint. |
+| `--files` | openai, anthropic | off | Stores files with the API provider. |
+| `--file-search` | openai | off | Uses provider storage and retrieval. |
+| `--skills` | openai, anthropic | off | Runs skill instructions and supporting code. |
+| `--tool-search` | openai, anthropic | off | Changes how tools enter model context. |
+| `--programmatic` | openai, anthropic | off | Changes tool execution and adds runtime cost. |
+| `--context-editing` | anthropic | off | Removes old detail from the model input. |
+| `--compaction` | openai, anthropic | off | Changes the context sent to the model. |
+| `--background` | openai | off | Changes storage and request lifetime. |
+| `--image-generation` | openai | off | Adds image-generation charges. |
+| `--api-advisor` | anthropic | off | Calls another paid model. |
+| `--functions` | openai, anthropic | off | Exposes local command execution. |
+| `--custom-tools` | openai | off | Exposes local command execution. |
+| `--namespaces` | openai | off | Changes tool names and discovery. |
+
+OpenAI supplies web search and page fetch as one tool; their switches move together. Skills turn on their required hosted runtime. Programmatic calls turn on functions (and Claude's sandbox). Tool search and namespaces turn on functions. OpenAI local shell and hosted shell cannot be enabled together.
+
+The `options` object in `state/tools.json` holds `computer_target`, `browser_endpoint`, `max_tool_steps` (24 by default), and resource IDs. File search needs `vector_store_ids`. Skills need version-pinned `openai_skills` or `anthropic_skills`; their list shapes match the providers' official APIs. Model notes live in `state/memory/`; edits are bounded to that folder. Uploaded file IDs are reused only for unchanged attachment hashes. Generated images go to `state/generated/`; downloaded provider files go to `state/downloads/`. Final replies include those local paths.
+
+Computer use reuses the screen driver (`phone`, `hidden:NAME`, `laptop`, `yana`). The touch adapter withholds Claude's right-click, middle-click and cursor-position members. It returns an error for unsupported input. The live proof captures a hidden screen; it does not exercise every tap/key on every target. Claude's browser tool uses the existing phone CDP endpoint, default `http://127.0.0.1:9335`. Its live proof lists tabs without changing them.
+
+### Remote phone MCP
+
+Local MCP exposes the phone's 55 tool definitions through `agentbridge-call`. The remote route uses an authenticated Cloudflare Worker and an outbound phone bridge, active only during a remote-MCP request. The installed relay permits `android_notification_list` by default. Set `mcp_allowed_tools` deliberately to expose more tools. Keep remote MCP off until needed.
+
+`options` holds `mcp_url`, `mcp_token_file`, `mcp_bridge_url`, `mcp_bridge_token_file`, and `mcp_allowed_tools`. Secret values live only in private token files, outside git. The two tokens serve different roles. The Worker keeps pending requests in memory, not Durable Object storage. The phone bridge closes when the request ends. Other authenticated remote MCP servers need only their URL, client token path and allowed tools.
+
+`deploy_mcp_relay.py --account ACCOUNT --token-file PATH --state PRIVATE_DIR` deploys this relay and writes its private configuration. `api_mcp_tunnel.py` also supports a local HTTP adapter for existing tunnel services. The deployed Worker route passed on both engines; the temporary quick-tunnel route proved unreliable and is not the installed route. No existing ngrok endpoint was replaced.
+
+### Conversation cache and proof
+
+Claude caches the growing conversation using one automatic history marker alongside the two system-page markers. Earlier messages stay byte-identical; each loop note sits beside its own turn. A three-turn live test checks that turn three reads more cached tokens than the complete first request. Cache metrics, tool-list hashes and provider errors are saved with the existing usage events.
+
+`verify_tools.py --engine openai --case shell --state state/api-tools/my-proof` runs one real tool case through the launcher, schema, display gate and SQLite. Use `--engine anthropic` for Claude and `--options-file FILE` for resource IDs or a relay. The script permits only its own harmless commands, fixture edits, hidden screenshot, tab listing and five-notification query. The memory case creates a note in one session and reads it in a second.
+
+See [API_TOOLS_REPORT.md](API_TOOLS_REPORT.md) for one result per provider/tool pair, defaults, live exit codes, exact evidence paths, cache counts, and the limits of the checks. Runtime settings and full reports stay under ignored `state/`; they contain private device results.
+
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay'
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes

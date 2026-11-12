@@ -432,7 +432,9 @@ class NoteTests(AdvisorCase):
         _, _, _, api, _ = self.work(['--loop', '--session', 's', 'Try again.'], [command(), reply()], [result('ok')])
         for call in api.call_args_list:
             self.assertEqual(len(self.notes_in(call.kwargs['history'])), 1)
-        self.assertIn('agent_loop', api.call_args_list[0].kwargs['history'][0]['content'])
+        history=api.call_args_list[0].kwargs['history']
+        self.assertEqual(history[0]['content'],'first request')
+        self.assertIn('agent_loop',history[-1]['content'])
 
     def test_two_notes_on_one_exchange_keep_their_order(self):
         self.work(['--session', 's', 'first request'])

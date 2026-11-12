@@ -8,6 +8,24 @@ usage: harness.py [-h] [--engine {openai,anthropic}] [--model MODEL]
                   [--listen-timeout LISTEN_TIMEOUT] [--no-web]
                   [--web-max WEB_MAX] [--image PATH] [--file PATH]
                   [--advisor [QUESTION]] [--advisor-turns ADVISOR_TURNS]
+                  [--tools] [--web-search | --no-web-search] [--web-fetch |
+                  --no-web-fetch] [--history-cache | --no-history-cache]
+                  [--memory | --no-memory] [--code-execution |
+                  --no-code-execution] [--computer | --no-computer]
+                  [--browser | --no-browser] [--shell | --no-shell]
+                  [--hosted-shell | --no-hosted-shell] [--text-editor |
+                  --no-text-editor] [--apply-patch | --no-apply-patch]
+                  [--mcp-local | --no-mcp-local] [--mcp-remote |
+                  --no-mcp-remote] [--files | --no-files] [--file-search |
+                  --no-file-search] [--skills | --no-skills] [--tool-search |
+                  --no-tool-search] [--programmatic | --no-programmatic]
+                  [--context-editing | --no-context-editing] [--compaction |
+                  --no-compaction] [--background | --no-background]
+                  [--image-generation | --no-image-generation]
+                  [--api-advisor | --no-api-advisor] [--functions |
+                  --no-functions] [--custom-tools | --no-custom-tools]
+                  [--namespaces | --no-namespaces]
+                  [--computer-target COMPUTER_TARGET]
                   [text ...]
 
 Direct answers, bounded memory, optional confirmed Termux execution.
@@ -61,6 +79,64 @@ options:
                         QUESTION.
   --advisor-turns ADVISOR_TURNS
                         Exchanges put in the advisor packet (1–50; default 3).
+  --tools               List API tools, switches, lanes, and recorded
+                        availability.
+  --web-search          Search the web.
+  --no-web-search       Disable web search.
+  --web-fetch           Read a web page.
+  --no-web-fetch        Disable web fetch.
+  --history-cache       Cache the growing chat.
+  --no-history-cache    Disable history cache.
+  --memory              Read and write model notes on this phone.
+  --no-memory           Disable memory.
+  --code-execution      Run code in the provider sandbox.
+  --no-code-execution   Disable code execution.
+  --computer            See and act on a named screen.
+  --no-computer         Disable computer.
+  --browser             Drive the phone browser through its API toolset.
+  --no-browser          Disable browser.
+  --shell               Run local shell commands with approval.
+  --no-shell            Disable shell.
+  --hosted-shell        Run commands in an OpenAI container.
+  --no-hosted-shell     Disable hosted shell.
+  --text-editor         Read and edit local text files.
+  --no-text-editor      Disable text editor.
+  --apply-patch         Apply model-generated file patches.
+  --no-apply-patch      Disable apply patch.
+  --mcp-local           Use the phone MCP tools through agentbridge-call.
+  --no-mcp-local        Disable mcp local.
+  --mcp-remote          Let the provider call an authenticated MCP server.
+  --no-mcp-remote       Disable mcp remote.
+  --files               Upload attachments once and use provider file IDs.
+  --no-files            Disable files.
+  --file-search         Search an uploaded vector store.
+  --no-file-search      Disable file search.
+  --skills              Load versioned skills in a hosted runtime.
+  --no-skills           Disable skills.
+  --tool-search         Find and load deferred tool definitions.
+  --no-tool-search      Disable tool search.
+  --programmatic        Let sandbox code call other enabled tools.
+  --no-programmatic     Disable programmatic.
+  --context-editing     Clear old tool results in provider context.
+  --no-context-editing  Disable context editing.
+  --compaction          Replace older context with a provider summary.
+  --no-compaction       Disable compaction.
+  --background          Poll a long-running provider response.
+  --no-background       Disable background.
+  --image-generation    Generate an image and save its bytes.
+  --no-image-generation
+                        Disable image generation.
+  --api-advisor         Ask a configured advisor model for help.
+  --no-api-advisor      Disable advisor.
+  --functions           Call the local command runner with JSON arguments.
+  --no-functions        Disable functions.
+  --custom-tools        Call the local runner with a free-form command.
+  --no-custom-tools     Disable custom tools.
+  --namespaces          Group the local function under a namespace.
+  --no-namespaces       Disable namespaces.
+  --computer-target COMPUTER_TARGET
+                        phone, hidden:NAME, laptop, or yana for computer
+                        tools.
 
 Screen: in an approved --loop command, screen snap or look PATH attaches the
 file to the next model turn. Run card screen for targets and commands.

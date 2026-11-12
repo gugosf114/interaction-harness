@@ -24,6 +24,7 @@ def allowed(request, state, marker):
     command=request.get('command','')
     try:parts=shlex.split(command)
     except ValueError:return False
+    if parts==['card','mcp-see']:return True
     prefix='Remote MCP request: android_notification_list '
     if parts[:2]==['printf','%s'] and len(parts)==3 and parts[2].startswith(prefix):
         try:return json.loads(parts[2][len(prefix):])=={'limit':5}

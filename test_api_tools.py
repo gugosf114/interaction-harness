@@ -237,5 +237,26 @@ class ApiToolTests(unittest.TestCase):
         with self.assertRaisesRegex(h.HarnessError,'lookup without its result'):
             h.request_reply('Search hello.',engine='anthropic',client=client,api_runtime=runtime,web=True,log_path=self.root/'usage')
 
+    def test_provider_output_files_are_saved_hashed_and_announced_once(self):
+        from api_tools_resources import fetch_output_files
+        import hashlib
+        content=NS(write_to_file=lambda path:path.write_bytes(b'proof output'))
+        files=NS(retrieve_metadata=lambda ident:NS(filename='../proof.txt'),download=lambda ident:content)
+        client=NS(files=files,containers=NS(files=NS(content=NS(retrieve=lambda ident,container_id:content))))
+        for engine in ('openai','anthropic'):
+            with self.subTest(engine=engine):
+                runtime=Runtime(settings(self.root/engine,engine,files=True))
+                block={'type':'container_file_citation','file_id':'file_proof','container_id':'cntr_proof','filename':'../proof.txt'} if engine=='openai' else {'type':'bash_code_execution_output','file_id':'file_proof'}
+                reply=NS(output=[block]) if engine=='openai' else NS(content=[block])
+                fetch_output_files(runtime,client,reply)
+                record=runtime.receipts[-1];path=Path(record['artifact'])
+                self.assertEqual(path.read_bytes(),b'proof output')
+                self.assertEqual(record['sha256'],hashlib.sha256(b'proof output').hexdigest())
+                self.assertTrue(path.is_relative_to(runtime.state/'downloads'))
+                self.assertIn(str(path),runtime.artifact_notice())
+                self.assertIsNone(runtime.artifact_notice())
+                fetch_output_files(runtime,client,reply)
+                self.assertEqual(len(runtime.receipts),1)
+
 
 if __name__=='__main__':unittest.main()
