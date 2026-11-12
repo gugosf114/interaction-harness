@@ -11,6 +11,7 @@ import advisor
 import recall_cli
 import senses_cli
 import api_tools_cli
+import lane_mods
 from execution_images import prepare_execution
 from lookup_gate import turn_metadata
 from phonetics import normalize
@@ -60,6 +61,8 @@ def run_chat(args, model):
     options.extend(senses_cli.common_options(args))
     options.extend(recall_cli.common_options(args))
     last_status=0
+    lane_mods.session_start()
+    loop_options=options if args.loop else [*options,'--loop','--max-turns',str(args.max_turns)]
     if args.text: last_status=main([*options,*api_tools_cli.options(args),*senses_cli.attachment_options(args),'--',' '.join(args.text)])
     while True:
         try:
@@ -75,6 +78,10 @@ def run_chat(args, model):
             raw=raw.rstrip('\r\n')
             if raw.strip().lower() in {'exit','quit'}: return last_status
             if not raw.strip(): continue
+            # George's mod commands (lane_mods.py): /on /off /mods /where /up /voice /usage /autopilot, and v to talk.
+            handled,spoken=lane_mods.chat_line(raw,sid,lambda text:main([*loop_options,*api_tools_cli.options(args),'--',text]),native)
+            if handled:continue
+            if spoken:raw=spoken
             handled=recall_cli.chat_command(raw,options,args)  # /on recall, /off recall, /fork, /rewind
             if handled is not None:last_status=handled;continue
             # Only a line the operator types reaches the advisor. It answers him and does not make the working model speak.
@@ -223,10 +230,14 @@ def main(argv=None):
                 if args.loop:exchange['loop_step']=step
                 store.save_session(session,exchange,args.turns)
                 sys.stdout.write(h.display_text(reply,metadata['sources']));sys.stdout.flush()
+                if not (args.loop and reply.execution_payload):  # the turn's final answer: proof marks, thread tree, voice
+                    lane_mods.turn_end(args,session,cleaned,reply,past,lambda:atomic_json(store.sessions/(sid+'.json'),session))
                 if not (args.execute and reply.execution_payload):return last_exit
                 request={'op':'exec','command':reply.execution_payload,'timeout':args.exec_timeout}
                 if args.yes:request['auto_confirm']=True
+                lane_mods.before_command(reply.execution_payload)
                 execution=native(request)
+                lane_mods.after_command(execution)
                 execution=prepare_execution(execution,args.engine,h.STATE,
                     [*past,{'attachments':turn_attachments}])
                 store.finish(row_id,reply,events,execution=execution)

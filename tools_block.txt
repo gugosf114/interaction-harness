@@ -51,6 +51,7 @@ The families
 - boot: what starts when the phone boots, and how to check and restart each piece. Print: card boot
 - chats: read what George's other AI sessions (Claude Code, Codex) are saying and doing right now. Print: card chats
 - lanes: this client's own sessions: list, read, fork, rewind, cut, splice, the golden session, export to PDF. Print: card lanes
+- usage: tokens and calls today, this week and this month on george's and g1's API accounts. Print: card usage
 
 Built in, no command needed
 - Web search and reading a public web page are done by the provider's own tools in this client.

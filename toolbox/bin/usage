@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# usage [--local] : tokens and calls today, this week and this month on each lane's API account.
+here=$(dirname "$(readlink -f "$0")")
+exec python "$here/../../usage_meter.py" "$@"

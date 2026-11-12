@@ -666,10 +666,45 @@ Each turn records with `termux-microphone-record` (AAC, `.m4a`), turns it into w
 
 Tests: `test_agentd.py` (queue, runner, service loop, web page, CLI) and `test_agentd_doors.py` (each door's parser and loop, the schedule, the trigger matcher, talk and the tunnel).
 
+## Mods and hooks
+
+George's Claude Code setup acts around every turn with mods (`/root/.claude/mods`) and hooks (`/root/.claude/hooks`, `settings.json`). The lanes now carry the same add-ons. Each ships on. `/on NAME` and `/off NAME` switch one; `/mods` lists them. The switches live in `state/mods.json`. The code: `answer_checks.py`, `lane_mods.py`, `mod_switches.py`, `narrator.py`, `thread_tree.py`, `proof_marks.py`, `helper_model.py`, `usage_meter.py`. Tests: `test_lane_mods.py`.
+
+**Answer checks, in the gate.** Each sends the answer back once with its reason, the usual one retry. A second answer that still fails one of these is shown, as in Claude Code, where each hook blocks once. A bounce prints one stderr line, such as `answer check: answer too long - asked again`, and the usage record holds the reason.
+
+| Mod | From | Rule |
+|---|---|---|
+| `length` | `hooks/answer-length.sh` | A yes/no question: 40 words. Any other question: 120. Anything else that is not a build order: 250. Prose only; code blocks and tables do not count. |
+| `plain-words` | `hooks/plain-words.sh` | Flesch-Kincaid grade 5 or lower, and none of the 45 listed jargon words. Answers under 25 words are not measured. |
+| `receipts` | `hooks/receipts-gate.py` | A sentence that says how WiM behaves needs a command result this turn that reads WiM code or its log and holds the claim's action word, or the word GUESS. |
+| `no-background` | `hooks/no-background.sh` | A command with `nohup`, `setsid`, `disown` or a trailing `&` is sent back. |
+| `undertaker` | the Undertaker in `mods/proof-marks` | A line that is only filler ("Don't worry.", "To be clear.") is removed in code, with no retry. A line with a number, a path, a link, a capitalised word or a verdict word stays. |
+
+`/root/.claude/play-mode` makes `length`, `plain-words` and `receipts` step aside, and `plain-words-off` makes `length` and `plain-words` step aside, as they do in Claude Code. The lanes only read those files.
+
+**Around the answer.** All of this prints on stderr; stdout stays answer and command only.
+
+- `narrator` (from `mods/narrator`): before a command runs, one plain sentence, such as `» Read the mail card`. The mod's step count was muted by George on 11/5 and stays off.
+- `proof` (from `mods/proof-marks`): after the turn's final answer, a small model grades each line against the session's command results. One line: `proof: 2 shown · 1 guess · 1 no proof`, then each no-proof line.
+- `tree` (from `mods/thread-tree`): after the final answer, a small model says how George's message moved the topic trail: deeper, back up, sideways, a new topic, or the same. The tree is saved in the session file under `thread_tree`. After a step back it prints `↑ back to: TOPIC`; when an answer settles a sub-topic it offers `Back to "PARENT": type /up.` `/where` prints the trail and the whole tree, closed branches marked. `/up` goes back one level by hand.
+- `voice` (from `hooks/speak.py`): each final answer is read aloud with `/usr/local/bin/say`, whole (`/voice full`, the default) or the first sentence (`/voice short`). `/voice off` silences it and stops what is playing. Ava's lane (car or home) follows George's existing `voice car` / `voice home` switch.
+- `memory-version` (from `memory-version.sh`): after each command, a change in the memory notes folder is committed to its git.
+- `voice-v` (from `hooks/voice-v.py`): a chat line of just `v` or `в` opens the phone microphone; the words become the message.
+- `reindex` and `voiceline` (from the two `SessionStart` hooks): when a chat opens, the past-chat search index is brought up to date, and the phone call line is started when its `WANTED` file exists.
+- `autopilot` (from `mods/autopilot`): `/autopilot GOAL` runs one loop run per step with the mod's own step prompt, until a step ends with `AUTOPILOT: COMPLETE` or `AUTOPILOT: BLOCKED`, or 150 steps, or 10 hours, or Ctrl-C. Log, questions and result go to `state/autopilot/`. `/autopilot status`, `/autopilot go`.
+
+The small model is `claude-haiku-5-5` on `george` and `gpt-6-luna` on `g1`, on the lane's own key (live on Nov 11, 2026: 0.9 s and 1.8 s). Each of its calls is one `usage.jsonl` record with `kind` `mod:proof` or `mod:tree`. A mod that fails prints nothing and the turn goes on.
+
+**Usage.** `usage` (a toolbox command; `/usage` in chat; `usage --local` skips the provider calls) prints tokens and calls today, this week (from Monday) and this month for `george` (Anthropic) and `g1` (OpenAI): from `usage.jsonl` (every API request) and from `history.db` (every saved model turn). It also asks each provider's own usage report: Anthropic `GET /v1/organizations/usage_report/messages`, OpenAI `GET /v1/organization/usage/completions`. Both need an admin key in `state/anthropic-admin-key` / `state/openai-admin-key` or `ANTHROPIC_ADMIN_KEY` / `OPENAI_ADMIN_KEY`. The lane keys are refused: Anthropic HTTP 401 "The Admin API requires an Admin API key or an organization-scoped API key.", OpenAI HTTP 403 "Missing scopes: api.usage.read." (Nov 11, 2026). `HARNESS_STATE_DIR` selects the state folder it reads.
+
+**Built by other workers, not here.** The rules stamp on every prompt (`hooks/george-core-contract.py`) is the per-turn stamp. The past-chat search on every prompt (`hooks/recall-inject.py`) is `recall_notes`; its always-on profile is already the `profile` page. The status line (`statusline.sh`) and the colour of whole replies are the chat screen. The second-model reviewer (`mods/watcher`, replaced by `drift-monitor`) is the judge. `mods/roster` is `/mods` here.
+
+**Where these switch on.** `harness.MODS_ON` is `False` on a plain import, so the unit tests see the gate as before. The command-line entry point sets it to `True`, next to `PAGES_FILE`.
+
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool test_agentd test_agentd_doors'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool test_agentd test_agentd_doors test_lane_mods'
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes

@@ -32,6 +32,8 @@ from attachments import AttachmentError
 from lookup_gate import violation as lookup_violation, source_block, urls
 from choice_check import violation as choice_violation
 from gate_rules import apply as operator_rules
+import answer_checks
+import mod_switches
 
 ROOT = Path(__file__).resolve().parent
 PREFIX_SHA256 = '73d3ce09d43431650591b9ff9c9eb7e5fe3def714e0a49eebdfd7c8fd2fd2854'
@@ -307,6 +309,9 @@ def load_tools() -> str | None:
 # The operator's page list. Only the command-line entry point at the bottom of this file sets it.
 # A plain import, which is what the unit tests do, leaves it off, so tests never read the real list.
 PAGES_FILE: Path | None = None
+# The lane mods (answer_checks.py, lane_mods.py). Off on a plain import, so the unit tests see the gate as before;
+# the command-line entry point at the bottom of this file switches them on. Each mod then has its own /on and /off.
+MODS_ON = False
 
 
 def load_pages() -> list:
@@ -366,6 +371,10 @@ def validate_reply(raw: str, input_text: str | None = None, *, execution_confirm
     answer = strip_reassurance(answer, ' '.join(part for part in (input_text, request_context) if part))
     if not answer:
         raise OpeningScrubError('No substantive answer remains after reassurance cleanup.')
+    if MODS_ON and mod_switches.is_on('undertaker', STATE):
+        answer = answer_checks.undertaker(answer)  # pure filler lines go, every other line stays as written
+        if not answer:
+            raise OpeningScrubError('No substantive answer remains after filler-line cleanup.')
     reply=reply.model_copy(update={'direct_answer':answer})
     # execution_confirmed means this reply directly follows a command that was approved and exited 0.
     if claims_completion(answer) and not execution_confirmed:
@@ -485,6 +494,12 @@ def request_reply(
                 receipts=(api_runtime.receipts if api_runtime else [])+([native_tool_evidence] if native_tool_evidence else [])
                 reason=api_tool_violation(reply.direct_answer,receipts)
                 if reason:raise GateError(reason)
+                # George's answer checks (answer_checks.py): one retry, and a second answer is shown even if it still fails.
+                soft=answer_checks.soft_violation(reply,request_context or raw_input,history or [],raw_input,STATE) if MODS_ON else None
+                if soft and attempt==1:
+                    print('answer check: '+soft.split(' - ',1)[0]+' - asked again',file=sys.stderr,flush=True)
+                    raise GateError(soft)
+                if soft:event['answer_check_kept']=soft.split(' - ',1)[0]
             except OpeningScrubError:
                 event['status']='empty_after_scrub'
                 raise
@@ -553,4 +568,5 @@ if __name__ == '__main__':
     _recall.wire()  # the past-chat search is on only under the command-line entry point, like the page list
     import second_gate as _second_gate
     _second_gate.switch_on(_client.ROOT / 'state')  # the operator's gate rules, the judge, the lessons page
+    _client.MODS_ON = True
     raise SystemExit(main())
