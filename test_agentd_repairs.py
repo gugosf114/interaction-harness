@@ -143,7 +143,7 @@ class Repairs(unittest.TestCase):
         from agentd.integrations import ensure_voice
         from agentd.config import write_private_json
         (self.paths.home/'voice-tunnel.pid').write_text('12345')
-        (self.paths.home/'voice-tunnel.log').write_text('https://test.trycloudflare.com')
+        (self.paths.home/'voice-tunnel.log').write_text('Your quick Tunnel has been created!\nhttps://test.trycloudflare.com')
         write_private_json(self.paths.home/'voice-address.json', {'server_url':'https://test.trycloudflare.com/vapi/tools'})
         with patch('agentd.jobs.pid_alive', return_value=True), patch.object(Path,'read_bytes',return_value=b'cloudflared'), \
              patch('agentd.integrations.subprocess.Popen') as spawn, patch('agentd.integrations.api') as api:

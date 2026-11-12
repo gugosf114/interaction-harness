@@ -1,4 +1,4 @@
-"""Native Termux operations served by the launcher; no SDK or Debian execution."""
+"""SDK-free native launcher operations, including a separate Debian speech worker."""
 import json
 import os
 from pathlib import Path
@@ -46,6 +46,9 @@ def confirm():
 
 def handle(request):
     operation = request.get('op')
+    if operation == 'speak':
+        from voice_playback import enqueue
+        return enqueue(request.get('text'),request.get('state'),request.get('generation',0))
     if operation == 'exec':
         command = request.get('command')
         if not isinstance(command,str) or not command.strip() or '\x00' in command:

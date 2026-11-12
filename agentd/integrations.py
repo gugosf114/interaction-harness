@@ -96,7 +96,14 @@ def point_voice(paths, public_url):
 
 def ensure_voice(paths):
     """Keep this phone's lane webhook reachable. Its dedicated tunnel never starts a brain session."""
+    from .voice_tunnel_health import locked
+    with locked(paths):
+        return _ensure_voice(paths)
+
+
+def _ensure_voice(paths):
     import re
+    from . import voice_tunnel_health as health
     from .phone import DEB
     from .jobs import pid_alive
     pidfile = paths.home / 'voice-tunnel.pid'
@@ -106,6 +113,9 @@ def ensure_voice(paths):
         running = pid_alive(pid) and b'cloudflared' in Path(f'/proc/{pid}/cmdline').read_bytes()
     except (OSError, ValueError):
         running = False
+    if running and logfile.exists() and health.revoked(logfile.read_text(errors='replace')[-100000:]):
+        health.remember(paths,pid)
+        running=False
     if not running:
         # Save each prior log, so a new tunnel cannot reuse a dead address.
         if logfile.exists():
@@ -121,9 +131,8 @@ def ensure_voice(paths):
     url = None
     while time.monotonic() < deadline:
         text = logfile.read_text(errors='replace')[-100000:] if logfile.exists() else ''
-        matches = re.findall(r'https://[a-z0-9-]+\.trycloudflare\.com', text)
-        if matches:
-            url = matches[-1]
+        url=health.address(logfile)
+        if url:
             break
         time.sleep(.5)
     if not url:
@@ -133,5 +142,11 @@ def ensure_voice(paths):
     except (OSError, ValueError):
         prior = {}
     if prior.get('server_url') != url + '/vapi/tools':
-        return point_voice(paths, url)
+        health.wait_route(paths,url)
+        result=point_voice(paths,url)
+        health.retire(paths)
+        return result
+    if health.pending(paths):
+        health.wait_route(paths,url)
+        health.retire(paths)
     return prior

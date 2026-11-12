@@ -30,7 +30,7 @@ MODS = {
     'voiceline': 'When a chat opens, the phone call line is started if George wants it (its WANTED file).',
     'autopilot': '/autopilot GOAL runs step after step until done, blocked, 150 steps or 10 hours.',
 }
-DEFAULTS = {'voice-mode': 'full'}
+DEFAULTS = {'voice-mode': 'full', 'voice-generation': 0}
 
 
 def path(state) -> Path:
@@ -70,4 +70,6 @@ def setting(name: str, state):
 def set_value(name: str, value, state) -> None:
     data = load(state)
     data[name] = value
+    if name == 'voice' and value is False:
+        data['voice-generation'] = int(data.get('voice-generation') or 0) + 1
     save(state, data)

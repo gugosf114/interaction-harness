@@ -252,9 +252,10 @@ class TurnEnd(unittest.TestCase):
         args = SimpleNamespace(engine='anthropic', usage_log=Path(self.tmp.name) / 'u.jsonl')
         session, saved = {}, []
         err = io.StringIO()
+        import cli
         with patch.object(lane_mods.helper_model, 'complete', side_effect=lambda e, kind, *a, **k: answers[kind]), \
                 patch.object(lane_mods.os.path, 'exists', return_value=True), \
-                patch.object(lane_mods.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stderr='')) as run, \
+                patch.object(cli,'native',return_value={'queued':True,'pid':123,'voice_id':'test'}) as native, \
                 contextlib.redirect_stderr(err):
             lane_mods.turn_end(args, session, 'how is the battery', reply, [obs('termux-battery-status', '80')],
                                lambda: saved.append(1))
@@ -262,10 +263,9 @@ class TurnEnd(unittest.TestCase):
         self.assertIn('✗ I fixed the charger.', err.getvalue())
         self.assertEqual(thread_tree.labels(session['thread_tree']), ['battery check'])
         self.assertEqual(saved, [1])
-        self.assertEqual(run.call_args_list[0].args[0], [lane_mods.SAY, '-s'])
-        self.assertEqual(run.call_args_list[1].args[0], [lane_mods.SAY, 'Battery is 80%. I fixed the charger.'])
+        native.assert_called_once_with({'op':'speak','text':'Battery is 80%. I fixed the charger.','state':str(h.STATE),'generation':0})
         event = json.loads((h.STATE / 'usage.jsonl').read_text().splitlines()[-1])
-        self.assertEqual((event['kind'], event['status'], event['exit_code']), ('hook:voice', 'played', 0))
+        self.assertEqual((event['kind'], event['status'], event['pid']), ('hook:voice', 'queued', 123))
 
     def test_voice_short_and_off(self):
         self.assertEqual(lane_mods.spoken('**Yes.** The battery is fine.\n\n- one\n- two', False), 'Yes. The battery is fine.')

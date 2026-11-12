@@ -19,7 +19,6 @@ import shlex
 import subprocess
 import sys
 import time
-import speech_lock
 
 import mod_switches
 import narrator
@@ -107,16 +106,13 @@ def speak(answer: str) -> None:
     line = spoken(answer, mod_switches.setting('voice-mode', h.STATE) != 'short')
     if not line or not os.path.exists(SAY):
         return
-    with speech_lock.acquire():
-        try:
-            subprocess.run([SAY, '-s'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
-        except (OSError, subprocess.SubprocessError):
-            pass
-        result = subprocess.run([SAY, line], stdin=subprocess.DEVNULL, capture_output=True, text=True)
-    _hook_event('voice', {'status': 'played' if result.returncode == 0 else 'error',
-                         'exit_code': result.returncode, 'characters': len(line), 'error': result.stderr.strip()})
-    if result.returncode:
-        say_err('Voice failed: ' + (result.stderr.strip() or f'exit {result.returncode}'))
+    from cli import native
+    try:
+        result=native({'op':'speak','text':line,'state':str(h.STATE.resolve()),
+                       'generation':mod_switches.setting('voice-generation',h.STATE)})
+        _hook_event('voice',{'status':'queued','characters':len(line),**result})
+    except Exception as exc:
+        _hook_event('voice',{'status':'error','error':str(exc)})
 
 
 def grade(engine: str, answer: str, history: list, log_path) -> None:
