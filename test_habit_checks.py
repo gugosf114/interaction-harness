@@ -50,5 +50,13 @@ class LetMeKnowHowItGoesTests(unittest.TestCase):
         self.assertEqual(shown('The mode is 640. **let me know how it goes.**'), 'The mode is 640.')
 
 
+class HaveAGreatDayTests(unittest.TestCase):
+    def test_have_a_great_day_is_listed_and_cut(self):
+        listed = {habit_checks.plain(sentence) for sentence in habit_checks.CUT_SENTENCES}
+        self.assertIn(habit_checks.plain('Have a great day.'), listed)
+        self.assertEqual(shown('The mode is 640. Have a great day.'), 'The mode is 640.')
+        self.assertEqual(shown('The mode is 640. **have a great day.**'), 'The mode is 640.')
+
+
 if __name__ == '__main__':
     unittest.main()

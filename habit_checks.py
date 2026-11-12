@@ -18,6 +18,7 @@ import re
 # Each entry is one whole sentence. The history row or the date that caused it goes in a comment on its line.
 CUT_SENTENCES: list[str] = [
     'Let me know how it goes.',  # 2026-11-12: George asked the gate to cut it from every answer.
+    'Have a great day.',  # 2026-11-12: George asked the gate to cut it from every answer.
 ]
 
 # Functions (answer, asked) -> reason or None.
