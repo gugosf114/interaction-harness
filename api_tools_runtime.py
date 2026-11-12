@@ -222,8 +222,9 @@ class Runtime:
         self.prepared=True
         return prepared
 
-    def send(self,senses,client,*,model,effort,max_output_tokens,messages,system_pages,schema,prefix_hash,system_blocks=None):
+    def send(self,senses,client,*,model,effort,max_output_tokens,messages,system_pages,schema,prefix_hash,system_blocks=None,knobs=None):
         from senses import CONTRACT, SensesError
+        knobs=knobs or {}
         if self.settings.on('mcp_remote') and self.options['mcp_bridge_url'] and not self.bridge:
             from api_mcp_relay import PhoneRelay
             self.bridge=PhoneRelay(self.options['mcp_bridge_url'],self.options['mcp_bridge_token_file'],
@@ -264,6 +265,7 @@ class Runtime:
             if self.settings.on('skills'):
                 if not self.options['anthropic_skills']:raise ValueError('Configure versioned anthropic_skills in tools.json options.')
                 params['container']={'skills':copy.deepcopy(self.options['anthropic_skills'])}
+        if knobs:params.update(knobs)
         for step in range(self.max_steps):
             check_request_size(params,self.engine)
             if self.engine=='openai':

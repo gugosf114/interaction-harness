@@ -17,7 +17,7 @@ def main():
         print('Unknown harness entry point.', file=sys.stderr)
         return 2
     read_fd, write_fd = os.pipe()
-    values = {name: os.environ[name] for name in ('OPENAI_API_KEY','ANTHROPIC_API_KEY','DEFAULT_ENGINE','OPENAI_MODEL','ANTHROPIC_MODEL','HARNESS_STATE_DIR') if os.environ.get(name)}
+    values = {name: os.environ[name] for name in ('OPENAI_API_KEY','ANTHROPIC_API_KEY','DEFAULT_ENGINE','OPENAI_MODEL','ANTHROPIC_MODEL','HARNESS_STATE_DIR','GEMINI_API_KEY','GEMINI_MODEL','OPENROUTER_API_KEY','OPENROUTER_BASE_URL','OPENROUTER_MODEL','GLM_OPENAI_URL','GLM_MODEL','VERTEX_MODEL') if os.environ.get(name)}
     values['HARNESS_CALLER_CWD']=os.getcwd()
     parent_socket, child_socket = socket.socketpair()
     command = ['proot-distro', 'login', 'debian', '--', str(ROOT / '.venv/bin/python'),

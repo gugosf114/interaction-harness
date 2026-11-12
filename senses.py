@@ -114,17 +114,20 @@ class TurnSenses:
         if self.counts['total'] and not self.web:raise SensesError('Provider returned a lookup while --no-web was active.')
         if self.counts['total']>self.web_max:raise SensesError('Provider exceeded the turn web lookup ceiling; no answer was displayed.')
 
-    def send(self,client,*,model,effort,max_output_tokens,messages,system_pages,schema,prefix_hash,system_blocks=None):
+    def send(self,client,*,model,effort,max_output_tokens,messages,system_pages,schema,prefix_hash,system_blocks=None,knobs=None):
+        # knobs: pre-mapped, already-accepted request knobs (temperature/stop/service_tier...),
+        # keyed by this engine's real API field names. Empty/None sends nothing new.
+        knobs=knobs or {}
         if self.runtime:
             return self.runtime.send(self,client,model=model,effort=effort,max_output_tokens=max_output_tokens,
-                messages=messages,system_pages=system_pages,schema=schema,prefix_hash=prefix_hash,system_blocks=system_blocks)
+                messages=messages,system_pages=system_pages,schema=schema,prefix_hash=prefix_hash,system_blocks=system_blocks,knobs=knobs)
         self.last_usage={};self.last_responses=[]
         prepared=materialize(messages,self.engine)
         if self.engine=='openai':
             params=dict(model=model,input=prepared,reasoning={'effort':effort},max_output_tokens=max_output_tokens,
                 text={'format':{'type':'json_schema','name':'interaction_reply','strict':True,'schema':schema}},
                 prompt_cache_key='interaction-harness-'+prefix_hash[:24],store=False,
-                instructions=CONTRACT,tools=copy.deepcopy(self.tools))
+                instructions=CONTRACT,tools=copy.deepcopy(self.tools),**knobs)
             if self.web:
                 params['include']=['web_search_call.action.sources']
                 remaining=self.web_max-self.counts['total']
@@ -137,7 +140,7 @@ class TurnSenses:
                 cache_control={'type':'ephemeral'},
                 system=system_blocks if system_blocks is not None else [{'type':'text','text':page,'cache_control':{'type':'ephemeral'}} for page in system_pages],
                 messages=prepared[len(system_pages):],tools=copy.deepcopy(self.tools),
-                tool_choice={'type':'auto','disable_parallel_tool_use':True})
+                tool_choice={'type':'auto','disable_parallel_tool_use':True},**knobs)
             self.paused_content=[]
             for continuation in range(9):
                 check_request_size(params,self.engine)

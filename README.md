@@ -737,10 +737,118 @@ The small model is `claude-haiku-5-5` on `george` and `gpt-6-luna` on `g1`, on t
 
 **Where these switch on.** `harness.MODS_ON` is `False` on a plain import, so the unit tests see the gate as before. The command-line entry point sets it to `True`, next to `PAGES_FILE`.
 
+## More lanes
+
+Two lanes shipped first: `george` (Anthropic) and `g1` (OpenAI). Four more brains
+answer through the same four-field reply, the same display gates, the same pages,
+sessions, history and loop. Each provider is its own module (`extra_lanes.py`); the
+edit to `harness.request_reply` is a single dispatch branch. Each lane is an
+OpenAI-compatible Chat Completions endpoint, except Vertex, which is Anthropic's
+Messages shape over Google's rawPredict HTTPS endpoint.
+
+| Shortcut | `--engine` | Model (default) | Key | Reply |
+|---|---|---|---|---|
+| `g2` | `gemini` | `gemini-3.1-pro-preview` | `state/gemini-api-key` | strict four-field JSON |
+| `g3` | `openrouter` | `openai/gpt-4o-mini` | `state/openrouter-api-key` (none yet) | strict four-field JSON |
+| `g4` | `glm` | `glm-george` (George's LoRA v11) | none (public Modal endpoint) | plain text, wrapped as an observation |
+| `gv` | `vertex` | `claude-sonnet-4-5` | gcloud token (ADC) | strict four-field JSON (emit_reply tool) |
+
+```sh
+g2 "Explain chmod 640."
+g3 "Explain chmod 640."
+g4 "Explain chmod 640."
+harness --engine gemini "Explain chmod 640."
+```
+
+The shortcuts carry the same flags as `george` and `g1` (`--effort max --loop -y`).
+A lane's default model, endpoint and key are overridable by environment variable
+(`GEMINI_MODEL`, `OPENROUTER_BASE_URL`, `GLM_OPENAI_URL`, …) or by a saved file in
+`state/`.
+
+- **Gemini (`g2`).** Strongest text model the key could call on 2026-11-11, found
+  from a live model list, is `gemini-3.1-pro-preview`. Strict `response_format`
+  json_schema returns the four fields. Reasoning effort is sent as
+  `reasoning_effort` (mapped to low/medium/high). This endpoint exposes **no
+  hosted web search or page fetch and no PDF input**; a web question is answered
+  from training knowledge, and the lane never claims a lookup. Image input is
+  available on the endpoint but not yet wired here.
+- **Open models (`g3`).** Any OpenAI-compatible endpoint behind a base URL and a
+  key: OpenRouter and the like. No key exists yet. To turn it on, in native
+  Termux: `export OPENROUTER_API_KEY=...` then
+  `python ~/interaction-harness/save_lane_key.py openrouter` (optionally
+  `export OPENROUTER_BASE_URL=...` and `export OPENROUTER_MODEL=...` first). Until
+  then the lane answers with one line naming the missing key.
+- **GLM (`g4`).** George's own fine-tuned GLM-4.5-Air + LoRA (adapter v11), served
+  OpenAI-compatible on Modal at `gugosf--glm-george-openai.us-east.modal.run`. The
+  model returns plain text, so the client wraps its answer as a four-field
+  observation; this lane answers but proposes no commands. The endpoint scales to
+  zero after three idle minutes, so the first call after a pause cold-starts for
+  about 6–10 minutes. If the app is torn down, bring it up with
+  `deb modal deploy /root/.glm/modal/app.py` (profile `gmail`, workspace `gugosf`,
+  app `glm-george`).
+- **Claude through Vertex (`gv`).** `gcloud` is signed in as George on project
+  `bakers-agent`. Claude models are recognized through Vertex in the `global`
+  location (a model name returns HTTP 429, not 404 or 403), so the lane is built
+  and calls the rawPredict endpoint with a gcloud token. Usage bills to project
+  `bakers-agent`'s billing account, where George's Google Cloud credit sits. On
+  2026-11-11 every call returns **HTTP 429**: *"Quota exceeded for
+  aiplatform.googleapis.com/global_online_prediction_requests_per_base_model with
+  base model: anthropic-claude-sonnet-4-5. Please submit a quota increase
+  request."* The lane works once George requests Claude quota in the Vertex AI
+  console for project `bakers-agent`.
+
+## Ask several at once
+
+```sh
+both "Which is faster, chmod or chown, and why?"
+both --lanes gemini,g1,george "Explain chmod 640."
+```
+
+`both "QUESTION"`, and `/both QUESTION` inside a `george` or `g1` chat, send one
+question to every working lane in parallel. Each answer passes the display gates on
+its own, prints under a fixed label line naming the model (`── gemini · …`), and is
+saved to that lane's own session (`both-<lane>`) and to history. `--lanes a,b,c`
+picks the set; the default is every lane that has a usable key, plus the public GLM
+lane. Vertex is included only when named. `both` answers text; it does not execute.
+
+## The knobs
+
+Flags, and the same words as chat commands, expose request controls the
+subscription never did. Nothing here changes a default; every knob is off until set.
+
+| Flag | Meaning |
+|---|---|
+| `--temperature N` | Sampling temperature (0–2). |
+| `--seed N` | Fixed sampling seed for repeatable output. |
+| `--stop WORD` | A stop string; repeatable (up to four). |
+| `--prefill TEXT` | Force the first words of the answer. |
+| `--service-tier TIER` | Request a faster service tier. |
+
+Each knob is sent only where the model accepts it. A knob the model refuses prints
+the provider's exact error once and the lane carries on without it. `--prefill` is
+enforced on the validated `direct_answer`, because the strict four-field schema
+forbids a true assistant-message prefill. Support measured live against each model
+on 2026-11-11:
+
+| Knob | openai (gpt-6.1-sol) | anthropic (opus-5-5) | gemini | openrouter | glm | vertex |
+|---|---|---|---|---|---|---|
+| temperature | refused (HTTP 400) | refused (HTTP 400) | yes | yes | yes | yes |
+| seed | no param | no param | refused (unknown field) | yes | no | no |
+| stop | no param | yes (`stop_sequences`) | yes | yes | no | yes (`stop_sequences`) |
+| prefill | answer layer | answer layer | answer layer | answer layer | answer layer | answer layer |
+| service tier | yes | yes | yes | yes | no | no |
+
+The exact refusal text for the two built-in lanes is recorded in `knobs.py`
+(`BUILTIN_SUPPORT`); the new lanes' support map is in `extra_lanes.py`
+(`Lane.knob_support`), and anything a provider still rejects live is dropped with
+its exact error by the chat sender's drop-and-retry.
+
+Tests: `test_extra_lanes.py` (lanes, knobs, and `both`, all with fake clients).
+
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool test_agentd test_agentd_doors test_lane_mods test_gate_rules test_judge'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool test_agentd test_agentd_doors test_lane_mods test_gate_rules test_judge test_extra_lanes' 
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes

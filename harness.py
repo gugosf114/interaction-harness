@@ -420,7 +420,14 @@ def request_reply(
     log_path: Path | None = None, events: list | None = None, history: list | None = None,
     execution_confirmed: bool = False, request_context: str | None = None,
     web: bool = True, web_max: int = 5, attachments=None, api_runtime=None, native_tool_evidence=None,
+    knobs=None,
 ) -> HarnessReply:
+    import extra_lanes
+    if extra_lanes.is_lane(engine):
+        return extra_lanes.request_reply(
+            raw_input, client=client, model=model, engine=engine, effort=effort, timeout=timeout,
+            log_path=log_path, events=events, history=history, execution_confirmed=execution_confirmed,
+            request_context=request_context, web=web, web_max=web_max, attachments=attachments, knobs=knobs)
     if len(raw_input) > MAX_INPUT_CHARS:
         raise HarnessError(f'Input exceeds {MAX_INPUT_CHARS} characters.')
     raw_input = raw_input.strip()
@@ -428,6 +435,11 @@ def request_reply(
         raise HarnessError('Input is empty.')
     prefix = load_prefix()
     if engine not in {'openai','anthropic'}: raise HarnessError('Unknown engine.')
+    import knobs as knobs_mod
+    kb = knobs or knobs_mod.Knobs()
+    knob_wire, knob_notes = knobs_mod.resolve_builtin(engine, kb)
+    for note in knob_notes:
+        print(note, file=sys.stderr)
     model = model or (DEFAULT_MODEL if engine == 'openai' else ANTHROPIC_MODEL)
     if client is None:
         if engine == 'openai':
@@ -462,7 +474,7 @@ def request_reply(
         try:
             response=senses.send(client,model=model,effort=effort,max_output_tokens=MAX_OUTPUT_TOKENS,
                 messages=messages,system_pages=system_pages,schema=schema,prefix_hash=PREFIX_SHA256,
-                system_blocks=anthropic_system(system_pages,len(base_pages)))
+                system_blocks=anthropic_system(system_pages,len(base_pages)),knobs=knob_wire)
             event['response_id'] = response.id
             event['model_returned'] = response.model
             usage = getattr(response, 'usage', None)
@@ -510,6 +522,8 @@ def request_reply(
                     raise HarnessError('Both replies failed the output gate. No answer was displayed.') from exc
                 messages=senses.repair(messages,response,str(exc))
                 continue
+            if kb.prefill:
+                reply=reply.model_copy(update={'direct_answer':knobs_mod.apply_prefill(reply.direct_answer,kb.prefill)})
             event['status'] = 'accepted'
             event['intent'] = reply.intent
             event['answer_chars'] = len(reply.direct_answer)

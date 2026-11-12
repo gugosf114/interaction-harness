@@ -13,6 +13,10 @@ import recall_cli
 import senses_cli
 import api_tools_cli
 import lane_mods
+import extra_lanes
+import knobs as knobs_mod
+
+ALL_ENGINES = ['openai', 'anthropic', *extra_lanes.LANES.keys()]
 from execution_images import prepare_execution
 from lookup_gate import turn_metadata
 from phonetics import normalize
@@ -61,6 +65,7 @@ def run_chat(args, model):
     if args.yes: options.append('--yes')
     options.extend(senses_cli.common_options(args))
     options.extend(recall_cli.common_options(args))
+    options.extend(knobs_mod.from_args(args).cli_options())
     last_status=0
     lane_mods.session_start()
     loop_options=options if args.loop else [*options,'--loop','--max-turns',str(args.max_turns)]
@@ -91,6 +96,16 @@ def run_chat(args, model):
             try:
                 if api_tools_cli.chat_command(raw,args,h.STATE,model):continue
             except ValueError as exc:print(str(exc),file=sys.stderr);last_status=2;continue
+            if raw.strip()=='/both' or raw.startswith('/both '):
+                question=raw[len('/both'):].strip()
+                if not question:print('Usage: /both QUESTION',file=sys.stderr);last_status=2;continue
+                bopts=['--engine',args.engine,'--effort',args.effort,'--timeout',str(args.timeout),
+                       '--usage-log',str(args.usage_log),'--session',sid,'--turns',str(args.turns),
+                       '--history-chars',str(args.history_chars),'--both']
+                if args.no_normalize:bopts.append('--no-normalize')
+                bopts.extend(senses_cli.common_options(args))
+                bopts.extend(knobs_mod.from_args(args).cli_options())
+                last_status=main([*bopts,'--',question]);continue
             try:attachment_flags,raw=senses_cli.chat_input(raw)
             except ValueError as exc:print(str(exc),file=sys.stderr);last_status=2;continue
             last_status=main([*options,*api_tools_cli.options(args),*attachment_flags,'--',raw])
@@ -102,7 +117,7 @@ def run_chat(args, model):
 def main(argv=None):
     parser=argparse.ArgumentParser(description='Direct answers, bounded memory, optional confirmed Termux execution.')
     parser.epilog='Screen: in an approved --loop command, screen snap or look PATH attaches the file to the next model turn. Run card screen for targets and commands.'
-    parser.add_argument('--engine',choices=['openai','anthropic'],default=os.environ.get('DEFAULT_ENGINE','openai'))
+    parser.add_argument('--engine',choices=ALL_ENGINES,default=os.environ.get('DEFAULT_ENGINE','openai'))
     parser.add_argument('--model',default=None)
     parser.add_argument('--effort',choices=['low','medium','high','xhigh','max'],default=h.DEFAULT_EFFORT,help='Reasoning effort on either engine (default: high).')
     parser.add_argument('--chat','--interactive',dest='chat',action='store_true',help='Stay open for multiple turns; automatic on an interactive terminal with no input.')
@@ -127,12 +142,16 @@ def main(argv=None):
     advisor.add_flags(parser)
     api_tools_cli.add_flags(parser)
     recall_cli.add_flags(parser)
+    knobs_mod.add_flags(parser)
+    parser.add_argument('--both',action='store_true',help='Ask every working lane the same question at once.')
+    parser.add_argument('--lanes',default=None,metavar='A,B,C',help='With --both: the comma-separated lane set. Default: every lane with a key.')
     parser.add_argument('text',nargs='*',help='Quoted input, or pipe text on stdin.')
     args=parser.parse_args(argv)
     senses_cli.validate_args(parser,args)
     advisor.validate_args(parser,args)
     recall_cli.validate_args(parser,args)
-    if args.engine not in {'openai','anthropic'}: parser.error('DEFAULT_ENGINE must be openai or anthropic.')
+    knobs_mod.validate(parser,args)
+    if args.engine not in set(ALL_ENGINES): parser.error('DEFAULT_ENGINE must be one of: '+', '.join(ALL_ENGINES)+'.')
     if not 1<=args.timeout<=3600: parser.error('--timeout must be between 1 and 3600 seconds.')
     if not 1<=args.turns<=1000000: parser.error('--turns must be between 1 and 1000000.')
     if args.history_chars is None: args.history_chars=HISTORY_CHARS_DEFAULT.get(args.engine,650000)
@@ -145,13 +164,24 @@ def main(argv=None):
     if args.listen and args.text: parser.error('Use --listen or typed text, not both.')
     if args.chat and (args.listen or args.recall is not None): parser.error('--chat uses typed input; use --listen or --recall separately.')
     if args.recall is not None and (args.text or args.listen or args.execute): parser.error('--recall searches history without input or execution.')
-    model=args.model or os.environ.get('OPENAI_MODEL' if args.engine=='openai' else 'ANTHROPIC_MODEL') or (h.DEFAULT_MODEL if args.engine=='openai' else h.ANTHROPIC_MODEL)
+    if args.engine in extra_lanes.LANES:
+        model=extra_lanes.lane_model(extra_lanes.LANES[args.engine],args.model)
+    else:
+        model=args.model or os.environ.get('OPENAI_MODEL' if args.engine=='openai' else 'ANTHROPIC_MODEL') or (h.DEFAULT_MODEL if args.engine=='openai' else h.ANTHROPIC_MODEL)
     if args.advisor is not None:return advisor.run(args,model)
     if args.tools:
         try:sys.stdout.write(api_tools_cli.settings(args,h.STATE).listing(model));return 0
         except (ValueError,OSError) as exc:print(str(exc),file=sys.stderr);return 2
     seeded=recall_cli.start_session(args)  # --fork, --from and the golden session seed a new session
     if seeded is not None:return seeded
+    if args.both:
+        import both
+        if args.listen or args.recall is not None or args.execute or args.loop:
+            parser.error('--both answers text questions; it does not use --listen, --recall, --exec or --loop.')
+        if args.text: question=' '.join(args.text)
+        elif not sys.stdin.isatty(): question=sys.stdin.read(h.MAX_INPUT_CHARS+1)
+        else: parser.error('Supply a question for --both.')
+        return both.run(args,question)
     if args.chat or (not args.text and not args.listen and args.recall is None and sys.stdin.isatty()):
         return run_chat(args,model)
     switched=reply_judge.typed(args)  # /on judge, /off judge typed as the whole question
@@ -227,7 +257,8 @@ def main(argv=None):
                                       log_path=args.usage_log,events=events,history=past,execution_confirmed=supported,
                                       request_context=cleaned,web=not args.no_web,web_max=args.web_max,attachments=turn_attachments,
                                       api_runtime=api_tools_cli.runtime(args,h.STATE,sid,native),
-                                      native_tool_evidence=api_tools_cli.native_evidence(last_exchange if args.loop else latest))
+                                      native_tool_evidence=api_tools_cli.native_evidence(last_exchange if args.loop else latest),
+                                      knobs=knobs_mod.from_args(args))
                 store.finish(row_id,reply,events)
                 exchange={'raw_input':current_raw,'normalized_input':current,'reply':reply.model_dump(),'engine':args.engine,'model':model}
                 if args.loop and step==1:exchange['loop_context']=loop_context['content']
