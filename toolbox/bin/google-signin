@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# google-signin [--print] [--wait SECONDS] [NAME ...] : open Google's consent page on George's screen for each account; George taps Allow.
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login debian -- python3 "$here/../debian/google-accounts.py" signin "$@"

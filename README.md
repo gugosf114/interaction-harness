@@ -243,9 +243,9 @@ George's subscription setup can drive his phone, laptop, mail, money tools, bake
 
 **The pieces.**
 
-- `tools_block.txt` — the index. One line per family, ending in `Print: card NAME`. Thirty-one families and 4,411 characters since the whole-phone pass. The first nineteen-family index measured 1,044 tokens on Claude Opus 5.5 and 739 on GPT-6.1 Sol.
+- `tools_block.txt` — the index. One line per family, ending in `Print: card NAME`. Thirty-three families and 4,787 characters since the whole-phone pass. The first nineteen-family index measured 1,044 tokens on Claude Opus 5.5 and 739 on GPT-6.1 Sol.
 - `toolbox/cards/NAME.md` — one card per family, each under 4,000 characters: what it does, the exact commands with real argument shapes, what comes back, which side it runs on, and the one known failure.
-- `toolbox/bin/` — the commands the model types. `toolbox/debian/` — the Debian-side halves of four of them.
+- `toolbox/bin/` — the commands the model types. `toolbox/debian/` — the Debian-side halves of some of them.
 - `toolbox/install.sh` — links every file in `toolbox/bin` into `$PREFIX/bin`. Safe to run again. It never replaces a real file.
 - `toolbox/hrun.py` — runs one command exactly as the harness does and prints its exit code.
 
@@ -259,12 +259,17 @@ George's subscription setup can drive his phone, laptop, mail, money tools, bake
 | `edit-exact FILE OLD NEW` | Replaces OLD with NEW only when OLD appears exactly once. Exit 1 and nothing written otherwise. |
 | `text-pdf OUT.pdf TEXT` | Makes a PDF that holds TEXT (or the text on stdin). |
 | `page-text URL` | Opens URL in the signed-in phone Chrome on its hidden screen and prints the page text. |
-| `mail-unread berkeley\|gmail [N]` | Unread count of the inbox and the newest N. Marks nothing read. |
+| `google-accounts` | Every Google account the phone can reach, and what each allows: mail, calendar, drive. |
+| `mail-unread NAME\|all [N]` | Unread count of the inbox, for one account or for all, and the newest N. Marks nothing read. |
+| `google-mail NAME VERB` | George's mail reader and reply sender, for any account by name. |
+| `google-calendar NAME\|all today\|tomorrow\|DATE` | The day's events. Also `list [DAYS]`, `read EVENT_ID`, `create`. |
+| `google-drive NAME list\|read\|create` | Lists and searches files, reads one, uploads one. |
+| `google-signin [NAME ...]` | Opens Google's consent page on the phone for each account, one after another. The operator taps Allow. |
 | `paypal-get PATH` | One read-only GET on the live PayPal API. |
 | `bakery-stats [DAYS]` | The bakery's site, search, listing and social numbers. |
 | `cloud-check NAME` | One read-only call that shows a cloud key still works. Prints no key. |
 | `mcp TOOL 'JSON'` | Calls one of the 55 tools of the phone's own MCP server. `mcp tools` lists them. Exit 1 when the tool reports an error. |
-| `rish -c 'COMMAND'` | Runs a command on the phone through Shizuku, at shell rights, with no adb. |
+| `rish -c 'COMMAND'` | Runs a command on the phone through Shizuku, at shell rights, with no adb. Prints the output in order and exits with the command's own code. |
 | `media-volume [PERCENT]` | Prints the media volume as a percent, or sets it. |
 
 **Install, or re-install after a clone.** In native Termux:
@@ -282,6 +287,8 @@ sh ~/interaction-harness/toolbox/install.sh
 - `test_toolbox.py` checks the caps, that the index and the cards name the same families, control characters, key-shaped strings, the card printer, the installer and `edit-exact`.
 
 **The whole-phone pass (Nov 11, 2026).** A scan showed the lanes knew a small part of the phone. Eleven families were added: `mcp-see`, `mcp-touch` and `mcp-apps` (all 55 tools of the phone's MCP server, with argument shapes taken from its own `tools/list`), `phone-settings`, `phone-hardware`, `shizuku`, `devices`, `agent-scripts`, `agent-box`, `programs` and `boot`. Every read-only form ran through the harness's own runner; every form that taps, sends, calls or changes a setting is listed without a run.
+
+**Google accounts.** The account names live in one file on the phone, `/root/.gmail/accounts.json`, never in git: a name, its address, and optionally an older mail-only token or a service key. `google-signin` asks Google for mail, calendar and drive in one consent, catches the answer on `localhost:8765`, checks that the address that allowed it is the one named, and saves the token as `/root/.gmail/accounts/NAME.json`, readable by the owner only. After each answer it sends the browser straight to the next account's page, so several accounts are one sitting. `test_google_accounts.py` covers the list, the day window, the calendar merge, the consent link and the sign-in bookkeeping without reaching Google.
 
 **Repaired on the phone that day.** These were lost when George moved from the Z Flip 7 to the Pixel 11, and their short names work again: `deb recall` (the file had a letter n where its line breaks belong), `deb mbc-stats` and the mail scripts (the Python folder `/root/.gmail/venv` was gone; gcloud's selected account was a service account), `deb phone-do`, `deb phone-ask`, `deb assistant` and `deb support-chat` (the installed copy and the errand profile were copied back from the old phone), `qr`, Modal, `playwright`, `apkinfo`, `check-model` and `yalta` (missing Python modules), the Bright Data program and `lt` (missing Node packages), `gemini` on both sides, `grok` (the program; its sign-in is still needed), and `termux-notification-list` (Termux:API had no notification access).
 

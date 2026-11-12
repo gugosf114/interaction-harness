@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# google-mail NAME test | list N [QUERY] | thread THREAD_ID | unread [N] | markread ID ... | send MESSAGE_ID /FULL/PATH/body.txt
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login debian -- python3 "$here/../debian/google-accounts.py" mail "$@"

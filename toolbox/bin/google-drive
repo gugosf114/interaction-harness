@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# google-drive NAME list [N] ['WORDS'] | read FILE_ID [/FULL/PATH/out] | create /FULL/PATH/file ['TITLE']
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login debian -- python3 "$here/../debian/google-accounts.py" drive "$@"

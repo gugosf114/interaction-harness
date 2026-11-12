@@ -16,7 +16,7 @@ INDEX = h.ROOT / 'tools_block.txt'
 INDEX_LINE = re.compile(r'^- ([a-z0-9-]+): .+ Print: card ([a-z0-9-]+)$')
 FAMILIES = ['files', 'documents', 'phone', 'mcp-see', 'mcp-touch', 'mcp-apps', 'phone-settings', 'phone-hardware', 'shizuku',
             'devices', 'screen', 'phone-browser', 'laptop', 'yana-phone', 'tv', 'voice', 'alerts', 'timers',
-            'calls', 'models', 'sessions', 'memory', 'mail', 'money', 'bakery', 'cloud', 'github',
+            'calls', 'models', 'sessions', 'memory', 'mail', 'calendar', 'drive', 'money', 'bakery', 'cloud', 'github',
             'agent-scripts', 'agent-box', 'programs', 'boot', 'chats', 'lanes', 'usage']
 CONTROLS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
 KEY_SHAPES = [re.compile(pattern) for pattern in (
@@ -111,7 +111,10 @@ class CommandTests(unittest.TestCase):
             with self.subTest(script=script):
                 self.assertEqual(run('bash', str(BOX / 'debian' / script)).returncode, 2)
         self.assertEqual(run('bash', str(BOX / 'debian' / 'paypal-get.sh'), 'https://elsewhere.example/v2/x').returncode, 2)
-        self.assertEqual(run(sys.executable, str(BOX / 'debian' / 'mail-unread.py'), 'nobody').returncode, 2)
+        accounts = str(BOX / 'debian' / 'google-accounts.py')
+        for arguments in ([], ['nothing'], ['unread'], ['mail'], ['calendar'], ['drive']):
+            with self.subTest(arguments=arguments):
+                self.assertEqual(run(sys.executable, accounts, *arguments).returncode, 2)
         self.assertEqual(run(sys.executable, str(BOX / 'bin' / 'mcp')).returncode, 2)
         self.assertEqual(run(sys.executable, str(BOX / 'bin' / 'mcp'), 'android_tap', '{not json').returncode, 2)
         self.assertEqual(run(sys.executable, str(BOX / 'bin' / 'mcp'), 'android_tap', '[1, 2]').returncode, 2)

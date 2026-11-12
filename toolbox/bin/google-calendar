@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# google-calendar NAME|all today|tomorrow|YYYY-MM-DD ; google-calendar NAME list [DAYS] | read EVENT_ID | create 'TITLE' 'START' 'END' ['PLACE']
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login debian -- python3 "$here/../debian/google-accounts.py" calendar "$@"

@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# google-accounts : every Google account this phone can reach, and what each one allows (mail, calendar, drive).
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login debian -- python3 "$here/../debian/google-accounts.py" accounts "$@"
