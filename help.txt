@@ -156,6 +156,10 @@ recall, /fork [NEWNAME], /rewind [N]. Session commands: sessions, session
 show|export|fork|rewind|cut|splice|golden (card lanes). Notes: note
 add|show|list (card memory).
 
+Second gate, typed in a chat:
+  /off judge, /on judge The judge on the other engine reads each reply before
+                        it is shown; a fail gives one corrective retry.
+
 Second gate, typed in the shell (a lane can type them too; see card lessons):
   rule add NAME --row N --action strip_sentence|reject --pattern 'REGEX' --bad 'SENTENCE'
                         Add a gate rule. Refused unless it matches its own bad

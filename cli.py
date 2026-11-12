@@ -8,6 +8,7 @@ import sys
 
 import harness as h
 import advisor
+import reply_judge
 import recall_cli
 import senses_cli
 import api_tools_cli
@@ -83,6 +84,7 @@ def run_chat(args, model):
             if handled:continue
             if spoken:raw=spoken
             handled=recall_cli.chat_command(raw,options,args)  # /on recall, /off recall, /fork, /rewind
+            if handled is None:handled=reply_judge.chat_switch(raw,h.STATE)  # /on judge, /off judge
             if handled is not None:last_status=handled;continue
             # Only a line the operator types reaches the advisor. It answers him and does not make the working model speak.
             if advisor.is_trigger(raw):last_status=main([*options,*advisor.chat_arguments(raw,args)]);continue
@@ -152,7 +154,9 @@ def main(argv=None):
     if seeded is not None:return seeded
     if args.chat or (not args.text and not args.listen and args.recall is None and sys.stdin.isatty()):
         return run_chat(args,model)
-    store=None; row_id=None; events=[]; reply=None; execution=None
+    switched=reply_judge.typed(args)  # /on judge, /off judge typed as the whole question
+    if switched is not None:return switched
+    store=None; row_id=None; events=[]; reply=None; execution=None;second=reply_judge.Second()
     try:
         store=Store(h.STATE)
         if args.recall is not None:
@@ -216,7 +220,10 @@ def main(argv=None):
                 # Past-chat evidence for the operator's message: one data message at the tail, directly before the message.
                 recalled=recall_cli.notes(args,session,cleaned,row_id) if step==1 else None
                 if recalled:past.append({'role':'user','content':recalled})
-                reply=h.request_reply(current,engine=args.engine,model=model,effort=args.effort,timeout=args.timeout,
+                # The judge on the other engine reads the reply before it is shown; a fail gives one corrective retry.
+                judged=dict(turns=session['turns'],step=step,loop=args.loop,
+                            renew=lambda:{'api_runtime':api_tools_cli.runtime(args,h.STATE,sid,native)})
+                reply=second.request_reply(current,judge_turn=judged,engine=args.engine,model=model,effort=args.effort,timeout=args.timeout,
                                       log_path=args.usage_log,events=events,history=past,execution_confirmed=supported,
                                       request_context=cleaned,web=not args.no_web,web_max=args.web_max,attachments=turn_attachments,
                                       api_runtime=api_tools_cli.runtime(args,h.STATE,sid,native),
@@ -225,6 +232,7 @@ def main(argv=None):
                 exchange={'raw_input':current_raw,'normalized_input':current,'reply':reply.model_dump(),'engine':args.engine,'model':model}
                 if args.loop and step==1:exchange['loop_context']=loop_context['content']
                 metadata=turn_metadata(events);exchange.update(metadata)
+                second.record(store,row_id,exchange)
                 if turn_attachments:exchange['attachments']=turn_attachments
                 if recalled:exchange['recall_notes']=recalled
                 if args.loop:exchange['loop_step']=step

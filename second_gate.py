@@ -7,6 +7,7 @@ rules and never call a judge.
 The parts:
   gate_rules.py     the operator's gate rules kept as data (state/gate_rules.json) and the `rule` command
   habit_checks.py   habits no regular expression can express, written as checks in code
+  reply_judge.py    the judge on the other engine, with one corrective retry
 """
 from pathlib import Path
 
@@ -15,3 +16,5 @@ def switch_on(config_dir) -> None:
     """config_dir is the installation's state folder, where pages.json and the saved keys are."""
     import gate_rules
     gate_rules.RULES_FILE = Path(config_dir) / 'gate_rules.json'
+    import reply_judge
+    reply_judge.LIVE = True

@@ -547,6 +547,35 @@ See [API_TOOLS_REPORT.md](API_TOOLS_REPORT.md) for one result per provider/tool 
 
 The local gate filters wording with patterns in code. The second gate adds what patterns cannot do. The code is in new modules; `harness.py` and `cli.py` hold only the hooks.
 
+### The judge
+
+After a reply passes the local gate, a second model on the other engine reads it before George sees it: `gpt-6.1-sol` judges the `george` lane, `claude-opus-5-5` judges the `g1` lane, at the lane's own `--effort` and `--timeout`. Every reply is judged, each step of a `--loop` run included.
+
+**The call.** One stateless request. It carries a fixed prompt and one JSON packet, and nothing else: no session history, no operator pages, no tools.
+
+- `request`: what George typed for this turn (the loop's original task on later steps).
+- `command_results`: every command the client ran for this request so far, with exit code and both output streams, clipped as the working model saw them. `tool_uses`: the API-tool receipts of this turn.
+- `reply`: the four fields under review.
+- `context`: whether this is a loop step, whether earlier conversation exists, how many attachments the judge cannot see, the addresses of web sources, and the sentences the client cut under George's gate rules.
+- A packet over 600,000 characters first shortens the output of earlier steps; if it still does not fit, the reply passes unjudged.
+
+**The answer** is strict JSON, `{"verdict": "pass" | "fail", "reason": "..."}`: OpenAI Structured Outputs in strict mode, and `output_config.format` with a JSON schema on Claude. Both were checked with live calls on Nov 11, 2026. The judge fails a reply that answers a different question than the one asked, states a result the recorded results do not support, adds a limit, a warning, an off switch or a question George did not ask for, or reports agreement or intent in place of the work.
+
+**What happens.**
+
+- Pass: the reply is shown.
+- Fail: the working model gets one corrective retry. Its first reply and the judge's reason ride at the tail of the request, so the cached front is unchanged. The second reply is judged too and is shown whatever the verdict. George never gets an empty screen because of the judge.
+- A corrected reply that fails the local gate, or an API error on the retry: the first reply is shown.
+- A judge error, a timeout, a refusal, or an answer that is not the strict JSON: the reply passes through.
+
+**Saved with the turn.** Every verdict and reason goes into `history.db` (column `gate_json`, key `judge`) and into the session exchange (`judge`). Rules that cut or rejected something are saved the same way (`rules_fired`). The judge's own usage goes to `judge.jsonl` next to the usage log, with no packet or reason text; the turn's token counts stay those of the working model.
+
+**The switch.** `/off judge` and `/on judge`, typed in a chat or as the whole question. It ships on. The switch is `judge` in `switches.json` in the lane's state folder.
+
+The judge runs only under the command-line entry point, so unit tests never call a model. Code: `reply_judge.py`; two hooks in `cli.py`. Tests: `test_judge.py`.
+
+**Live proof (Nov 11, 2026).** `verify_second_gate.py --case judge` plants a wrong-question first reply (a `chmod` explanation for "What is the capital of France?") and makes the real judge call and the real corrective retry. On both lanes the judge failed the planted reply with a reason, the working model answered "Paris" on the retry, the judge passed that, and a planted right answer passed with no second call. Exit code 0 on both lanes. Each verdict took 2 to 6 seconds at `max` effort: gpt-6.1-sol used about 830 input and 90 to 130 output tokens, claude-opus-5-5 about 1,320 input and 115 to 390 output tokens.
+
 ### The choice check
 
 When George's request is an instruction, the local gate rejects a reply that asks leave for the ordered work ("Do you want me to…", "Should I proceed?", "Shall I…", "Would you like me to…", "Let me know if you'd like…") or that ends by offering the work instead of doing it. The usual one corrective retry follows. A question about a missing fact is allowed: one that opens with which, what, where, when, who or how, or one that names real alternatives ("Should I use main or dev?"). The check is skipped when the request is not an instruction, and when George asked to be asked first. Code: `choice_check.py`. Tests: `test_choice_check.py`.
@@ -704,7 +733,7 @@ The small model is `claude-haiku-5-5` on `george` and `gpt-6-luna` on `g1`, on t
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool test_agentd test_agentd_doors test_lane_mods'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool test_agentd test_agentd_doors test_lane_mods test_gate_rules test_judge'
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes
