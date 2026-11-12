@@ -9,6 +9,7 @@ import sqlite3
 import subprocess
 import time
 import uuid
+from verify_quiet import quiet, turn_events
 
 from lookup_gate import urls,displayed_sources
 from senses_fixtures import create
@@ -39,7 +40,7 @@ def main():
         fixtures_path.write_text(json.dumps(fixtures,indent=2)+'\n')
     report_path=folder/'report.json'
     report=json.loads(report_path.read_text()) if report_path.exists() else {'engine':args.engine,'cases':{},'attempts':[]}
-    runtime=folder/'runtime';env=os.environ.copy();env.pop('LD_LIBRARY_PATH',None);env['HARNESS_STATE_DIR']=str(runtime)
+    runtime=quiet(folder/'runtime');env=os.environ.copy();env.pop('LD_LIBRARY_PATH',None);env['HARNESS_STATE_DIR']=str(runtime)
     key_name='OPENAI_API_KEY' if args.engine=='openai' else 'ANTHROPIC_API_KEY'
     if not env.get(key_name):
         key_path=args.key_dir/('api-key' if args.engine=='openai' else 'anthropic-api-key')
@@ -65,7 +66,7 @@ def main():
             run=type('Run',(),{'returncode':124,'stdout':(exc.stdout or b'').decode() if isinstance(exc.stdout,bytes) else exc.stdout or '',
                               'stderr':'Verification timed out.'})()
         elapsed=round((time.monotonic()-started)*1000)
-        events=[json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+        events=turn_events([json.loads(line) for line in log.read_text().splitlines()] if log.exists() else [])  # model turns only
         row={};reply={};sources=[];counts={}
         if (runtime/'history.db').exists():
             db=sqlite3.connect(runtime/'history.db');db.row_factory=sqlite3.Row

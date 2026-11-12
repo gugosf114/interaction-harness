@@ -42,7 +42,9 @@ def compact_messages(runtime,client,messages,system_pages):
     """Use the on-demand endpoints. Keep their complete returned context intact."""
     from senses import dump
     if runtime.prepared:return messages
-    count=len(system_pages);past=messages[count:-1]
+    from stamp import is_stamp
+    tail=2 if is_stamp(messages[-1]) else 1  # the rules stamp rides behind the current request
+    count=len(system_pages);past=messages[count:-tail]
     if not any(m.get('role')=='assistant' for m in past) or len(json.dumps(past))<int(runtime.options['compaction_threshold']):return messages
     if runtime.engine=='openai':
         result=client.responses.compact(model=runtime.model,input=past,instructions='\n\n'.join(system_pages))
@@ -50,7 +52,7 @@ def compact_messages(runtime,client,messages,system_pages):
         runtime.compacted={'engine':'openai','messages':context}
         runtime.record('compaction',result.id,'success',usage=dump(result.usage),context_items=len(context))
         # Endpoint output is the canonical context, including retained input items.
-        return [*messages[:count],*context,messages[-1]]
+        return [*messages[:count],*context,*messages[-tail:]]
     result=client.beta.messages.create(model=runtime.model,max_tokens=8192,
         betas=['compact-2026-09-04'],compaction={'type':'summarize'},
         system=[{'type':'text','text':text} for text in system_pages],messages=past)
@@ -58,7 +60,7 @@ def compact_messages(runtime,client,messages,system_pages):
     context=[{'role':'assistant','content':dump(result.content)}]
     runtime.compacted={'engine':'anthropic','messages':context}
     runtime.record('compaction',result.id,'success',usage=dump(result.usage),context_items=len(context))
-    return [*messages[:count],*context,messages[-1]]
+    return [*messages[:count],*context,*messages[-tail:]]
 
 
 def fetch_output_files(runtime,client,response):

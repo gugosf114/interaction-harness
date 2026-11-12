@@ -1,5 +1,10 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""Live alias calls with four-field, display, cache and SQLite receipts."""
+"""Live one-off calls with four-field, display, cache and SQLite receipts.
+
+The aliases carry --loop -y, which runs a returned command and asks for another model turn. These
+checks are about one call that prints and runs nothing, so they call this folder's launcher with the
+alias's engine, model and effort, and without --loop -y.
+"""
 import argparse
 from datetime import datetime, timezone
 import json
@@ -9,6 +14,7 @@ import shlex
 import sqlite3
 import time
 import uuid
+from verify_quiet import quiet, turn_events, without_check_lines
 
 from verify_repl import terminal
 
@@ -21,21 +27,23 @@ def main():
     parser.add_argument('--engine',choices=['openai','anthropic'],required=True)
     args=parser.parse_args()
     alias='g1' if args.engine=='openai' else 'george'
+    model='gpt-6.1-sol' if args.engine=='openai' else 'claude-opus-5-5'
+    launcher=shlex.quote(str(ROOT/'harness'))+' --engine '+args.engine+' --model '+model+' --effort max'
     label='OpenAI' if args.engine=='openai' else 'Claude'
     query=f"echo 'Testing {label} API connection'"
     folder=ROOT/'state'/'diagnostics'/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+args.engine+'-'+uuid.uuid4().hex[:6])
     folder.mkdir(parents=True,mode=0o700)
-    runtime=folder/'runtime'
+    runtime=quiet(folder/'runtime')  # the verifier's answers are not read aloud
     env=os.environ.copy();env.pop('LD_LIBRARY_PATH',None);env['HARNESS_STATE_DIR']=str(runtime)
     cases=[];event_count=0
     for number in (1,2):
-        command=alias+' '+shlex.quote(query)
+        command=launcher+' '+shlex.quote(query)
         started=time.monotonic()
         run=terminal(command,env,timeout=220)
         wall_ms=round((time.monotonic()-started)*1000)
         (folder/f'call-{number}-terminal.txt').write_text(run['transcript'])
         events_path=runtime/'usage.jsonl'
-        all_events=[json.loads(line) for line in events_path.read_text().splitlines()] if events_path.exists() else []
+        all_events=turn_events([json.loads(line) for line in events_path.read_text().splitlines()] if events_path.exists() else [])  # model turns only
         events=all_events[event_count:];event_count=len(all_events)
         rows=[]
         if (runtime/'history.db').exists():
@@ -66,7 +74,7 @@ def main():
                 and all(isinstance(reply.get(k),str) and reply[k].strip() for k in ('cleaned_input','direct_answer'))
                 and (reply.get('execution_payload') is None or isinstance(reply.get('execution_payload'),str)),
             'observation_has_no_command':reply.get('intent')!='observation' or reply.get('execution_payload') is None,
-            'display_gate':run['transcript'].replace('\r\n','\n')==expected,
+            'display_gate':without_check_lines(run['transcript'])==expected,
             'provider_cache_metrics_reported':metrics_present,
             'sqlite_transaction':len(rows)==number and row.get('status')=='accepted'
                 and row.get('engine')==args.engine and row.get('raw_input')==query,

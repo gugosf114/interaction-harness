@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""Live create/read loop through the real aliases and native Termux bridge."""
+"""Live create/read loop through the native Termux bridge: the real alias with --yes, the launcher for y/N approval."""
 import argparse
 from datetime import datetime,timezone
 import errno
@@ -13,6 +13,7 @@ import signal
 import sqlite3
 import time
 import uuid
+from verify_quiet import quiet
 
 ROOT=Path(__file__).resolve().parent
 BASH='/data/data/com.termux/files/usr/bin/bash'
@@ -54,7 +55,7 @@ def main():
     parser.add_argument('--yes',action='store_true',help='Test explicit -y mode instead of per-command approval.')
     args=parser.parse_args()
     folder=ROOT/'state'/'loop-checks'/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+args.engine+'-'+uuid.uuid4().hex[:6])
-    folder.mkdir(parents=True,mode=0o700);runtime=folder/'runtime';target=folder/'roundtrip.txt'
+    folder.mkdir(parents=True,mode=0o700);runtime=quiet(folder/'runtime');target=folder/'roundtrip.txt'
     marker='loop-proof-'+uuid.uuid4().hex[:12]
     commands=["printf '%s\\n' "+shlex.quote(marker)+' > '+shlex.quote(str(target)), 'cat -- '+shlex.quote(str(target))]
     query=('Perform a two-step verification. In the first model turn, propose exactly this command: '+commands[0]+
@@ -62,7 +63,11 @@ def main():
            '\nAfter receiving the read result, give a final answer containing the observed marker with execution_payload null. '
            'Use two separate command payloads. Do not combine steps or run extra commands.')
     alias='g1' if args.engine=='openai' else 'george'
-    command=alias+' --loop --max-turns 5 '+('--yes ' if args.yes else '')+shlex.quote(query)
+    model='gpt-6.1-sol' if args.engine=='openai' else 'claude-opus-5-5'
+    # The aliases carry --loop -y, so they cannot show the y/N prompt. The approval test calls this
+    # folder's launcher with the alias's other flags and no -y. The --yes test runs the alias itself.
+    launcher=shlex.quote(str(ROOT/'harness'))+' --engine '+args.engine+' --model '+model+' --effort max'
+    command=(alias+' --loop --max-turns 5 --yes ' if args.yes else launcher+' --loop --max-turns 5 ')+shlex.quote(query)
     env=os.environ.copy();env.pop('LD_LIBRARY_PATH',None);env['HARNESS_STATE_DIR']=str(runtime)
     started=time.monotonic();run=run_terminal(command,env,runtime/'history.db',commands,args.yes)
     rows=[]

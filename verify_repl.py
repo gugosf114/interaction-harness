@@ -13,6 +13,7 @@ import signal
 import sqlite3
 import time
 import uuid
+from verify_quiet import quiet, turn_events
 
 ROOT=Path(__file__).resolve().parent
 BASH='/data/data/com.termux/files/usr/bin/bash'
@@ -51,7 +52,7 @@ def main():
     stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     folder=ROOT/'state'/'repl-checks'/(stamp+'-'+args.engine+'-'+uuid.uuid4().hex[:6])
     folder.mkdir(parents=True,mode=0o700)
-    runtime=folder/'runtime'
+    runtime=quiet(folder/'runtime')  # the verifier's answers are not read aloud
     env=os.environ.copy();env.pop('LD_LIBRARY_PATH',None);env['HARNESS_STATE_DIR']=str(runtime)
     oneoff_marker='oneshot-'+uuid.uuid4().hex[:8]
     print('Checking '+alias+' one-off mode.',flush=True)
@@ -65,7 +66,7 @@ def main():
     try: rows=[dict(r) for r in db.execute('SELECT * FROM history ORDER BY id')]
     finally: db.close()
     usage_path=runtime/'usage.jsonl'
-    events=[json.loads(line) for line in usage_path.read_text().splitlines()] if usage_path.exists() else []
+    events=turn_events([json.loads(line) for line in usage_path.read_text().splitlines()] if usage_path.exists() else [])  # model turns only
     checks={
       'oneoff_exits':oneoff['exit_code']==0 and not oneoff['timed_out'],
       'oneoff_answer':bool(rows) and oneoff_marker in (rows[0].get('direct_answer') or ''),
@@ -75,11 +76,11 @@ def main():
       'one_session_inside_chat':len(rows)==3 and rows[1]['session_id']==rows[2]['session_id'] and rows[0]['session_id']!=rows[1]['session_id'],
       'correct_engine_and_model':bool(rows) and all(row['engine']==args.engine and row['model']==model for row in rows),
       'actual_model_returned':bool(events) and all(event.get('model_returned')==model for event in events),
-      'high_effort':bool(events) and all(event.get('effort')=='high' for event in events),
+      'max_effort':bool(events) and all(event.get('effort')=='max' for event in events),  # the aliases run --effort max
     }
     cache=[(event.get('usage') or {}).get('cache_read_input_tokens',0)+((event.get('usage') or {}).get('input_tokens_details') or {}).get('cached_tokens',0) for event in events]
     checks['cache_reused']=any(cache)
-    report={'time_utc':stamp,'engine':args.engine,'alias':alias,'model':model,'effort':'high',
+    report={'time_utc':stamp,'engine':args.engine,'alias':alias,'model':model,'effort':'max',
             'all_passed':all(checks.values()),'checks':checks,'cache_read_tokens':cache,
             'oneoff':oneoff,'interactive':interactive,'rows':[{'id':row['id'],'session_id':row['session_id'],'answer':row['direct_answer'],'status':row['status']} for row in rows]}
     path=folder/'report.json';path.write_text(json.dumps(report,indent=2)+'\n');path.chmod(0o600)

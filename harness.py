@@ -34,9 +34,10 @@ from choice_check import violation as choice_violation
 from gate_rules import apply as operator_rules
 import answer_checks
 import mod_switches
+import stamp
 
 ROOT = Path(__file__).resolve().parent
-PREFIX_SHA256 = '73d3ce09d43431650591b9ff9c9eb7e5fe3def714e0a49eebdfd7c8fd2fd2854'
+PREFIX_SHA256 = 'dd0f77ac9cab72a9c4f2404aaa59b01a93883ff6e3b9b658ede256d24cd8f8a8'
 DEFAULT_MODEL = 'gpt-6.1-sol'
 ANTHROPIC_MODEL = 'claude-opus-5-5'
 DEFAULT_EFFORT = 'max'
@@ -280,7 +281,9 @@ def load_prefix() -> str:
     except OSError as exc:
         raise HarnessError('The frozen prefix file cannot be read.') from exc
     if hashlib.sha256(raw).hexdigest() != PREFIX_SHA256:
-        raise HarnessError('The frozen prefix changed. Restore the approved prefix before running.')
+        # A chat that was open while the client was updated still holds the old digest; a restart loads the new one.
+        raise HarnessError('The frozen prefix changed on disk. If the client was just updated, type exit and start it '
+                           'again with -c. Otherwise restore the approved prefix_block.txt.')
     return raw.decode('utf-8')
 
 
@@ -321,6 +324,18 @@ def load_pages() -> list:
     try:
         return read_pages(PAGES_FILE)
     except PageError as exc:
+        raise HarnessError(str(exc)) from exc
+
+
+# The per-turn rules stamp (stamp.py). Like the page list, only the command-line entry point switches it on.
+STAMP_SOURCE: Path | None = None
+
+
+def load_stamp() -> dict | None:
+    """The operator_rules_stamp message that ends this request. None when the stamp is off."""
+    try:
+        return stamp.tail(STAMP_SOURCE, STATE)
+    except stamp.StampError as exc:
         raise HarnessError(str(exc)) from exc
 
 
@@ -451,10 +466,13 @@ def request_reply(
     base_pages = [prefix] + ([tools_page] if tools_page else [])
     extra_pages = load_pages()
     system_pages = base_pages + [page.text for page in extra_pages]
+    # The rules stamp goes last, after the request, so everything before it stays byte-identical.
+    stamp_message = load_stamp()
     messages = [
         *({'role': 'system', 'content': page} for page in system_pages),
         *(history or []),
         {'role': 'user', 'content': raw_input, **({'attachments':attachments} if attachments else {})},
+        *([stamp_message] if stamp_message else []),
     ]
     allowed_text=json.dumps(messages[len(system_pages):],ensure_ascii=False)+' '+(request_context or '')
     schema = api_schema()
@@ -469,6 +487,7 @@ def request_reply(
             'prefix_sha256': PREFIX_SHA256, 'attempt': attempt,
             'tools_sha256': hashlib.sha256(tools_page.encode('utf-8')).hexdigest() if tools_page else None,
             'pages': [{'label': page.label, 'sha256': page.sha256} for page in extra_pages],
+            'stamp_sha256': stamp.sha256(stamp_message) if stamp_message else None,
             'input_chars': len(raw_input), 'status': 'pending',
         }
         try:
@@ -583,4 +602,5 @@ if __name__ == '__main__':
     import second_gate as _second_gate
     _second_gate.switch_on(_client.ROOT / 'state')  # the operator's gate rules, the judge, the lessons page
     _client.MODS_ON = True
+    _client.STAMP_SOURCE = stamp.SOURCE
     raise SystemExit(main())

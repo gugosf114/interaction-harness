@@ -57,7 +57,7 @@ class HarnessTests(unittest.TestCase):
         return h.request_reply(raw, client=client, log_path=self.log, **kwargs)
 
     def test_prefix_is_frozen(self):
-        self.assertIn('FROZEN PREFIX V3', h.load_prefix())
+        self.assertIn('FROZEN PREFIX V4', h.load_prefix())
 
     def test_changed_prefix_stops_before_api(self):
         client = FakeClient([])

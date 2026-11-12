@@ -250,6 +250,7 @@ class Runtime:
                 tool_choice={'type':'auto','disable_parallel_tool_use':True})
             if self.settings.on('programmatic'):params['tool_choice']={'type':'auto'}
             cache_history(params,self.settings.on('history_cache'))
+            from stamp import cache_before_stamp;cache_before_stamp(params)  # the marker goes before the rules stamp
             betas=[]
             if self.compacted:betas.append('compact-2026-09-04')
             if self.settings.on('context_editing'):

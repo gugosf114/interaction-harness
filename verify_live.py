@@ -10,6 +10,7 @@ import subprocess
 import sys
 import uuid
 import harness as h
+from verify_quiet import quiet, turn_events, without_check_lines
 ROOT=Path(__file__).resolve().parent
 
 def main():
@@ -21,7 +22,7 @@ def main():
     stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     folder=ROOT/'state'/('live-'+args.engine+'-'+stamp+'-'+uuid.uuid4().hex[:6])
     folder.mkdir(parents=True,mode=0o700)
-    runtime=folder/'runtime'
+    runtime=quiet(folder/'runtime')  # the verifier's answers are not read aloud
     env=os.environ.copy(); env['HARNESS_STATE_DIR']=str(runtime)
     audit='audit device permissions and credentials for local terminal, uh term units; give me read only commands for my user ID, permission mask, and whether OPENAI_API_KEY is set, without printing its value'
     marker='emerald-'+uuid.uuid4().hex[:8]
@@ -44,9 +45,9 @@ def main():
         try: run=subprocess.run(command,input=query if use_stdin else None,text=True,capture_output=True,timeout=220,env=env)
         except subprocess.TimeoutExpired:
             results.append({'case':name,'passed':False,'error':'Test process timed out.'}); break
-        events=[json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+        events=turn_events([json.loads(line) for line in log.read_text().splitlines()] if log.exists() else [])  # model turns only
         last=events[-1] if events else {}
-        passed=(run.returncode==0 and bool(run.stdout.strip()) and not run.stderr and last.get('status')=='accepted' and last.get('intent')==intent and last.get('has_execution_payload')==payload)
+        passed=(run.returncode==0 and bool(run.stdout.strip()) and not without_check_lines(run.stderr) and last.get('status')=='accepted' and last.get('intent')==intent and last.get('has_execution_payload')==payload)
         if name=='ambiguous-target': passed=passed and '?' in run.stdout
         if name in {'session-seed','session-recall','continue-recall'}: passed=passed and marker in run.stdout
         results.append({'case':name,'passed':passed,'exit_code':run.returncode,'stdout':run.stdout,'stderr':run.stderr,'attempts':len(events),'usage':last.get('usage'),'intent':last.get('intent'),'has_execution_payload':last.get('has_execution_payload'),'response_id':last.get('response_id')})

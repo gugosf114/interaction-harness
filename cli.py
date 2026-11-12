@@ -10,6 +10,7 @@ import harness as h
 import advisor
 import reply_judge
 import recall_cli
+import stamp
 import senses_cli
 import api_tools_cli
 import lane_mods
@@ -93,6 +94,8 @@ def run_chat(args, model):
             if handled is not None:last_status=handled;continue
             # Only a line the operator types reaches the advisor. It answers him and does not make the working model speak.
             if advisor.is_trigger(raw):last_status=main([*options,*advisor.chat_arguments(raw,args)]);continue
+            # /on stamp and /off stamp belong to the rules stamp, not to the API tool switches below.
+            if stamp.is_switch(raw):last_status=stamp.run_switch(raw,h.STATE);continue
             try:
                 if api_tools_cli.chat_command(raw,args,h.STATE,model):continue
             except ValueError as exc:print(str(exc),file=sys.stderr);last_status=2;continue
@@ -117,6 +120,7 @@ def run_chat(args, model):
 def main(argv=None):
     parser=argparse.ArgumentParser(description='Direct answers, bounded memory, optional confirmed Termux execution.')
     parser.epilog='Screen: in an approved --loop command, screen snap or look PATH attaches the file to the next model turn. Run card screen for targets and commands.'
+    parser.epilog+=' Stamp: /off stamp and /on stamp switch the operator_rules_stamp record that follows the request on every call. Type either one in a chat or as the whole question.'
     parser.add_argument('--engine',choices=ALL_ENGINES,default=os.environ.get('DEFAULT_ENGINE','openai'))
     parser.add_argument('--model',default=None)
     parser.add_argument('--effort',choices=['low','medium','high','xhigh','max'],default=h.DEFAULT_EFFORT,help='Reasoning effort on either engine (default: high).')
@@ -186,6 +190,8 @@ def main(argv=None):
         return run_chat(args,model)
     switched=reply_judge.typed(args)  # /on judge, /off judge typed as the whole question
     if switched is not None:return switched
+    # /on stamp and /off stamp as the whole question: flip the switch, no model call.
+    if args.text and stamp.is_switch(' '.join(args.text)):return stamp.run_switch(' '.join(args.text),h.STATE)
     store=None; row_id=None; events=[]; reply=None; execution=None;second=reply_judge.Second()
     try:
         store=Store(h.STATE)
@@ -236,7 +242,8 @@ def main(argv=None):
                     # replace the first history bytes and invalidate the conversation cache.
                     loop_context={'role':'user','content':json.dumps({'client_mode':'agent_loop',
                         'original_task':cleaned,'max_turns':ceiling},ensure_ascii=False)}
-                    if loop_context not in past:past.append(loop_context)
+                    # A new task always brings its own record, even when its words repeat an earlier task.
+                    if step==1 or loop_context not in past:past.append(loop_context)
                     if last_exchange is not None:
                         observation=execution_message(last_exchange)
                         if observation not in past:past.append(observation)

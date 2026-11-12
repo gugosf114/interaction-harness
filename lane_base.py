@@ -260,8 +260,11 @@ def request_reply(lane: Lane, raw_input, *, client=None, model=None, effort='max
     base_pages = [prefix] + ([tools_page] if tools_page else [])
     extra_pages = h.load_pages()
     system_pages = base_pages + [page.text for page in extra_pages]
+    # The rules stamp follows the request on every lane, as in harness.request_reply. It is never saved with a turn.
+    stamp_message = h.load_stamp()
     messages = [*(history or []),
-                {'role': 'user', 'content': raw_input, **({'attachments': attachments} if attachments else {})}]
+                {'role': 'user', 'content': raw_input, **({'attachments': attachments} if attachments else {})},
+                *([stamp_message] if stamp_message else [])]
     if kb.prefill:
         messages.append(prefill_message(kb.prefill))
     try:
@@ -285,6 +288,7 @@ def request_reply(lane: Lane, raw_input, *, client=None, model=None, effort='max
             'prefix_sha256': h.PREFIX_SHA256, 'attempt': attempt,
             'tools_sha256': hashlib.sha256(tools_page.encode('utf-8')).hexdigest() if tools_page else None,
             'pages': [{'label': page.label, 'sha256': page.sha256} for page in extra_pages],
+            'stamp_sha256': h.stamp.sha256(stamp_message) if stamp_message else None,
             'input_chars': len(raw_input), 'status': 'pending',
             'lookup_counts': {'total': 0, 'search': 0, 'fetch': 0, 'find': 0,
                               'allowed_urls': allowed_urls, 'provider_reports': []},

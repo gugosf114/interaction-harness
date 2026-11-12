@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from attachments import materialize, check_request_size
 from lookup_gate import unique_sources
+from stamp import cache_before_stamp
 
 CONTRACT = (
     'Use the hosted web tools when available for current facts, explicit searches, and page fetches. '
@@ -26,7 +27,8 @@ class SensesError(ValueError): pass
 
 
 def dump(value):
-    if hasattr(value,'model_dump'):return value.model_dump(exclude_none=True)
+    # warnings=False: a provider item newer than the installed SDK is still data, not stderr noise.
+    if hasattr(value,'model_dump'):return value.model_dump(exclude_none=True,warnings=False)
     if isinstance(value,dict):return {k:dump(v) for k,v in value.items()}
     if isinstance(value,(list,tuple)):return [dump(v) for v in value]
     if isinstance(value,SimpleNamespace):return {k:dump(v) for k,v in vars(value).items()}
@@ -141,6 +143,7 @@ class TurnSenses:
                 system=system_blocks if system_blocks is not None else [{'type':'text','text':page,'cache_control':{'type':'ephemeral'}} for page in system_pages],
                 messages=prepared[len(system_pages):],tools=copy.deepcopy(self.tools),
                 tool_choice={'type':'auto','disable_parallel_tool_use':True},**knobs)
+            cache_before_stamp(params)  # the rules stamp is the last message; the marker goes before it
             self.paused_content=[]
             for continuation in range(9):
                 check_request_size(params,self.engine)

@@ -206,3 +206,8 @@ Mods, typed at the > prompt of a george or g1 chat (each ships on):
   /autopilot GOAL       step after step until done, blocked, 150 steps or 10 hours;
                         /autopilot status, /autopilot go; Ctrl-C stops it
   v                     a line of just v: the phone listens, the words become the message
+
+Rules stamp, typed at the > prompt or as the whole question (ships on):
+  /off stamp            stop sending the operator_rules_stamp record
+  /on stamp             send it again: the four core rule headlines from the
+                        operator's rules file, after the request, on every call
