@@ -98,6 +98,12 @@ class SkillCommandTests(unittest.TestCase):
         self.assertEqual(self.skill('show', 'long', '4').returncode, 1)
         self.assertEqual(self.skill('show', 'long', 'two').returncode, 2)
 
+    def test_show_all_keeps_whole_long_skill_in_one_result(self):
+        result=self.skill('show','long','--all')
+        self.assertEqual(result.returncode,0)
+        self.assertEqual(result.stdout.count('word '),4000)
+        self.assertNotIn('[part ',result.stdout)
+
     def test_short_names_resolve_only_when_unique(self):
         self.assertIn('SKILL legal:triage', self.skill('show', 'triage').stdout)
         both = self.skill('show', 'brief')
@@ -236,3 +242,32 @@ class CardTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class AddedCoverageTests(unittest.TestCase):
+    def test_current_google_maps_and_exact_unknown_tool(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            skill = load('skill')
+            notes = skill.lane_notes({'text':'Google Drive Google Calendar mcp__unknown__read', 'allowed':'',
+                'real_folder':Path(folder), 'kind':'skill','plugin_dir':None,'folder':folder,'name':'sample','group':'claude'})
+            result=' '.join(notes)
+            self.assertIn('card drive',result)
+            self.assertIn('card calendar',result)
+            self.assertIn('mcp__unknown__read',result)
+            self.assertNotIn('no Drive connector',result)
+
+    def test_domain_with_path_only_link_is_included(self):
+        import contextlib,io
+        app=load('app')
+        class Phone:
+            via='adb'
+            def sh(self,command,check=True,**kwargs):
+                if command.startswith('pm list packages'):return 'package:de.test.app\n'
+                if command.startswith('cmd package query'):return ''
+                if command.startswith('pm set-app'):return ''
+                if command.startswith('pm get-app-links'):return ('  de.test.app:\n    Domain verification state:\n      example.com: verified\n'
+                    '    User 0:\n      Selection state:\n        Enabled:\n          example.com\n')
+                raise AssertionError(command)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(app.cmd_default(Phone(),['example.com','de.test.app']),0)
+        self.assertIn('de.test.app',out.getvalue())

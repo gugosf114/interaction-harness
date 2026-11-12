@@ -460,6 +460,15 @@ def cmd_default(phone, args):
                    f'-c android.intent.category.BROWSABLE -d {q("https://" + domain + "/")}', check=False)
     candidates = list(dict.fromkeys(line.strip().split('/')[0] for line in out.splitlines()
                                     if '/' in line and PACKAGE.match(line.strip().split('/')[0])))
+    # A declared app link may require a path, so querying https://DOMAIN/ alone misses it.
+    declarations = phone.sh('pm get-app-links --user 0', check=False)
+    for block in re.split(r'(?m)(?=^  [A-Za-z][A-Za-z0-9_.]+:\s*$)', declarations):
+        match = re.match(r'  ([A-Za-z][A-Za-z0-9_.]+):', block)
+        if match and re.search(r'^\s+' + re.escape(domain) + r': \S+$', block, re.M):
+            if match.group(1) not in candidates:
+                candidates.append(match.group(1))
+    if len(args) >= 2 and args[1] not in candidates:
+        candidates.append(args[1])
     print(f'https://{domain}/ ({phone.via}): {len(candidates)} app(s) can open it')
     chosen = None
     for package in candidates:

@@ -225,7 +225,7 @@ Rules stamp, typed at the > prompt or as the whole question (ships on):
                         operator's rules file, after the request, on every call
 
 Skills and apps, typed in the shell (a lane types them too; card skills, card apps):
-  skill find WORDS | skill show NAME [PART] | skill files NAME | skill list [GROUP] | skill groups
+  skill find WORDS | skill show NAME [PART|--all] | skill files NAME | skill list [GROUP] | skill groups
                         George's skill packs (256 on the phone): find one,
                         print its instructions with lane notes first, list its
                         scripts.

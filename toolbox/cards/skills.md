@@ -3,16 +3,16 @@
 What a skill is
   A folder with a SKILL.md: how to do one kind of job well (a Word file, a spreadsheet, a slide deck, a PDF,
   deep research, a code review, legal and data work, design critique, scraping, and more), and sometimes
-  scripts and reference files. 256 of them on this phone (checked 2026-11-11), from George's Claude Code,
+  scripts and reference files. The current count is printed by skill groups, from George's Claude Code,
   its plugins, Codex, grok, Antigravity, his own projects and some Python packages.
 
 Before a job that matches a skill, print the skill and follow it.
   skill find WORDS            the 10 best matches: name and purpose      skill find spreadsheet
-  skill show NAME             LANE NOTES first, then the skill's own text      skill show xlsx
+  skill show NAME --all       LANE NOTES first, then all instructions in one call      skill show xlsx --all
   skill show NAME 2           a long skill comes in parts of 7,000 characters; the first line says how many
   skill files NAME            its scripts and reference files, with the full path and how to run each
   skill list GROUP            every skill of one group, one line each      skill groups   the groups and folders
-  skill list                  all 256; longer than the 8,000 characters you see of one output, so use a GROUP
+  skill list                  all skills; use GROUP or find to narrow the output
   A short name works when only one skill has it (xlsx, analyze, brief); otherwise use the full name (data:analyze).
 
 The lane notes
@@ -41,5 +41,5 @@ Not files on this phone
   program. grok:code-review and codex-source:code-review are the code review skills on disk.
 
 Known failure
-  Skills of the Adobe, Google Drive, Figma, Slack and other connectors call tools the lanes do not have.
+  Skills of the Adobe, Figma, Slack and other connectors call tools the lanes do not have.
   The lane notes name each one; there is no command that stands in for them.

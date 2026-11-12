@@ -2,7 +2,7 @@
 """skill : George's skill packs (folders with a SKILL.md), for the API lanes.
 
   skill list [GROUP]      every skill: name and one-line purpose (GROUP: see skill groups)
-  skill show NAME [PART]  the lane notes, then the skill's own instructions, in parts of 7,000 characters
+  skill show NAME [PART|--all]  the lane notes, then the skill's own instructions, in parts of 7,000 characters
   skill files NAME        the skill's scripts and reference files, with full paths and how to run each
   skill find WORDS        the skills that match the words, best first
   skill groups            where the skills live and how many each place holds
@@ -25,6 +25,9 @@ DEFAULT_ROOTS = [
     ('claude-plugin', '/root/.claude/plugins/synced', ''),
     ('claude-plugin', '/root/.claude/plugins/cache', ''),
     ('codex', HOME + '/.codex/skills', 'codex:'),
+    ('codex', '/root/.codex/skills', 'debian-codex:'),
+    ('project', '/root/work-training/corpus/skill', 'training:'),
+    ('library', '/usr/local/lib/node_modules/@brightdata/cli/node_modules/playwright-core/lib/tools/skills', 'brightdata-playwright:'),
     ('codex-plugin', HOME + '/.codex/plugins/cache', ''),
     ('project', HOME + '/plugins/george-shipping-studio', ''),
     ('project', '/root/wim-android/onboarding-plugin', ''),
@@ -211,8 +214,8 @@ MISSING = [
 ]
 CONNECTORS = [
     (r'mcp__claude_ai_Gmail|\bGmail (MCP|connector)', 'Gmail connector: use card mail instead.'),
-    (r'Google Drive|mcp__claude_ai_Google_Drive', 'Google Drive: the lanes have no Drive connector.'),
-    (r'Google Calendar|mcp__claude_ai_Google_Calendar', 'Google Calendar: the lanes have no Calendar connector.'),
+    (r'Google Drive|mcp__claude_ai_Google_Drive', 'Google Drive: use card drive and google-drive ACCOUNT list|read|create.'),
+    (r'Google Calendar|mcp__claude_ai_Google_Calendar', 'Google Calendar: use card calendar and google-calendar ACCOUNT today|tomorrow|DATE.'),
     (r'mcp__plugin_brightdata|Bright Data MCP', 'Bright Data MCP: the lanes use the bdata program instead (deb bdata --help).'),
     (r'adobe_mandatory_init|Adobe connector|mcp__plugin_adobe', 'Adobe tools (adobe_mandatory_init, pdf_export and the rest) are the Adobe connector. The lanes do not have it.'),
     (r'claude-in-chrome|Claude_Browser|computer-use|computer_use', 'Browser and computer control: use card phone-browser (the signed-in Chrome, page-text) and card screen.'),
@@ -246,6 +249,10 @@ def lane_notes(skill):
     if re.search(r'WebSearch|WebFetch|web search|search the web|web_search|web_fetch|fetch the (page|url)', text, re.I):
         notes.append('Web search and page reading are your own provider tools in this client: search and read pages '
                      'directly. A page that needs George signed in: page-text URL (card phone-browser).')
+    if re.search(r'image_gen|imagegen|image generation|generate images', text, re.I):
+        notes.append('Image generation: the OpenAI lane has the image-generation API tool; generated files are saved '
+                     'under the lane state/generated folder. The Anthropic lane has no native image-generation tool. '
+                     'For an existing local picture use look PATH (card screen).')
     if re.search(r'\bAgent tool\b|\bTask tool\b|subagent|sub-agent|\bAgent\(|fan-out|in parallel|parallel agents|spawn', text, re.I):
         notes.append('Subagents: the lanes have none. Do each part yourself, one after another, in the loop. '
                      'One question to a second model: card models.')
@@ -261,13 +268,18 @@ def lane_notes(skill):
                      'Where the text prefers one of those, use the skill\'s file route. A web page goes to '
                      '/sdcard/Download/NAME.html.')
     if '~~' in text:
-        notes.append('Words such as ~~CRM or ~~chat name kinds of connectors. The lanes have none: work from files on '
+        notes.append('Words such as ~~CRM or ~~chat name kinds of connectors. Mail, Calendar and Drive use card mail, card calendar and card drive; other unnamed connectors use files on '
                      'the phone, from the web, or from what George pastes.')
     if re.search(r'\bgh (pr|issue|api|repo)\b|GitHub', text):
         notes.append('gh and git are signed in as gugosf114 on the Termux side: card github.')
     for pattern, line in CONNECTORS:
         if re.search(pattern, text):
             notes.append(line)
+    named_tools = sorted(set(re.findall(r'\bmcp__[A-Za-z0-9_]+', text)))
+    known = ('claude_ai_Gmail', 'claude_ai_Google_Drive', 'claude_ai_Google_Calendar', 'plugin_brightdata')
+    unknown = [name for name in named_tools if not any(key in name for key in known)]
+    if unknown:
+        notes.append('These named connector tools have no matching lane command: ' + ', '.join(unknown) + '.')
     have = []
     for pattern, label in INSTALLED:
         if label and re.search(pattern, text) and label not in have:
@@ -312,7 +324,7 @@ def cmd_groups(skills, args):
 
 
 def cmd_show(skills, args):
-    if len(args) not in (1, 2) or (len(args) == 2 and not args[1].isdigit()):
+    if len(args) not in (1, 2) or (len(args) == 2 and not args[1].isdigit() and args[1] != '--all'):
         return usage()
     skill, error = pick(skills, args[0])
     if not skill:
@@ -323,6 +335,9 @@ def cmd_show(skills, args):
             'LANE NOTES (read these first: they turn the skill\'s tool names into this client\'s commands)']
     head += ['- ' + n for n in notes] or ['- none']
     whole = '\n'.join(head) + '\n\nTHE SKILL\n' + skill['text'].rstrip('\n') + '\n'
+    if len(args) == 2 and args[1] == '--all':
+        sys.stdout.write(whole)
+        return 0
     parts = [whole[i:i + PART] for i in range(0, len(whole), PART)] or ['']
     number = int(args[1]) if len(args) == 2 else 1
     if not 1 <= number <= len(parts):
