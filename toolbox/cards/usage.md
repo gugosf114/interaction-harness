@@ -6,7 +6,7 @@
 
 What it prints
   Usage log: one line per lane and window: API calls, input tokens, output tokens, cache-read tokens.
-    Every request counts: lane turns, gate retries, /advisor calls and the mods' small-model calls.
+    Every request counts: lane turns, gate retries, second-opinion calls and the mods' small-model calls.
   Saved turns: the same from history.db, one row per model turn.
   Anthropic usage report / OpenAI usage report: the provider's own numbers for the whole account.
 
