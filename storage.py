@@ -258,6 +258,8 @@ def history_messages(exchanges, max_chars=24000):
         ]
         if exchange.get('attachments'):pair[0]['attachments']=exchange['attachments']
         if exchange.get('loop_context'):pair.insert(0,{'role':'user','content':exchange['loop_context']})
+        # Past-chat evidence is replayed exactly as sent: directly before the message it was searched for.
+        if exchange.get('recall_notes'):pair.insert(len(pair)-2,{'role':'user','content':exchange['recall_notes']})
         if exchange.get('sources'):
             pair.append({'role':'user','content':json.dumps({'type':'source_record','sources':exchange['sources']})})
         if exchange.get('execution_result') is not None:

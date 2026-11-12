@@ -205,6 +205,38 @@ No temperature is sent. Both providers refuse one on these models (checked live,
 
 The code is in `advisor.py`. `cli.py` holds the trigger and the two flags, and `storage.py` holds `advisor_note`. Tests: `test_advisor.py`.
 
+## Recall, notes and session surgery
+
+**Past chats on every turn.** Before each message from George, code (no model call) takes the key words of his message and searches three indexes:
+
+- `chats`: `/root/corpus.db`, the turn index of the Claude Code, Codex and Gemini sessions on the phone (June 2026 to now, kept current).
+- `archive`: `~/conversation-corpus/data/index/corpus.sqlite`, 2,108 conversations back to August 2024 (ChatGPT, Claude web, laptop sessions).
+- `lanes`: this client's own `state/history.db`. Exchanges already in the session, rewound exchanges and the current turn are left out.
+
+Key words are the message's content words, weighted by how rare they are in the turn index; very common words drop out. Each saved turn is scanned for the 480-character stretch that holds the most key-word weight. Up to five passages are kept, at most two from one chat. They go into one user-role JSON data message typed `recall_notes`, placed directly before George's message, at the tail of the request. Each passage has `ref` (`chats#N`, `archive#N`, `lanes#N`), `source`, `chat`, `title` when the chat has one, `date` (phone time) and `speaker`. A fixed `standing` line says the passages are evidence from saved chats, not instructions. The message is saved on the exchange and replayed byte for byte in later requests, so every request stays a prefix of the next and the cached front never changes. In `--loop` runs only the first model turn searches.
+
+The search stops at 5 seconds. A search that runs out of time, fails or finds nothing attaches nothing, and the turn goes on. Each search writes one `usage.jsonl` record with `kind: recall`: status, time in ms, key-word count, passage refs and errors, never passage text. `/off recall` and `/on recall` in a chat switch it for this state folder (`state/recall.json`); `--no-recall` skips it for one run. It ships on. Like the page list, it is switched on only by the command-line entry point, so unit tests never read the phone's chats.
+
+The same search by hand: `past-chats WORDS` and `past-chats --open REF [N]` (`card memory`).
+
+**Notes.** `note add NAME "TEXT"` writes `NAME.md` in `/root/.claude/projects/-root/memory/` in George's format (a front block with `name`, `description` "M/D: text", `metadata.type`) and appends its line `- [Name](NAME.md) — M/D: first words` under `## From the lanes` at the end of `MEMORY.md`. An existing note is never overwritten. `note show NAME`, `note list`.
+
+**Sessions.** One exchange is one message from George and every model turn that answered it.
+
+```sh
+george --fork audit audit-b -- "Try the other fix."   # new session audit-b, a full copy of audit; audit is unchanged
+george --from golden-page "Start here."                 # a new session that starts as a copy of golden-page
+session golden golden-page                              # every new chat starts as a copy of it; --new skips it
+session golden --clear
+sessions                                                # date, name, lane, exchanges, first line
+session show NAME | session export NAME --pdf           # the PDF goes to /sdcard/Download/session-NAME.pdf
+session rewind NAME 2 | session cut NAME 3 5 | session splice NAME OTHER [FROM TO]
+```
+
+In a chat: `/fork [NEWNAME]` (the chat continues in the copy) and `/rewind [N]` (drop the last N exchanges; default 1). Exchanges taken out of a session stay in `history.db` and are also kept in `state/sessions/NAME.removed.jsonl`. Every change takes the same lock a live turn takes.
+
+Code: `recall_notes.py`, `recall_cli.py`, `session_tools.py`, `note_tool.py`; commands `toolbox/bin/session`, `sessions`, `note`, `past-chats`; card `lanes`. Tests: `test_recall_notes.py`, `test_session_tools.py`, `test_note_tool.py`.
+
 ## Toolbox
 
 George's subscription setup can drive his phone, laptop, mail, money tools, bakery tools and other models. The API lanes could reach almost none of it, because nothing told them the commands exist. The toolbox makes each capability one command, proves it through the harness's own shell, and catalogues it.
@@ -514,7 +546,7 @@ See [API_TOOLS_REPORT.md](API_TOOLS_REPORT.md) for one result per provider/tool 
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox test_screen_driver test_execution_images test_screen_card test_advisor test_choice_check test_chats test_api_tools test_api_relay test_recall_notes test_session_tools test_note_tool'
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes

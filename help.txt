@@ -25,7 +25,8 @@ usage: harness.py [-h] [--engine {openai,anthropic}] [--model MODEL]
                   [--api-advisor | --no-api-advisor] [--functions |
                   --no-functions] [--custom-tools | --no-custom-tools]
                   [--namespaces | --no-namespaces]
-                  [--computer-target COMPUTER_TARGET]
+                  [--computer-target COMPUTER_TARGET] [--no-recall]
+                  [--fork SESSION [NEWNAME ...]] [--from NAME]
                   [text ...]
 
 Direct answers, bounded memory, optional confirmed Termux execution.
@@ -137,6 +138,20 @@ options:
   --computer-target COMPUTER_TARGET
                         phone, hidden:NAME, laptop, or yana for computer
                         tools.
+  --no-recall           Skip the past-chat search for this run. In chat: /off
+                        recall, /on recall.
+  --fork SESSION [NEWNAME ...]
+                        Start in a new session that is a full copy of SESSION.
+                        The original is untouched. A question goes after --.
+                        In chat: /fork [NEWNAME].
+  --from NAME           A new session starts as a copy of NAME. `session
+                        golden NAME` makes this the default for every new
+                        chat; --new skips it.
 
 Screen: in an approved --loop command, screen snap or look PATH attaches the
-file to the next model turn. Run card screen for targets and commands.
+file to the next model turn. Run card screen for targets and commands. Past
+chats: before each message the client searches the saved chats and sends the
+best passages as a recall_notes data message. In chat: /off recall, /on
+recall, /fork [NEWNAME], /rewind [N]. Session commands: sessions, session
+show|export|fork|rewind|cut|splice|golden (card lanes). Notes: note
+add|show|list (card memory).

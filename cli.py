@@ -8,6 +8,7 @@ import sys
 
 import harness as h
 import advisor
+import recall_cli
 import senses_cli
 import api_tools_cli
 from execution_images import prepare_execution
@@ -57,6 +58,7 @@ def run_chat(args, model):
     if args.loop: options.extend(['--loop','--max-turns',str(args.max_turns)])
     if args.yes: options.append('--yes')
     options.extend(senses_cli.common_options(args))
+    options.extend(recall_cli.common_options(args))
     last_status=0
     if args.text: last_status=main([*options,*api_tools_cli.options(args),*senses_cli.attachment_options(args),'--',' '.join(args.text)])
     while True:
@@ -73,6 +75,8 @@ def run_chat(args, model):
             raw=raw.rstrip('\r\n')
             if raw.strip().lower() in {'exit','quit'}: return last_status
             if not raw.strip(): continue
+            handled=recall_cli.chat_command(raw,options,args)  # /on recall, /off recall, /fork, /rewind
+            if handled is not None:last_status=handled;continue
             # Only a line the operator types reaches the advisor. It answers him and does not make the working model speak.
             if advisor.is_trigger(raw):last_status=main([*options,*advisor.chat_arguments(raw,args)]);continue
             try:
@@ -113,10 +117,12 @@ def main(argv=None):
     senses_cli.add_flags(parser)
     advisor.add_flags(parser)
     api_tools_cli.add_flags(parser)
+    recall_cli.add_flags(parser)
     parser.add_argument('text',nargs='*',help='Quoted input, or pipe text on stdin.')
     args=parser.parse_args(argv)
     senses_cli.validate_args(parser,args)
     advisor.validate_args(parser,args)
+    recall_cli.validate_args(parser,args)
     if args.engine not in {'openai','anthropic'}: parser.error('DEFAULT_ENGINE must be openai or anthropic.')
     if not 1<=args.timeout<=3600: parser.error('--timeout must be between 1 and 3600 seconds.')
     if not 1<=args.turns<=1000000: parser.error('--turns must be between 1 and 1000000.')
@@ -135,6 +141,8 @@ def main(argv=None):
     if args.tools:
         try:sys.stdout.write(api_tools_cli.settings(args,h.STATE).listing(model));return 0
         except (ValueError,OSError) as exc:print(str(exc),file=sys.stderr);return 2
+    seeded=recall_cli.start_session(args)  # --fork, --from and the golden session seed a new session
+    if seeded is not None:return seeded
     if args.chat or (not args.text and not args.listen and args.recall is None and sys.stdin.isatty()):
         return run_chat(args,model)
     store=None; row_id=None; events=[]; reply=None; execution=None
@@ -198,6 +206,9 @@ def main(argv=None):
                     notes=len(latest.get('advisor_notes') or []) if latest else 0  # advice sits after the command result
                     supported=bool(latest and successful_execution(latest.get('execution_result')) and len(past)>notes
                                    and past[-1-notes]==execution_message(latest))
+                # Past-chat evidence for the operator's message: one data message at the tail, directly before the message.
+                recalled=recall_cli.notes(args,session,cleaned,row_id) if step==1 else None
+                if recalled:past.append({'role':'user','content':recalled})
                 reply=h.request_reply(current,engine=args.engine,model=model,effort=args.effort,timeout=args.timeout,
                                       log_path=args.usage_log,events=events,history=past,execution_confirmed=supported,
                                       request_context=cleaned,web=not args.no_web,web_max=args.web_max,attachments=turn_attachments,
@@ -208,6 +219,7 @@ def main(argv=None):
                 if args.loop and step==1:exchange['loop_context']=loop_context['content']
                 metadata=turn_metadata(events);exchange.update(metadata)
                 if turn_attachments:exchange['attachments']=turn_attachments
+                if recalled:exchange['recall_notes']=recalled
                 if args.loop:exchange['loop_step']=step
                 store.save_session(session,exchange,args.turns)
                 sys.stdout.write(h.display_text(reply,metadata['sources']));sys.stdout.flush()

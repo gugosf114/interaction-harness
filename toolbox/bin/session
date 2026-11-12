@@ -1,0 +1,13 @@
+#!/data/data/com.termux/files/usr/bin/python
+"""session VERB ... : this client's own saved sessions (see `card lanes`). `sessions` lists them all."""
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import session_tools  # noqa: E402
+
+if __name__ == '__main__':
+    words = sys.argv[1:]
+    if Path(sys.argv[0]).name == 'sessions':
+        words = ['list', *words]
+    raise SystemExit(session_tools.command(words))

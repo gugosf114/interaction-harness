@@ -544,4 +544,6 @@ if __name__ == '__main__':
     # It sits in this installation's state folder, next to the saved keys; HARNESS_STATE_DIR does not move it.
     import harness as _client
     _client.PAGES_FILE = _client.ROOT / 'state' / 'pages.json'
+    import recall_notes as _recall
+    _recall.wire()  # the past-chat search is on only under the command-line entry point, like the page list
     raise SystemExit(main())

@@ -1,0 +1,10 @@
+#!/data/data/com.termux/files/usr/bin/python
+"""note add NAME "TEXT" | note show NAME | note list : George's memory notes (see `card memory`)."""
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import note_tool  # noqa: E402
+
+if __name__ == '__main__':
+    raise SystemExit(note_tool.main())
