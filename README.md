@@ -243,7 +243,7 @@ George's subscription setup can drive his phone, laptop, mail, money tools, bake
 
 **The pieces.**
 
-- `tools_block.txt` — the index. One line per family, ending in `Print: card NAME`. Thirty-three families and 4,787 characters since the whole-phone pass. The first nineteen-family index measured 1,044 tokens on Claude Opus 5.5 and 739 on GPT-6.1 Sol.
+- `tools_block.txt` — the index. One line per family, ending in `Print: card NAME`. Thirty-six families and 5,171 characters since the Google accounts pass. The first nineteen-family index measured 1,044 tokens on Claude Opus 5.5 and 739 on GPT-6.1 Sol.
 - `toolbox/cards/NAME.md` — one card per family, each under 4,000 characters: what it does, the exact commands with real argument shapes, what comes back, which side it runs on, and the one known failure.
 - `toolbox/bin/` — the commands the model types. `toolbox/debian/` — the Debian-side halves of some of them.
 - `toolbox/install.sh` — links every file in `toolbox/bin` into `$PREFIX/bin`. Safe to run again. It never replaces a real file.
@@ -481,6 +481,8 @@ answers must also be compared with their saved PNGs.
 ## API tools
 
 `g1 --tools` and `george --tools` list every API tool, its default state, its provider, and any recorded provider refusal. There are 26 switches covering 39 provider/tool pairs. The final answer still passes through the same four-field schema and display gates. The frozen prefix is unchanged.
+
+**On but not set up.** A tool that is switched on with nothing to work with leaves the request instead of stopping the call: `skills` with no skill listed, `file_search` with no `vector_store_ids`, `mcp_remote` with no https `mcp_url`. Asked for by flag, it stays in and the missing setting is an error. OpenAI answers HTTP 400 `code_interpreter and shell with an OpenAI-managed container cannot be used together at the same time` for code execution with either shell, so on that lane one of `code_execution`, `shell` and `hosted_shell` stays: the one asked for by flag, else the hosted shell when skills are set up, else code execution. The phone's commands still run through the function and custom tools. `--tools` names what stepped aside. OpenAI remote MCP is sent with `require_approval: never`.
 
 ```sh
 g1 --tools
