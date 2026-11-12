@@ -8,9 +8,9 @@ Read texts (SMS)
   termux-sms-list -l 20
   JSON list, one object per message: number, received, body, type. `termux-sms-list -h` lists the filters.
 
-Read the screen as words (the on-phone bridge, port 8080)
-  ~/.local/bin/agentbridge-call android_get_screen_state '{}'
-  deb phone-link                 says "phone link UP" or reopens the bridge
+Read the screen as words (the phone's MCP server, port 8080)
+  mcp android_get_screen_state
+  deb phone-link                 says "phone link UP" or reopens the door
 
 adb (device 127.0.0.1:5555 is this phone)
   adb -s 127.0.0.1:5555 shell getprop ro.product.model        -> Pixel 11
@@ -29,9 +29,14 @@ Hidden screens: a screen only the agent sees. George's real screen does not chan
   deb bash /root/hidden-operator/scripts/hidden_display.sh stop -n NAME
   The screen named "web" holds the signed-in Chrome: see `card phone-browser`.
 
+More of the phone, each on its own card
+  mcp-see, mcp-touch, mcp-apps    the phone's MCP server: read the screen as words, tap, type, apps, notifications
+  phone-settings                  volume, Wi-Fi, Bluetooth, airplane mode, do-not-disturb, battery, permissions
+  phone-hardware                  sensors, location, camera, microphone, torch, send a text, place a call
+  shizuku                         the second door when adb drops        devices     the other phones and machines
+  screen                          pictures of any screen and input by picture
 The AI that phones a place for George (phone-do, phone-ask): see `card calls`.
 Full how-to: deb cat /root/.claude/device-control.md
 
 Known failure
-  `deb phone-do` and `deb phone-ask` answer "command not found": their links in /usr/local/bin point
-  at a folder that is gone. The full paths in `card calls` work.
+  "adb: more than one device/emulator": an adb command with no -s. Four devices are listed, so name one.

@@ -10,19 +10,22 @@ The voice line: George dials the line and talks to a Claude session that runs in
   Checked 2026-11-11: server down, tunnel down, room "brain" gone.
 
 The caller (Bland): an AI voice phones a business
-  P=/data/data/com.termux/files/home/phone-errands     (write the full path in each command)
-  deb /data/data/com.termux/files/home/phone-errands/phone-ask --balance      -> "$9.97 left on Bland"
-  deb /data/data/com.termux/files/home/phone-errands/phone-ask --last         last call: answers and transcript
-  deb /data/data/com.termux/files/home/phone-errands/phone-do --last          last errand: result and transcript
-  deb /data/data/com.termux/files/home/phone-errands/phone-ask "+14155551234" "Ace Hardware on Mission" "Are you open Sunday?" "Do you sell propane?"
+  deb phone-ask --balance                     -> "$9.97 left on Bland"
+  deb phone-ask --last                        last call: answers and transcript
+  deb phone-do --last                         last errand: result and transcript
+  deb phone-ask --dry "+14155551234" "Ace Hardware on Mission" "Are you open Sunday?"
+                                              prints the request it would send; places no call
+  deb phone-ask "+14155551234" "Ace Hardware on Mission" "Are you open Sunday?" "Do you sell propane?"
       This places a real phone call at once and spends Bland credit, about $0.14 a minute.
-  deb /data/data/com.termux/files/home/phone-errands/phone-do CARD.txt
+  deb phone-do CARD.txt
       Runs an errand from a card file (who, number, goal, facts). This places a real phone call at once.
-  deb /data/data/com.termux/files/home/phone-errands/phone-do --dry CARD.txt  shows the call plan, places no call
-  deb /data/data/com.termux/files/home/phone-errands/phone-do --help          the card format
-  Key: /root/.bland/key.
+  deb phone-do --dry CARD.txt                 shows the call plan, places no call
+  deb phone-do --help                         the card format
+  When a live person answers, the call is handed to George's own number from the errand profile.
+  Key: /root/.bland/key. Profile: /root/.local/state/phone-errands/profile.json.
+
+The same brain from a terminal: deb assistant submit 'JOB' | jobs | status; deb support-chat CARD.txt (`card programs`).
 
 Known failure
-  phone-ask stops with "ValueError: The shared profile needs the handoff phone number." (checked
-  2026-11-11 with --dry). The folder phone-errands/config holds profile.example.json and no filled-in profile.
-  `deb phone-do` and `deb phone-ask` answer "command not found": use the full paths above.
+  The installed tool in /root/.local/share/phone-errands is older than the code in ~/phone-errands.
+  `python3 scripts/install.py` in that folder installs the newer revision and restarts the line.

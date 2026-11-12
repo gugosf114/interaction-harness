@@ -1,0 +1,5 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# rish -c 'COMMAND' : run a command on the phone through Shizuku, at shell rights, with no adb.
+# Shizuku is the second door into the phone: it keeps working when adb's port has dropped.
+[ $# -ge 1 ] || { echo "usage: rish -c 'COMMAND'" >&2; exit 2; }
+exec /system/bin/sh /data/data/com.termux/files/home/rish "$@"

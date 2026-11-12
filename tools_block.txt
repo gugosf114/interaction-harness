@@ -20,7 +20,14 @@ The cards
 The families
 - files: read a slice of a file, search, write a new file, make an exact-replace edit. Print: card files
 - documents: make a PDF from text, make a QR code, download a video, put a file in Downloads. Print: card documents
-- phone: screenshot, read texts, read the screen, adb, hidden screens. Print: card phone
+- phone: screenshot, read texts, adb, hidden screens, and the list of the other phone cards. Print: card phone
+- mcp-see: read George's visible screen as words, his notifications, apps and files through the phone's MCP server. Print: card mcp-see
+- mcp-touch: tap, swipe, type and press keys on George's visible screen. Print: card mcp-touch
+- mcp-apps: open apps, send intents, use the camera, act on and reply to notifications. Print: card mcp-apps
+- phone-settings: volume, brightness, Wi-Fi, Bluetooth, airplane mode, do-not-disturb, battery, screen timeout, app permissions. Print: card phone-settings
+- phone-hardware: sensors, location, camera, microphone, torch, send a text, place a call, contacts, dialogs. Print: card phone-hardware
+- shizuku: the second door into the phone, for when adb drops. Print: card shizuku
+- devices: the old Z Flip 7 and every other device the phone can reach. Print: card devices
 - screen: capture and see pictures in the next loop turn; tap, swipe, type and press keys on a named screen. Print: card screen
 - phone-browser: the signed-in Chrome on the phone; open a page as George and read its text. Print: card phone-browser
 - laptop: run a command on George's Windows laptop, copy files each way, start a long job there. Print: card laptop
@@ -38,6 +45,10 @@ The families
 - bakery: the bakery's site numbers, Google listings, the Play apps, indexing pushes. Print: card bakery
 - cloud: Google Cloud, the secret names, the backup bucket, and the keys for other cloud accounts. Print: card cloud
 - github: gh and git, signed in as gugosf114. Print: card github
+- agent-scripts: George's own scripts that find, tap and drive things on the phone. Print: card agent-scripts
+- agent-box: the always-on box and its job queue, and the laptop's helpers. Print: card agent-box
+- programs: public tunnels, speech files, a browser library, file checkers, a network scan and other programs. Print: card programs
+- boot: what starts when the phone boots, and how to check and restart each piece. Print: card boot
 
 Built in, no command needed
 - Web search and reading a public web page are done by the provider's own tools in this client.

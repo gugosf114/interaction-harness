@@ -11,7 +11,7 @@ The notes (plain files on the Debian side)
   deb sed -n '1,60p' /root/.claude/projects/-root/memory/MEMORY.md
 
 recall: the best lines from past chats
-  deb python3 /root/.claude/recall.py "bakery voicemail"
+  deb recall "bakery voicemail"
   Up to six lines, each with its date and source: "- [2026-10-27 me · claude#36282] Found it. ..."
   It searches the turn index /root/corpus.db (June 2026 to now). It changes nothing.
 
@@ -25,5 +25,5 @@ The full archive
   /data/data/com.termux/files/home/conversation-corpus : 2,108 conversations, August 2024 to November 2026.
 
 Known failure
-  `deb recall "WORDS"` hangs until the timeout (exit 124, no output). The file /usr/local/bin/recall is
-  broken. The python3 form above is the same tool and works.
+  recall prints nothing when no saved turn holds the words. It knows chats from June 2026 on;
+  search-chats reaches the older ones.

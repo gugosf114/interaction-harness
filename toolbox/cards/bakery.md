@@ -33,5 +33,6 @@ Related
   PayPal invoices: `card money`. Bing key check: `cloud-check bing`.
 
 Known failure
-  `deb mbc-stats 7` answers "cannot execute: required file not found": its Python folder
-  /root/.gmail/venv is gone. bakery-stats runs the same script and works.
+  A line that reads "ERROR: (gcloud.secrets.versions.access) PERMISSION_DENIED" inside the output means
+  gcloud's selected account is not gugosf@gmail.com. bakery-stats selects it by itself; `deb mbc-stats 7`,
+  the same script by its own name, relies on gcloud's setting.

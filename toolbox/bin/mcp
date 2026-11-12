@@ -1,0 +1,99 @@
+#!/data/data/com.termux/files/usr/bin/python
+"""mcp TOOL ['JSON ARGUMENTS'] : call one tool of the phone's own MCP server (127.0.0.1:8080).
+mcp tools : list every tool with its arguments.     mcp tools NAME : one tool's full description.
+
+The server is the on-phone app that reads and drives George's screen, files, apps, camera and notifications.
+Exit 0 when the tool answered; exit 1 when the server or the tool reported an error; exit 2 on wrong use.
+The server's access token is read at run time from ~/.local/bin/agentbridge-call. It is not stored here.
+"""
+import json
+import os
+import re
+import sys
+import urllib.error
+import urllib.request
+
+URL = 'http://127.0.0.1:8080/mcp'
+SOURCE = os.path.expanduser('~/.local/bin/agentbridge-call')
+if not os.path.exists(SOURCE):
+    SOURCE = '/data/data/com.termux/files/home/.local/bin/agentbridge-call'
+
+
+def token():
+    try:
+        found = re.search(r"Authorization: Bearer ([^'\"\s]+)", open(SOURCE, encoding='utf-8').read())
+    except OSError:
+        found = None
+    if not found:
+        sys.exit('mcp: cannot read the server token from ' + SOURCE)
+    return found.group(1)
+
+
+def post(body, session=None, timeout=90):
+    headers = {'Authorization': 'Bearer ' + token(), 'Content-Type': 'application/json',
+               'Accept': 'application/json, text/event-stream'}
+    if session:
+        headers['mcp-session-id'] = session
+    reply = urllib.request.urlopen(urllib.request.Request(URL, json.dumps(body).encode(), headers), timeout=timeout)
+    raw = reply.read().decode('utf-8', 'replace')
+    found = re.search(r'\{.*\}', raw, re.S)
+    return reply.headers.get('mcp-session-id'), (json.loads(found.group(0)) if found else {})
+
+
+def shape(tool):
+    schema = tool.get('inputSchema') or {}
+    required = set(schema.get('required') or [])
+    parts = []
+    for name, spec in (schema.get('properties') or {}).items():
+        kind = '|'.join(map(str, spec['enum'])) if spec.get('enum') else spec.get('type', 'any')
+        parts.append(f"{name}{'' if name in required else '?'}:{kind}")
+    return ', '.join(parts)
+
+
+def main(argv):
+    if len(argv) < 2 or argv[1] in ('-h', '--help'):
+        print("usage: mcp TOOL ['JSON']   |   mcp tools [NAME]", file=sys.stderr)
+        return 2
+    try:
+        arguments = json.loads(argv[2]) if len(argv) > 2 and argv[1] != 'tools' else {}
+    except ValueError:
+        print('mcp: the arguments are not valid JSON.', file=sys.stderr)
+        return 2
+    if not isinstance(arguments, dict):
+        print('mcp: the arguments must be one JSON object.', file=sys.stderr)
+        return 2
+    try:
+        session, _ = post({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {
+            'protocolVersion': '2025-03-26', 'capabilities': {}, 'clientInfo': {'name': 'toolbox-mcp', 'version': '1'}}})
+        post({'jsonrpc': '2.0', 'method': 'notifications/initialized'}, session)
+        if argv[1] == 'tools':
+            _, answer = post({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'}, session)
+            tools = (answer.get('result') or {}).get('tools') or []
+            if len(argv) > 2:
+                for tool in tools:
+                    if tool['name'] == argv[2]:
+                        print(tool['name'] + '(' + shape(tool) + ')\n' + (tool.get('description') or '').strip())
+                        return 0
+                print('mcp: no tool named ' + argv[2], file=sys.stderr)
+                return 1
+            for tool in tools:
+                print(tool['name'] + '(' + shape(tool) + ')')
+            return 0 if tools else 1
+        _, answer = post({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call', 'params': {'name': argv[1], 'arguments': arguments}}, session)
+    except (urllib.error.URLError, OSError) as exc:
+        print(f'mcp: the phone MCP server did not answer ({exc.__class__.__name__}). Run: deb phone-link', file=sys.stderr)
+        return 1
+    if 'error' in answer:
+        print('mcp: ' + str(answer['error'].get('message', answer['error'])), file=sys.stderr)
+        return 1
+    result = answer.get('result') or {}
+    for item in result.get('content') or []:
+        if item.get('type') == 'text':
+            print(item['text'])
+        elif item.get('type') == 'image':
+            print(f"[image {item.get('mimeType', '')}, {len(item.get('data', ''))} base64 characters; use a save tool to keep it as a file]")
+    return 1 if result.get('isError') else 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main(sys.argv))

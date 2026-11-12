@@ -14,8 +14,7 @@ Read the text of a PDF
 
 QR code
   deb bash -c 'qr "TEXT OR URL" > /sdcard/Download/code.png'
-  Not working on this phone (checked 2026-11-11):
-  "ModuleNotFoundError: No module named 'qrcode'". The Python module qrcode is missing on the Debian side.
+  Writes a PNG picture of the code (370 x 370 for a short link). `deb qr "TEXT"` alone draws it in the terminal.
 
 Download a video (yt-dlp 2026.10.26, Debian side)
   deb yt-dlp -F 'URL'                                            list the formats, download nothing

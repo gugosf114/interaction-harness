@@ -14,8 +14,10 @@ BOX = h.ROOT / 'toolbox'
 CARDS = BOX / 'cards'
 INDEX = h.ROOT / 'tools_block.txt'
 INDEX_LINE = re.compile(r'^- ([a-z0-9-]+): .+ Print: card ([a-z0-9-]+)$')
-FAMILIES = ['files', 'documents', 'phone', 'screen', 'phone-browser', 'laptop', 'yana-phone', 'tv', 'voice', 'alerts', 'timers',
-            'calls', 'models', 'sessions', 'memory', 'mail', 'money', 'bakery', 'cloud', 'github']
+FAMILIES = ['files', 'documents', 'phone', 'mcp-see', 'mcp-touch', 'mcp-apps', 'phone-settings', 'phone-hardware', 'shizuku',
+            'devices', 'screen', 'phone-browser', 'laptop', 'yana-phone', 'tv', 'voice', 'alerts', 'timers',
+            'calls', 'models', 'sessions', 'memory', 'mail', 'money', 'bakery', 'cloud', 'github',
+            'agent-scripts', 'agent-box', 'programs', 'boot']
 CONTROLS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
 KEY_SHAPES = [re.compile(pattern) for pattern in (
     r'sk-[A-Za-z0-9_-]{16,}', r'AIza[0-9A-Za-z_-]{20,}', r'gh[pousr]_[A-Za-z0-9]{20,}', r'xox[abprs]-[A-Za-z0-9-]{10,}',
@@ -110,6 +112,24 @@ class CommandTests(unittest.TestCase):
                 self.assertEqual(run('bash', str(BOX / 'debian' / script)).returncode, 2)
         self.assertEqual(run('bash', str(BOX / 'debian' / 'paypal-get.sh'), 'https://elsewhere.example/v2/x').returncode, 2)
         self.assertEqual(run(sys.executable, str(BOX / 'debian' / 'mail-unread.py'), 'nobody').returncode, 2)
+        self.assertEqual(run(sys.executable, str(BOX / 'bin' / 'mcp')).returncode, 2)
+        self.assertEqual(run(sys.executable, str(BOX / 'bin' / 'mcp'), 'android_tap', '{not json').returncode, 2)
+        self.assertEqual(run(sys.executable, str(BOX / 'bin' / 'mcp'), 'android_tap', '[1, 2]').returncode, 2)
+        self.assertEqual(run('sh', str(BOX / 'bin' / 'rish')).returncode, 2)
+        self.assertEqual(run(sys.executable, str(BOX / 'bin' / 'media-volume'), 'loud').returncode, 2)
+        self.assertEqual(run(sys.executable, str(BOX / 'bin' / 'media-volume'), '10', '20').returncode, 2)
+
+    def test_the_three_mcp_cards_name_all_fifty_five_tools_once(self):
+        names = []
+        for card in ('mcp-see', 'mcp-touch', 'mcp-apps'):
+            text = (CARDS / (card + '.md')).read_text(encoding='utf-8')
+            names.extend(sorted(set(re.findall(r'mcp (android_[a-z_]+)', text))))
+        self.assertEqual(len(set(names)), 55)
+
+    def test_no_key_value_is_stored_for_the_mcp_server(self):
+        text = (BOX / 'bin' / 'mcp').read_text(encoding='utf-8')
+        self.assertNotIn('Bearer agent', text)
+        self.assertIn('agentbridge-call', text)
 
     def test_every_command_file_is_runnable(self):
         for folder in ('bin', 'debian'):

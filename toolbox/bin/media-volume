@@ -1,0 +1,42 @@
+#!/data/data/com.termux/files/usr/bin/python
+"""media-volume : print the media volume as a percent.     media-volume PERCENT : set it (0 to 100).
+
+It reads and sets Android's "music" stream through termux-volume. Prints: "media volume: 40% (10 of 25)".
+"""
+import json
+import subprocess
+import sys
+
+
+def read():
+    streams = json.loads(subprocess.run(['termux-volume'], capture_output=True, text=True, timeout=30).stdout)
+    music = next(item for item in streams if item['stream'] == 'music')
+    return music['volume'], music['max_volume']
+
+
+def main(argv):
+    if len(argv) > 2 or (len(argv) == 2 and not argv[1].rstrip('%').isdigit()):
+        print('usage: media-volume [PERCENT]', file=sys.stderr)
+        return 2
+    try:
+        level, top = read()
+        if len(argv) == 2:
+            percent = int(argv[1].rstrip('%'))
+            if not 0 <= percent <= 100:
+                print('PERCENT must be between 0 and 100.', file=sys.stderr)
+                return 2
+            wanted = round(percent * top / 100)
+            done = subprocess.run(['termux-volume', 'music', str(wanted)], capture_output=True, text=True, timeout=30)
+            if done.returncode != 0:
+                sys.stderr.write(done.stderr or 'termux-volume failed.\n')
+                return done.returncode
+            level, top = read()
+    except (OSError, ValueError, StopIteration, subprocess.TimeoutExpired) as exc:
+        print(f'media-volume: termux-volume did not answer ({exc.__class__.__name__}).', file=sys.stderr)
+        return 1
+    print(f'media volume: {round(level * 100 / top)}% ({level} of {top})')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main(sys.argv))

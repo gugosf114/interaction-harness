@@ -1,8 +1,8 @@
 # cloud — Google Cloud, and the keys for the other cloud accounts
 
 Google Cloud (gcloud on the Debian side)
-  Add --account=gugosf@gmail.com to every gcloud command. The default account on this phone is a
-  service account for Google Play, and it is refused on most calls.
+  The selected account is gugosf@gmail.com (set 2026-11-11). --account=gugosf@gmail.com on a command
+  forces it; two service accounts for Play and Analytics are also signed in.
   deb gcloud projects list --account=gugosf@gmail.com --format='value(projectId)'
       -> bakers-agent, bakers-agent-2, credit-burn-test-g114, gen-lang-client-0808363618,
          heirloom-gem-10140048, web-search-g114
@@ -24,12 +24,13 @@ The other accounts: where each key lives, and one read-only call
   cloud-check bing           key /root/.bing/apikey               -> "bing sites: ['https://mybakingcreations.com/']"
   cloud-check huggingface    key /root/.huggingface/token         -> "hugging face user: NAME"
   cloud-check runpod         key /root/.runpod/config.toml        -> "runpod balance: N | pods: [...]"
-  cloud-check modal          key /root/.modal.toml                -> not working, see below
-  cloud-check brightdata     sign-in /root/.brightdata/account.env -> not working, see below
+  cloud-check modal          key /root/.modal.toml                -> the list of Modal apps
+  cloud-check brightdata     sign-in kept by the bdata program    -> the active zones (cli_unlocker, cli_browser)
+  More of each: deb modal --help ; deb bdata --help (scrape, search, zones, budget, browser).
   The bakery's Cloudflare account uses two secrets, cloudflare-mbc-global-key and cloudflare-mbc-email,
   sent as the headers X-Auth-Key and X-Auth-Email.
 
-Known failure (checked 2026-11-11)
-  modal: "ModuleNotFoundError: No module named 'modal'". The modal program is not installed on the Debian side.
-  brightdata: "bdata: command not found". The Bright Data program is not installed, and no API token is on file.
-  A gcloud call without --account answers PERMISSION_DENIED and names play-publisher@bakers-agent.
+Known failure
+  A gcloud call that answers PERMISSION_DENIED and names play-publisher@bakers-agent means the selected
+  account was switched to the Play service account. Put it back:
+  deb gcloud config set account gugosf@gmail.com

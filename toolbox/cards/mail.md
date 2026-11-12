@@ -34,4 +34,4 @@ Known failure
   "invalid_grant" on Berkeley or Gmail: the Google sign-in expired (it lasts 7 days). Renew it:
   deb bash -c 'cd /root/.gmail && WAIT=540 ./berkeley_auth.py'
   That opens Google's consent page on the phone, and George taps Allow.
-  /root/.gmail/venv is gone, so run the scripts with python3 as written here.
+  The scripts run with python3. /root/.gmail/venv/bin/python, the path their first lines name, works again too.

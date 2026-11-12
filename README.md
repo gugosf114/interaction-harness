@@ -211,7 +211,7 @@ George's subscription setup can drive his phone, laptop, mail, money tools, bake
 
 **The pieces.**
 
-- `tools_block.txt` — the index. Nineteen families, one line each, ending in `Print: card NAME`. 3,013 characters. Measured from provider usage: 1,044 tokens on Claude Opus 5.5 and 739 on GPT-6.1 Sol.
+- `tools_block.txt` — the index. One line per family, ending in `Print: card NAME`. Thirty-one families and 4,411 characters since the whole-phone pass. The first nineteen-family index measured 1,044 tokens on Claude Opus 5.5 and 739 on GPT-6.1 Sol.
 - `toolbox/cards/NAME.md` — one card per family, each under 4,000 characters: what it does, the exact commands with real argument shapes, what comes back, which side it runs on, and the one known failure.
 - `toolbox/bin/` — the commands the model types. `toolbox/debian/` — the Debian-side halves of four of them.
 - `toolbox/install.sh` — links every file in `toolbox/bin` into `$PREFIX/bin`. Safe to run again. It never replaces a real file.
@@ -231,6 +231,9 @@ George's subscription setup can drive his phone, laptop, mail, money tools, bake
 | `paypal-get PATH` | One read-only GET on the live PayPal API. |
 | `bakery-stats [DAYS]` | The bakery's site, search, listing and social numbers. |
 | `cloud-check NAME` | One read-only call that shows a cloud key still works. Prints no key. |
+| `mcp TOOL 'JSON'` | Calls one of the 55 tools of the phone's own MCP server. `mcp tools` lists them. Exit 1 when the tool reports an error. |
+| `rish -c 'COMMAND'` | Runs a command on the phone through Shizuku, at shell rights, with no adb. |
+| `media-volume [PERCENT]` | Prints the media volume as a percent, or sets it. |
 
 **Install, or re-install after a clone.** In native Termux:
 
@@ -244,9 +247,15 @@ sh ~/interaction-harness/toolbox/install.sh
 - Cards state facts. A command that acts on the outside world gets one plain fact line, such as "This sends a real email at once."
 - No key, token or password value goes on the index, on a card, or in a script. Say where the key lives.
 - `tools_block.txt` must stay byte-identical between calls, so the caches keep hitting. Every edit to it starts the cache over once.
-- `test_toolbox.py` checks the caps, that the index and the cards name the same nineteen families, control characters, key-shaped strings, the card printer, the installer and `edit-exact`.
+- `test_toolbox.py` checks the caps, that the index and the cards name the same families, control characters, key-shaped strings, the card printer, the installer and `edit-exact`.
 
-**Not working on this phone when checked (Nov 11, 2026).** Each card states its own failure. In short: `qr` (Python module `qrcode` missing), `gemini` and `grok` (broken installs; `agy --print` works), `modal` and the Bright Data program (not installed), `deb recall` (broken file; the `python3 /root/.claude/recall.py` form works), `deb mbc-stats` (its Python folder is gone; `bakery-stats` works), `deb phone-do` and `deb phone-ask` (dead links; the full paths work), PayPal transaction search (the PayPal app lacks that permission), new calls through `phone-ask` (the caller's profile has no handoff number), `termux-notification-list` (no answer), and the timers table (seven timers listed, none scheduled in Android).
+**The whole-phone pass (Nov 11, 2026).** A scan showed the lanes knew a small part of the phone. Eleven families were added: `mcp-see`, `mcp-touch` and `mcp-apps` (all 55 tools of the phone's MCP server, with argument shapes taken from its own `tools/list`), `phone-settings`, `phone-hardware`, `shizuku`, `devices`, `agent-scripts`, `agent-box`, `programs` and `boot`. Every read-only form ran through the harness's own runner; every form that taps, sends, calls or changes a setting is listed without a run.
+
+**Repaired on the phone that day.** These were lost when George moved from the Z Flip 7 to the Pixel 11, and their short names work again: `deb recall` (the file had a letter n where its line breaks belong), `deb mbc-stats` and the mail scripts (the Python folder `/root/.gmail/venv` was gone; gcloud's selected account was a service account), `deb phone-do`, `deb phone-ask`, `deb assistant` and `deb support-chat` (the installed copy and the errand profile were copied back from the old phone), `qr`, Modal, `playwright`, `apkinfo`, `check-model` and `yalta` (missing Python modules), the Bright Data program and `lt` (missing Node packages), `gemini` on both sides, `grok` (the program; its sign-in is still needed), and `termux-notification-list` (Termux:API had no notification access).
+
+**Still not working when checked (Nov 11, 2026).** Each card states its own failure. In short: `grok` needs George's sign-in (`grok login --device-code`); PayPal transaction search needs a permission only George can add in the PayPal developer dashboard; the MCP server's camera and location tools lack those two app permissions; the name reader for hidden screens does not answer on Android 17, so hidden screens are driven by picture (`card screen`), and the MCP tools see the visible screen only; DroidRun's helper is not enabled; no boot keeper loop is running and Android lists no scheduled timers.
+
+**Live proof of the whole-phone pass (Nov 11, 2026).** Six questions on each lane, real launcher, `--loop -y`, isolated state: battery level and temperature, set the media volume to its current level, the last five notifications, Wi-Fi state and network name, the Android version through Shizuku, and a node position on a hidden screen through the MCP tools. Ten of twelve passed with exit 0 and matched a direct check. The hidden-screen question did not pass on either lane: the MCP server cannot see a hidden screen, and both models said so.
 
 **Live proof (Nov 11, 2026).** Six questions on each engine, through the real launcher with `--loop -y` and an isolated state folder: a screenshot with its path and size, the Berkeley unread count and newest subject, the bakery site's sessions for seven days, the laptop's hostname, an exact edit of a file, and a one-page PDF in Downloads. Twelve of twelve exited 0 with the right command, and each answer matched a direct check. Every run printed the family's card first, then ran the command from it. With the index in place the second call still read the cache: 13,939 tokens on Claude, 10,810 of 11,584 on GPT-6.1 Sol.
 

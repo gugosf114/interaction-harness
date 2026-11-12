@@ -15,6 +15,10 @@ Show a notification
 Remove one
   termux-notification-remove 4101
 
+Read what is in the notification shade
+  termux-notification-list                  JSON list: id, packageName, title, content, when
+  mcp android_notification_list '{"limit":5}'       the same through the phone's MCP server, with action ids
+
 A short pop-up on the screen
   termux-toast 'TEXT'
 
@@ -26,5 +30,5 @@ Other phone signals
   termux-battery-status                     JSON: percentage, status; changes nothing
 
 Known failure
-  termux-notification-list does not answer on this phone (no reply in 40 seconds, checked 2026-11-11).
-  Do not use it to read notifications.
+  termux-notification-list hangs with no output when Termux:API loses notification access. Give it back:
+  rish -c 'cmd notification allow_listener com.termux.api/.apis.NotificationListAPI$NotificationService'
