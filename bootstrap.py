@@ -10,7 +10,7 @@ if len(sys.argv) < 4 or sys.argv[3] not in {'harness.py', 'verify_live.py'}:
     sys.exit('Unknown harness entry point.')
 with os.fdopen(int(sys.argv[1])) as stream:
     values = json.load(stream)
-for name in ('OPENAI_API_KEY','ANTHROPIC_API_KEY','DEFAULT_ENGINE','OPENAI_MODEL','ANTHROPIC_MODEL','HARNESS_STATE_DIR'):
+for name in ('OPENAI_API_KEY','ANTHROPIC_API_KEY','DEFAULT_ENGINE','OPENAI_MODEL','ANTHROPIC_MODEL','HARNESS_STATE_DIR','HARNESS_CALLER_CWD'):
     if values.get(name): os.environ[name]=values[name]
 os.environ['HARNESS_BRIDGE_FD']=sys.argv[2]
 target = ROOT / sys.argv[3]

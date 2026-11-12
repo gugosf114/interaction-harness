@@ -7,6 +7,8 @@ import socket
 import sys
 
 import harness as h
+import senses_cli
+from lookup_gate import turn_metadata
 from phonetics import normalize
 from storage import (Store, history_messages, atomic_json, execution_observation,
                      confirmed_execution, successful_execution)
@@ -46,8 +48,9 @@ def run_chat(args, model):
     if args.execute: options.append('--exec')
     if args.loop: options.extend(['--loop','--max-turns',str(args.max_turns)])
     if args.yes: options.append('--yes')
+    options.extend(senses_cli.common_options(args))
     last_status=0
-    if args.text: last_status=main([*options,'--',' '.join(args.text)])
+    if args.text: last_status=main([*options,*senses_cli.attachment_options(args),'--',' '.join(args.text)])
     while True:
         try:
             # Prompts stay off stdout so redirected output remains answer-only.
@@ -62,7 +65,9 @@ def run_chat(args, model):
             raw=raw.rstrip('\r\n')
             if raw.strip().lower() in {'exit','quit'}: return last_status
             if not raw.strip(): continue
-            last_status=main([*options,'--',raw])
+            try:attachment_flags,raw=senses_cli.chat_input(raw)
+            except ValueError as exc:print(str(exc),file=sys.stderr);last_status=2;continue
+            last_status=main([*options,*attachment_flags,'--',raw])
             if last_status==130: return 130
         except KeyboardInterrupt:
             print('',file=sys.stderr); return 130
@@ -91,8 +96,10 @@ def main(argv=None):
     parser.add_argument('--recall',metavar='QUERY',help='Search local history without an API call.')
     parser.add_argument('-l','--listen',action='store_true',help='Use Android speech recognition through Termux:API.')
     parser.add_argument('--listen-timeout',type=int,default=90)
+    senses_cli.add_flags(parser)
     parser.add_argument('text',nargs='*',help='Quoted input, or pipe text on stdin.')
     args=parser.parse_args(argv)
+    senses_cli.validate_args(parser,args)
     if args.engine not in {'openai','anthropic'}: parser.error('DEFAULT_ENGINE must be openai or anthropic.')
     if not 1<=args.timeout<=300: parser.error('--timeout must be between 1 and 300 seconds.')
     if not 1<=args.turns<=50: parser.error('--turns must be between 1 and 50.')
@@ -117,8 +124,13 @@ def main(argv=None):
             for row in matches:
                 raw={k:row[k] for k in ('intent','cleaned_input','direct_answer','execution_payload')}
                 # Recall uses the same gate; rejected legacy text is not displayed.
-                try: rendered.append(h.display_text(h.validate_reply(json.dumps(raw),row.get('normalized_input') or row.get('raw_input'),
-                            execution_confirmed=store.follows_successful_execution(row['session_id'],row['id']))))
+                try:
+                    saved=senses_cli.saved_metadata(row)
+                    checked=h.validate_reply(json.dumps(raw),row.get('normalized_input') or row.get('raw_input'),
+                            execution_confirmed=store.follows_successful_execution(row['session_id'],row['id']))
+                    reason=senses_cli.recall_violation(checked,row,saved)
+                    if reason:raise h.GateError(reason)
+                    rendered.append(h.display_text(checked,saved['sources']))
                 except h.GateError: continue
             sys.stdout.write('\n'.join(rendered) if rendered else 'No saved match.\n')
             return 0
@@ -128,6 +140,7 @@ def main(argv=None):
         elif not sys.stdin.isatty(): raw=sys.stdin.read(h.MAX_INPUT_CHARS+1)
         else: parser.error('Supply quoted text, pipe text on stdin, or use --listen.')
         cleaned=raw if args.no_normalize else normalize(raw)
+        attached=senses_cli.prepare(args)
         sid=store.select_session(args.session,args.continuing)
         if len(raw)>h.MAX_INPUT_CHARS:
             row_id=store.begin(raw,cleaned,args.engine,model,sid)
@@ -142,7 +155,8 @@ def main(argv=None):
                 current=cleaned if step==1 else ('Continue the original task using the recorded execution observation. '
                     f'Return execution_payload null when finished. This is model turn {step} of {ceiling}.')
                 current_raw=raw if step==1 else current
-                row_id=store.begin(current_raw,current,args.engine,model,sid)
+                turn_attachments=attached if step==1 else []
+                row_id=store.begin(current_raw,current,args.engine,model,sid,attachments=turn_attachments)
                 past=history_messages(session['turns'],args.history_chars)
                 if args.loop:
                     # Original task and latest actual result survive a small rolling window.
@@ -160,12 +174,14 @@ def main(argv=None):
                                    and past[-1]=={'role':'user','content':execution_observation(latest)})
                 reply=h.request_reply(current,engine=args.engine,model=model,effort=args.effort,timeout=args.timeout,
                                       log_path=args.usage_log,events=events,history=past,execution_confirmed=supported,
-                                      request_context=cleaned)
+                                      request_context=cleaned,web=not args.no_web,web_max=args.web_max,attachments=turn_attachments)
                 store.finish(row_id,reply,events)
                 exchange={'raw_input':current_raw,'normalized_input':current,'reply':reply.model_dump(),'engine':args.engine,'model':model}
+                metadata=turn_metadata(events);exchange.update(metadata)
+                if turn_attachments:exchange['attachments']=turn_attachments
                 if args.loop:exchange['loop_step']=step
                 store.save_session(session,exchange,args.turns)
-                sys.stdout.write(h.display_text(reply));sys.stdout.flush()
+                sys.stdout.write(h.display_text(reply,metadata['sources']));sys.stdout.flush()
                 if not (args.execute and reply.execution_payload):return last_exit
                 request={'op':'exec','command':reply.execution_payload,'timeout':args.exec_timeout}
                 if args.yes:request['auto_confirm']=True

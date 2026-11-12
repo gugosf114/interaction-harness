@@ -222,10 +222,44 @@ Each API call carries context in four places, in this order.
 - **Claude's tool call is not forced.** `tool_choice` is `auto`, so the model can answer in plain text. The local gate rejects that reply.
 - **Speed.** Both defaults run at high reasoning effort. A turn takes seconds with or without a cache hit.
 
+## Senses
+
+Both engines have hosted web search and page fetching enabled by default. `--no-web` disables both. `--web-max N` sets a total lookup ceiling per model turn (2-50; default 5). OpenAI uses its `web_search` tool for search, `open_page`, and `find_in_page` actions. Claude uses `web_search_20260209` and `web_fetch_20260209` with direct calling. Claude exposes separate per-tool limits, so the client reserves `ceil(N/2)` searches and `floor(N/2)` fetches: three searches and two fetches at the default. The minimum of two leaves a slot for each tool. A paused Claude turn resumes with its complete content unchanged; an invalid final tool reply is returned as a tool error within the same quota turn. OpenAI corrective calls use the remaining shared budget. Tool definitions stay byte-identical for a fixed engine and flag configuration.
+
+```sh
+g1 "Search the web for today's official Python release news."
+george "Fetch https://example.com and give me its title."
+g1 --no-web "What does chmod 640 mean?"
+george --web-max 8 "Search for the latest announcement and read its page."
+g1 --image ~/picture.png "What is shown here?"
+george --file /sdcard/Download/report.pdf "Read the second chart."
+```
+
+`--image PATH` and `--file PATH` are repeatable. Images can be PNG, JPEG, WebP, or GIF; files must be PDF. The file signature determines the type, regardless of its extension. Paths beginning with `~` mean the Termux home, `/sdcard` paths work through Debian, and relative paths use the folder from which the native launcher was started. In chat, use one line such as `/image "/sdcard/Download/a b.png" What number is shown?` or `/file ~/report.pdf What does page two say?`.
+
+Files are sent inline without client resizing, cropping, or truncation. The verified first-party limits are: OpenAI, 512 MB total request payload, PDFs individually under 50 MB and at most 50 MB combined; Claude, 10 MB base64 data per image and 128 MB total request payload including PDFs and all other content. Base64 overhead counts. Preflight rejects an over-limit file or request before making an API call. Provider processing and model-specific image/page constraints still apply; a provider rejection is a failure, not a substituted or shortened attachment.
+
+An exchange stores each attachment's phone path, SHA-256, byte size, media type and kind. Bytes are not stored in SQLite or session files. While that exchange remains in the rolling history, the original file is checked and re-sent on later turns. A missing or changed file stops the request instead of silently substituting new content.
+
+The client records actual hosted tool events and provider-reported counts. It deduplicates source URLs and prints at most eight, after the answer and before any command:
+
+```text
+Sources:
+1. Example Domain — https://example.com
+```
+
+Only a lookup returning sources creates this block. The model must not write its own Sources section. SQLite stores `sources_json`, `lookup_counts_json`, and `attachments_json`; sessions retain the same metadata, and `--recall` displays saved sources. Counts distinguish search, fetch and find actions, preserve the provider's usage reports, and include the URLs that were supplied as request/history context.
+
+Two checks run after the existing answer checks. A claimed search, browse, fetch or online check without a recorded lookup is rejected. Quoted text and denials are preserved. A URL in the answer must be in this turn's sources, the operator's request, or the supplied session history. Either violation gets at most one corrective reply. Hosted lookup errors, including Claude's HTTP-200 error blocks, stop the turn with an error and no answer. The four-field reply, frozen prefix and operator-owned context pages retain their existing contracts.
+
+Verification: `python verify_senses.py --engine openai` and `python verify_senses.py --engine anthropic` run the seven live cases and save JSON reports under `state/senses-checks/`. A separate development copy can supply `--key-dir /path/to/live/state`; only the directory is passed on the command line. `--resume REPORT_DIRECTORY --case NAME` reruns a failed case while retaining prior receipts. The PNG and PDF fixtures use the standard library; no dependency was added.
+
+Official references checked for this implementation: [OpenAI web tools](https://developers.openai.com/api/docs/guides/tools-web-search), [OpenAI images](https://developers.openai.com/api/docs/guides/images-vision), [OpenAI files](https://developers.openai.com/api/docs/guides/file-inputs), [Claude web search](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool), [Claude web fetch](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-fetch-tool), [Claude server tools](https://platform.claude.com/docs/en/agents-and-tools/tool-use/server-tools), [Claude images](https://platform.claude.com/docs/en/build-with-claude/vision), and [Claude PDF support](https://platform.claude.com/docs/en/build-with-claude/pdf-support).
+
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses'
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes

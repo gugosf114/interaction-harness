@@ -18,6 +18,7 @@ def main():
         return 2
     read_fd, write_fd = os.pipe()
     values = {name: os.environ[name] for name in ('OPENAI_API_KEY','ANTHROPIC_API_KEY','DEFAULT_ENGINE','OPENAI_MODEL','ANTHROPIC_MODEL','HARNESS_STATE_DIR') if os.environ.get(name)}
+    values['HARNESS_CALLER_CWD']=os.getcwd()
     parent_socket, child_socket = socket.socketpair()
     command = ['proot-distro', 'login', 'debian', '--', str(ROOT / '.venv/bin/python'),
                '-B', str(ROOT / 'bootstrap.py'), str(read_fd), str(child_socket.fileno()), *sys.argv[1:]]

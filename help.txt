@@ -5,7 +5,8 @@ usage: harness.py [-h] [--engine {openai,anthropic}] [--model MODEL]
                   [--history-chars HISTORY_CHARS] [--no-normalize] [-x]
                   [--exec-timeout EXEC_TIMEOUT] [--loop]
                   [--max-turns MAX_TURNS] [-y] [--recall QUERY] [-l]
-                  [--listen-timeout LISTEN_TIMEOUT]
+                  [--listen-timeout LISTEN_TIMEOUT] [--no-web]
+                  [--web-max WEB_MAX] [--image PATH] [--file PATH]
                   [text ...]
 
 Direct answers, bounded memory, optional confirmed Termux execution.
@@ -45,3 +46,8 @@ options:
   --recall QUERY        Search local history without an API call.
   -l, --listen          Use Android speech recognition through Termux:API.
   --listen-timeout LISTEN_TIMEOUT
+  --no-web              Disable hosted web search and fetch.
+  --web-max WEB_MAX     Total hosted lookup ceiling per model turn (2–50;
+                        default 5).
+  --image PATH          Attach PNG/JPEG/WebP/GIF bytes; repeatable.
+  --file PATH           Attach PDF bytes; repeatable.

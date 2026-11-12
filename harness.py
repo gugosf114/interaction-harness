@@ -27,6 +27,9 @@ from openai import (
 )
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 import anthropic
+from senses import TurnSenses, SensesError
+from attachments import AttachmentError
+from lookup_gate import violation as lookup_violation, source_block, urls
 
 ROOT = Path(__file__).resolve().parent
 PREFIX_SHA256 = '73d3ce09d43431650591b9ff9c9eb7e5fe3def714e0a49eebdfd7c8fd2fd2854'
@@ -371,10 +374,12 @@ def validate_reply(raw: str, input_text: str | None = None, *, execution_confirm
     return reply
 
 
-def display_text(reply: HarnessReply) -> str:
+def display_text(reply: HarnessReply, sources=()) -> str:
     text = scrub_opening(reply.direct_answer)
     if not text:
         raise OpeningScrubError('No substantive answer remains after opening-line cleanup.')
+    block=source_block(sources,text)
+    if block:text+='\n\n'+block
     if reply.execution_payload is not None:
         text += '\n\n' + reply.execution_payload.strip()
     return text + '\n'
@@ -395,6 +400,7 @@ def request_reply(
     effort: str = DEFAULT_EFFORT, timeout: float = 90,
     log_path: Path | None = None, events: list | None = None, history: list | None = None,
     execution_confirmed: bool = False, request_context: str | None = None,
+    web: bool = True, web_max: int = 5, attachments=None,
 ) -> HarnessReply:
     if len(raw_input) > MAX_INPUT_CHARS:
         raise HarnessError(f'Input exceeds {MAX_INPUT_CHARS} characters.')
@@ -417,9 +423,12 @@ def request_reply(
     messages = [
         *({'role': 'system', 'content': page} for page in system_pages),
         *(history or []),
-        {'role': 'user', 'content': raw_input},
+        {'role': 'user', 'content': raw_input, **({'attachments':attachments} if attachments else {})},
     ]
+    allowed_text=json.dumps(messages[len(system_pages):],ensure_ascii=False)+' '+(request_context or '')
     schema = api_schema()
+    senses=TurnSenses(engine,schema,web,web_max)
+    senses.counts['allowed_urls']=sorted(urls(allowed_text))
     for attempt in (1, 2):
         started = time.monotonic()
         event = {
@@ -432,27 +441,14 @@ def request_reply(
             'input_chars': len(raw_input), 'status': 'pending',
         }
         try:
-            if engine == 'openai':
-                response = client.responses.create(
-                    model=model, input=messages,
-                    reasoning={'effort': effort}, max_output_tokens=MAX_OUTPUT_TOKENS,
-                    text={'format': {'type':'json_schema','name':'interaction_reply','strict':True,'schema':schema}},
-                    prompt_cache_key='interaction-harness-' + PREFIX_SHA256[:24], store=False,
-                )
-            else:
-                response = client.messages.create(
-                    model=model, max_tokens=MAX_OUTPUT_TOKENS,
-                    thinking={'type':'adaptive'}, output_config={'effort':effort},
-                    system=anthropic_system(system_pages, len(base_pages)),
-                    messages=messages[len(system_pages):],
-                    tools=[{'name':'emit_reply','description':'Required final response channel for every user request. Call this tool exactly once with the final four-field interaction reply. Do not return the object as ordinary text. This tool returns data and never executes a command.','input_schema':schema,'strict':True}],
-                    tool_choice={'type':'auto','disable_parallel_tool_use':True},
-                )
+            response=senses.send(client,model=model,effort=effort,max_output_tokens=MAX_OUTPUT_TOKENS,
+                messages=messages,system_pages=system_pages,schema=schema,prefix_hash=PREFIX_SHA256,
+                system_blocks=anthropic_system(system_pages,len(base_pages)))
             event['response_id'] = response.id
             event['model_returned'] = response.model
             usage = getattr(response, 'usage', None)
             if usage is not None:
-                event['usage'] = usage.model_dump(exclude_none=True)
+                event['usage'] = senses.last_usage or usage.model_dump(exclude_none=True)
             if engine == 'openai':
                 for output in response.output:
                     if getattr(output,'type',None) == 'message':
@@ -471,6 +467,8 @@ def request_reply(
             try:
                 reply = validate_reply(raw_response, raw_input, execution_confirmed=execution_confirmed,
                                        request_context=request_context)
+                reason=lookup_violation(reply.direct_answer,senses.counts,senses.metadata()['sources'],allowed_text)
+                if reason:raise GateError(reason)
             except OpeningScrubError:
                 event['status']='empty_after_scrub'
                 raise
@@ -479,21 +477,16 @@ def request_reply(
                 event['gate_reason'] = str(exc)
                 if attempt == 2:
                     raise HarnessError('Both replies failed the output gate. No answer was displayed.') from exc
-                messages.append({
-                    'role': 'user',
-                    'content': (
-                        'Local validation rejected the previous reply: ' + str(exc) +
-                        ' Return a corrected reply for the original request. Preserve facts and '
-                        'meaning. Do not invent certainty. If meaning is unclear, ask one short '
-                        'question with intent observation and execution_payload null.'
-                    ),
-                })
+                messages=senses.repair(messages,response,str(exc))
                 continue
             event['status'] = 'accepted'
             event['intent'] = reply.intent
             event['answer_chars'] = len(reply.direct_answer)
             event['has_execution_payload'] = reply.execution_payload is not None
             return reply
+        except (SensesError,AttachmentError) as exc:
+            event['status']='senses_error'
+            raise HarnessError(str(exc)) from exc
         except (AuthenticationError, anthropic.AuthenticationError) as exc:
             event['status'] = 'authentication_error'
             raise HarnessError('The API key was rejected.') from exc
@@ -512,8 +505,12 @@ def request_reply(
         except (APIStatusError, anthropic.APIStatusError) as exc:
             event['status'] = 'api_error'
             event['http_status'] = exc.status_code
+            event['provider_error'] = getattr(exc,'body',None)
             raise HarnessError(f'The API rejected this request (HTTP {exc.status_code}).') from exc
         finally:
+            event.update(senses.metadata())
+            if senses.last_usage:event.setdefault('usage',senses.last_usage)
+            event['provider_response_ids']=senses.last_responses
             event['elapsed_ms'] = round((time.monotonic() - started) * 1000)
             record_event(event, log_path)
             if events is not None:

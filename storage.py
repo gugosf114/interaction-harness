@@ -9,6 +9,7 @@ import re
 import sqlite3
 import tempfile
 import uuid
+from lookup_gate import turn_metadata
 
 NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z')
 METRIC_COLUMNS = ('input_tokens', 'output_tokens', 'cache_creation_tokens',
@@ -150,19 +151,25 @@ class Store:
             for name in METRIC_COLUMNS:
                 if name not in columns:
                     self.db.execute(f'ALTER TABLE history ADD COLUMN {name} INTEGER')
+            for name in ('sources_json','lookup_counts_json','attachments_json'):
+                if name not in columns:self.db.execute(f'ALTER TABLE history ADD COLUMN {name} TEXT')
 
     def close(self):
         self.db.close()
 
-    def begin(self, raw, normalized, engine, model, session_id=None):
+    def begin(self, raw, normalized, engine, model, session_id=None, attachments=None):
         with self.db:
             cur = self.db.execute('INSERT INTO history(timestamp,engine,model,session_id,raw_input,normalized_input) VALUES(?,?,?,?,?,?)',
                                   (now(),engine,model,session_id,raw,normalized))
-        return cur.lastrowid
+            idx=cur.lastrowid
+            self.db.execute('UPDATE history SET attachments_json=? WHERE id=?',(json.dumps(attachments or []),idx))
+            return idx
 
     def finish(self, row_id, reply=None, events=(), error=None, execution=None, status=None):
         fields = dict(status=status or ('error' if error else 'accepted'), error=error,
                       **request_metrics(events))
+        metadata=turn_metadata(events)
+        fields.update(sources_json=json.dumps(metadata['sources']),lookup_counts_json=json.dumps(metadata['lookup_counts']))
         if reply:
             fields.update(reply.model_dump())
         if execution is not None: fields['execution_result'] = json.dumps(execution)
@@ -227,9 +234,12 @@ def history_messages(exchanges, max_chars=24000):
             {'role':'user','content':exchange['normalized_input']},
             {'role':'assistant','content':json.dumps(record,ensure_ascii=False)},
         ]
+        if exchange.get('attachments'):pair[0]['attachments']=exchange['attachments']
+        if exchange.get('sources'):
+            pair.append({'role':'user','content':json.dumps({'type':'source_record','sources':exchange['sources']})})
         if exchange.get('execution_result') is not None:
             pair.append({'role':'user','content':execution_observation(exchange)})
-        size = sum(len(p['content']) for p in pair)
+        size = sum(len(p['content'])+len(json.dumps(p.get('attachments',[]))) for p in pair)
         if used + size > max_chars: break
         selected.insert(0,pair); used += size
     return [message for pair in selected for message in pair]
