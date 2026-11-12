@@ -24,3 +24,20 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(signal.getsignal(signal.SIGINT),before)
         self.assertEqual(exchange(wire,{'command':'next'})['stdout'],'next')
         self.assertEqual(wire.reads,2)
+    def test_daemon_signal_is_forwarded_but_terminal_signal_is_not_duplicated(self):
+        from unittest.mock import Mock,patch,call
+        from launch import bridge_interrupt
+        child=Mock(pid=10);stop=bridge_interrupt(child)
+        with patch('launch.worker_pids',return_value=[30]),patch('launch.os.kill') as kill:
+            with patch('launch.foreground_tty',return_value=False):stop(signal.SIGINT,None)
+            self.assertEqual(kill.call_args_list,[call(30,signal.SIGINT)])
+            kill.reset_mock()
+            with patch('launch.foreground_tty',return_value=True):stop(signal.SIGINT,None)
+            kill.assert_not_called()
+    def test_worker_selection_excludes_the_proot_command_string(self):
+        from unittest.mock import patch
+        import launch
+        path=str(launch.ROOT/'bootstrap.py').encode()
+        data=[b'python\0-B\0'+path+b'\0',b'proot\0python -B '+path+b' 3 6 harness.py\0']
+        with patch('launch.child_tree',return_value=[30,20]),patch('pathlib.Path.read_bytes',side_effect=data):
+            self.assertEqual(launch.worker_pids(10),[30])

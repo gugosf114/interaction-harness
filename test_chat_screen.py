@@ -94,8 +94,11 @@ class ScreenTests(unittest.TestCase):
         with ThreadPoolExecutor(2) as pool:list(pool.map(append,['FIRST','SECOND']))
         self.assertEqual(set(json.loads((self.root/'chat-input.json').read_text())),{'FIRST','SECOND'})
     def test_recall_status_reads_the_real_recall_switch(self):
-        _,_,err,_=self.chat('/off recall\n/status\nquit\n')
+        _,_,err,_=self.chat('/off recall\n/voice short\n/status\nquit\n')
         self.assertIn('recall: off',err)
+        self.assertIn('voice-mode: short',err)
+        self.assertIn('colors: off',err)
+        self.assertIn('Recall settings:',err)
     def test_history_preserves_multiline_across_launches(self):
         self.chat('/paste\none\ntwo\n.\nquit\n')
         self.chat('three\nquit\n')

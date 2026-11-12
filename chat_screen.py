@@ -374,8 +374,12 @@ def run_chat(args, model, cli):
                     if rest not in ('low','medium','high','xhigh','max'): raise ValueError('Use /effort low|medium|high|xhigh|max.')
                     args.effort = rest; screen.note('Thinking '+rest+'.'); continue
                 if name == 'status':
+                    import mod_switches, recall_notes
                     screen.note('\n'.join(f'{key}: {value}' for key,value in sorted(vars(args).items()) if not key.startswith('_') and key != 'text'))
                     screen.note('session: '+sid)
+                    screen.note('colors: '+('on' if screen.colors else 'off')+'\nNO_COLOR: '+('set' if 'NO_COLOR' in os.environ else 'unset'))
+                    screen.note('voice-mode: '+str(mod_switches.setting('voice-mode',h.STATE)))
+                    screen.note('Recall settings: '+json.dumps(recall_notes.settings(h.STATE),sort_keys=True))
                     screen.note('Model limits: '+json.dumps({k:v for k,v in model_metadata(args.model).items() if k in ('window_tokens','max_input_tokens','max_output_tokens','window_source')}))
                     screen.note('\n'.join(f'{key}: {"on" if value else "off"}' for key,value in switches(args,h.STATE).items()))
                     config = api_tools_cli.settings(args,h.STATE)
