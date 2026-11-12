@@ -209,6 +209,12 @@ class FlowTests(Base):
         self.assertEqual(judge.calls[0]['model'], h.ANTHROPIC_MODEL)
         self.assertEqual((judge.calls[0]['effort'], judge.calls[0]['timeout']), ('xhigh', 77))
 
+    def test_the_judge_never_gets_longer_than_its_own_ceiling(self):
+        judge = FakeJudge(verdict())
+        self.ask_through(judge, FakeClient([response(reply(RIGHT))]), engine='openai', effort='max', timeout=1800)
+        self.assertEqual(judge.calls[0]['timeout'], reply_judge.JUDGE_SECONDS)
+        self.assertEqual(reply_judge.JUDGE_SECONDS, 120)
+
     def test_a_second_fail_is_shown_anyway(self):
         judge = FakeJudge(verdict('fail', REASON), verdict('fail', 'Still the wrong question; name the capital.'))
         client = FakeClient([response(reply(WRONG)), response(reply('The file mode is 640.'))])

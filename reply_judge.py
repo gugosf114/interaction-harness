@@ -9,6 +9,7 @@ no tools. The answer is strict JSON: {"verdict": "pass" | "fail", "reason": "...
 A fail gives the working model one corrective retry that carries the judge's reason. The second reply
 is shown whatever the judge says about it; George never gets an empty screen because of the judge.
 A judge error, a timeout, a refusal or an answer that is not the strict JSON passes the reply through.
+The judge has JUDGE_SECONDS (120) to answer; a slow judge never holds a finished reply longer than that.
 Every verdict is saved with the turn: history.db column gate_json, and the session exchange under "judge".
 
 /off judge and /on judge flip the switch (switches.json in the lane's state folder). It ships on.
@@ -44,6 +45,10 @@ LOG_NAME = 'judge.jsonl'
 PACKET_CAP_CHARS = 600000
 OLD_STREAM_CHARS = 4000  # when the packet is over the cap, earlier steps keep this much of each end of a stream
 MAX_REASON_CHARS = 1000
+# The judge's own time ceiling, in seconds. Past it the reply is shown unjudged (status "timeout").
+# Live on 2026-11-11, 36 verdicts took 2 to 44 seconds; one, at max effort, thought for 223 seconds over a
+# one-line answer that the working model had produced in 12. The lane's --timeout still applies when it is lower.
+JUDGE_SECONDS = 120
 SCHEMA = {'type': 'object',
           'properties': {'verdict': {'type': 'string', 'enum': ['pass', 'fail']}, 'reason': {'type': 'string'}},
           'required': ['verdict', 'reason'], 'additionalProperties': False}
@@ -278,7 +283,7 @@ class Second:
         if packet is None:
             return {'engine': engine, 'model': model, 'verdict': None, 'reason': '', 'status': 'packet_over_cap'}
         return (self.judge or ask)(packet, engine=engine, model=model, effort=kwargs.get('effort', h.DEFAULT_EFFORT),
-                          timeout=kwargs.get('timeout', 90), log_path=kwargs.get('log_path'))
+                          timeout=min(float(kwargs.get('timeout', 90)), JUDGE_SECONDS), log_path=kwargs.get('log_path'))
 
     def request_reply(self, current: str, *, judge_turn: dict | None = None, **kwargs):
         gate_rules.drain()
