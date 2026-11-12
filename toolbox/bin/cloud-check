@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# cloud-check NAME : one read-only call that shows the key for that service still works. It prints no key.
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login debian -- bash "$here/../debian/cloud-check.sh" "$@"

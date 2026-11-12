@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# page-text URL [WAIT_MS] : open URL in the signed-in phone Chrome on its hidden screen and print the page text.
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login debian -- bash "$here/../debian/page-text.sh" "$@"

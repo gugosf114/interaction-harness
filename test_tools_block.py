@@ -79,7 +79,7 @@ class ToolsPageTests(unittest.TestCase):
     def test_the_shipped_tools_page_loads(self):
         page = h.load_tools()
         self.assertIsNotNone(page)
-        self.assertIn('gh is installed', page)
+        self.assertIn('Print: card github', page)
 
 
 if __name__ == '__main__':

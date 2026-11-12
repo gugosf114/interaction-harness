@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# mail-unread berkeley|gmail [N] : count of unread inbox mail, then the newest N (default 5). Marks nothing read.
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login debian -- python3 "$here/../debian/mail-unread.py" "$@"

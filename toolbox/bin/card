@@ -1,0 +1,7 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# card NAME : print one tool card. Unknown name: exit 1.
+here=$(dirname "$(readlink -f "$0")")
+[ $# -eq 1 ] || { echo 'usage: card NAME   (cards lists the names)' >&2; exit 2; }
+case "$1" in ''|*[!a-z0-9-]*) echo "No card named $1. Run: cards" >&2; exit 1 ;; esac
+[ -f "$here/../cards/$1.md" ] || { echo "No card named $1. Run: cards" >&2; exit 1; }
+exec cat "$here/../cards/$1.md"

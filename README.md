@@ -155,9 +155,54 @@ This uses `termux-speech-to-text` and Android's speech recognizer through Termux
 
 ## Tools page
 
-`tools_block.txt` tells the model what this phone has: `gh` signed in, `git`, `rg`, `jq`, `curl`, `python`, the bridge to the Debian side, the mail reader and reply sender, George's memory notes, the search over past chats, and the Termux phone commands. It is sent on every call right after the frozen prefix, on both engines, and both providers cache it.
+`tools_block.txt` is the index of the operator's tools: one line per tool family, with the command that prints that family's card. The cards and the commands behind them are described under *Toolbox*. The page is sent on every call right after the frozen prefix, on both engines, and both providers cache it.
 
 It is plain text and the operator can edit it. It is not hash-pinned. Rules: at most 8,000 characters, no control characters. An empty or missing file sends nothing and the harness works as before. The page grants no permission; every command still needs approval. Each usage record stores the page's SHA-256 as `tools_sha256`. Keep it to tools that were checked on the phone, because the model will propose what the page lists.
+
+## Toolbox
+
+George's subscription setup can drive his phone, laptop, mail, money tools, bakery tools and other models. The API lanes could reach almost none of it, because nothing told them the commands exist. The toolbox makes each capability one command, proves it through the harness's own shell, and catalogues it.
+
+**The pieces.**
+
+- `tools_block.txt` — the index. Nineteen families, one line each, ending in `Print: card NAME`. 3,013 characters. Measured from provider usage: 1,044 tokens on Claude Opus 5.5 and 739 on GPT-6.1 Sol.
+- `toolbox/cards/NAME.md` — one card per family, each under 4,000 characters: what it does, the exact commands with real argument shapes, what comes back, which side it runs on, and the one known failure.
+- `toolbox/bin/` — the commands the model types. `toolbox/debian/` — the Debian-side halves of four of them.
+- `toolbox/install.sh` — links every file in `toolbox/bin` into `$PREFIX/bin`. Safe to run again. It never replaces a real file.
+- `toolbox/hrun.py` — runs one command exactly as the harness does and prints its exit code.
+
+**The commands.**
+
+| Command | What it does |
+|---|---|
+| `cards` | Lists every card with its purpose. |
+| `card NAME` | Prints one card. Exit 1 on an unknown name. |
+| `deb COMMAND ARGS` | Runs one command on the Debian side, in the current folder. |
+| `edit-exact FILE OLD NEW` | Replaces OLD with NEW only when OLD appears exactly once. Exit 1 and nothing written otherwise. |
+| `text-pdf OUT.pdf TEXT` | Makes a PDF that holds TEXT (or the text on stdin). |
+| `page-text URL` | Opens URL in the signed-in phone Chrome on its hidden screen and prints the page text. |
+| `mail-unread berkeley\|gmail [N]` | Unread count of the inbox and the newest N. Marks nothing read. |
+| `paypal-get PATH` | One read-only GET on the live PayPal API. |
+| `bakery-stats [DAYS]` | The bakery's site, search, listing and social numbers. |
+| `cloud-check NAME` | One read-only call that shows a cloud key still works. Prints no key. |
+
+**Install, or re-install after a clone.** In native Termux:
+
+```sh
+sh ~/interaction-harness/toolbox/install.sh
+```
+
+**Rules for changing it.**
+
+- A command goes on a card only after it ran through the harness's own runner and its exit code was seen: `python ~/interaction-harness/toolbox/hrun.py 'COMMAND'` in native Termux. A run from another shell proves nothing here.
+- Cards state facts. A command that acts on the outside world gets one plain fact line, such as "This sends a real email at once."
+- No key, token or password value goes on the index, on a card, or in a script. Say where the key lives.
+- `tools_block.txt` must stay byte-identical between calls, so the caches keep hitting. Every edit to it starts the cache over once.
+- `test_toolbox.py` checks the caps, that the index and the cards name the same nineteen families, control characters, key-shaped strings, the card printer, the installer and `edit-exact`.
+
+**Not working on this phone when checked (Nov 11, 2026).** Each card states its own failure. In short: `qr` (Python module `qrcode` missing), `gemini` and `grok` (broken installs; `agy --print` works), `modal` and the Bright Data program (not installed), `deb recall` (broken file; the `python3 /root/.claude/recall.py` form works), `deb mbc-stats` (its Python folder is gone; `bakery-stats` works), `deb phone-do` and `deb phone-ask` (dead links; the full paths work), PayPal transaction search (the PayPal app lacks that permission), new calls through `phone-ask` (the caller's profile has no handoff number), `termux-notification-list` (no answer), and the timers table (seven timers listed, none scheduled in Android).
+
+**Live proof (Nov 11, 2026).** Six questions on each engine, through the real launcher with `--loop -y` and an isolated state folder: a screenshot with its path and size, the Berkeley unread count and newest subject, the bakery site's sessions for seven days, the laptop's hostname, an exact edit of a file, and a one-page PDF in Downloads. Twelve of twelve exited 0 with the right command, and each answer matched a direct check. Every run printed the family's card first, then ran the command from it. With the index in place the second call still read the cache: 13,939 tokens on Claude, 10,810 of 11,584 on GPT-6.1 Sol.
 
 ## Rules and profile pages
 
@@ -259,7 +304,7 @@ Official references checked for this implementation: [OpenAI web tools](https://
 ## Verification
 
 ```sh
-proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses'
+proot-distro login debian -- sh -c 'cd /data/data/com.termux/files/home/interaction-harness && .venv/bin/python -m unittest -v test_harness test_features test_repl test_diagnostics test_loop test_reassurance test_tools_block test_pages test_senses test_toolbox'
 python ~/interaction-harness/test_native_terminal.py
 python ~/interaction-harness/verify_loop.py --engine openai
 python ~/interaction-harness/verify_loop.py --engine anthropic --yes

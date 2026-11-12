@@ -1,0 +1,5 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# deb COMMAND [ARGS...] : run one command on the Debian side of this phone, in the current folder.
+# For a pipe or a redirect on the Debian side:  deb bash -c 'COMMAND | COMMAND'
+[ $# -ge 1 ] || { echo 'usage: deb COMMAND [ARGS...]' >&2; exit 2; }
+exec proot-distro login --work-dir "$PWD" debian -- "$@"

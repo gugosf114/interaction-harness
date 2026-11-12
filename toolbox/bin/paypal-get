@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# paypal-get PATH : one read-only GET on George's live PayPal account. It cannot create, send or change anything.
+here=$(dirname "$(readlink -f "$0")")
+exec proot-distro login debian -- bash "$here/../debian/paypal-get.sh" "$@"

@@ -1,50 +1,43 @@
-OPERATOR TOOLS — WHAT THIS PHONE HAS
-Checked on the phone on 2026-11-11. This page lists tools you may use in execution_payload.
-It grants no permission: every command still needs the operator's approval, and the rules above still hold.
-Do not say a tool exists unless it is listed here or a command result shows it.
+OPERATOR TOOLS — THE INDEX
+Checked on the phone on 2026-11-11. George's setup has many tools. This page lists the families.
+Each family has a card with its exact commands, what comes back, and its one known failure.
+Print the card before you use a family. Do not guess a command that a card would give you.
+This page grants no permission, and the rules above still hold.
+Do not say a tool exists unless this page, a card, or a command result shows it.
 
 Where commands run
-- Native Termux bash on an Android phone. No sudo. Packages come from pkg, not apt.
-- Each command runs in its own shell, in the folder where the harness was started. A cd does not carry to the next command.
+- Native Termux bash on George's Android phone (a Pixel 11). No sudo. Packages come from pkg, not apt.
+- Each command runs in its own shell, in the folder where the harness was started. A cd does not carry to the next command. Use full paths.
+- A Debian install lives on the same phone, and most of George's own tools live there. Run one command there with:
+  deb COMMAND ARGUMENTS
+  For a pipe on the Debian side: deb bash -c 'COMMAND | COMMAND'
+- Both sides see /sdcard/Download (George's Downloads folder) and the Termux home folder at the same paths.
 
-GitHub
-- gh is installed and signed in as gugosf114. git is installed.
-- Examples: gh repo list gugosf114 --limit 10 ; gh pr list --repo OWNER/REPO ; gh issue list --repo OWNER/REPO ; gh api repos/OWNER/REPO/commits/main
+The cards
+  cards        lists every card
+  card NAME    prints one card
 
-Text and data
-- rg (search file contents), jq (JSON), curl, python.
+The families
+- files: read a slice of a file, search, write a new file, make an exact-replace edit. Print: card files
+- documents: make a PDF from text, make a QR code, download a video, put a file in Downloads. Print: card documents
+- phone: screenshot, read texts, read the screen, adb, hidden screens. Print: card phone
+- phone-browser: the signed-in Chrome on the phone; open a page as George and read its text. Print: card phone-browser
+- laptop: run a command on George's Windows laptop, copy files each way, start a long job there. Print: card laptop
+- yana-phone: reach Yana's phone. Print: card yana-phone
+- tv: the LG TV and the Chromecast; show a message, cast a video. Print: card tv
+- voice: speak a line out loud; turn spoken answers on or off. Print: card voice
+- alerts: put a notification on George's phone. Print: card alerts
+- timers: run a script later or on a schedule. Print: card timers
+- calls: the phone line into a Claude session; the AI that phones a business for George. Print: card calls
+- models: ask Codex, Google's model or Claude Code one question from the shell. Print: card models
+- sessions: send a message to another live AI session. Print: card sessions
+- memory: George's notes and the search over his past chats. Print: card memory
+- mail: read the Berkeley, Gmail and bakery mailboxes; send a reply. Print: card mail
+- money: PayPal invoices on the bakery's live account. Print: card money
+- bakery: the bakery's site numbers, Google listings, the Play apps, indexing pushes. Print: card bakery
+- cloud: Google Cloud, the secret names, the backup bucket, and the keys for other cloud accounts. Print: card cloud
+- github: gh and git, signed in as gugosf114. Print: card github
 
-The Debian side
-- A Debian install lives on the same phone. Run one command there with:
-  proot-distro login debian -- COMMAND
-  It takes a few seconds to start. gcloud is installed there.
-
-Mail: read
-- A mailbox reader lives on the Debian side:
-  proot-distro login debian -- python3 /root/.gmail/bmail.py test
-  proot-distro login debian -- python3 /root/.gmail/bmail.py unread 5
-  proot-distro login debian -- python3 /root/.gmail/bmail.py list 5 "GMAIL QUERY"
-  proot-distro login debian -- python3 /root/.gmail/bmail.py thread THREAD_ID
-  list and thread print one JSON object per line: id, threadId, from, to, subject, date, text.
-
-Mail: send a reply
-- This sends a real email at once, from the operator's Berkeley address, as a reply inside an existing thread. There is no draft step.
-  proot-distro login debian -- python3 /root/.gmail/bsend.py MESSAGE_ID BODY_FILE
-  MESSAGE_ID is the id of the message being answered. BODY_FILE is a text file on the Debian side that holds the reply body.
-  To, Subject and threading are taken from that message. It prints one JSON object: sent_id, threadId, to, subject.
-- Send only when the operator asked for that reply to be sent.
-
-George's memory notes
-- Notes about George and his projects are files on the Debian side, in /root/.claude/projects/-root/memory/. The index is MEMORY.md: one line per note, with its file name.
-  proot-distro login debian -- cat /root/.claude/projects/-root/memory/MEMORY.md
-  proot-distro login debian -- cat /root/.claude/projects/-root/memory/NOTE_FILE.md
-
-Past chats
-- recall searches George's saved chats on the Debian side and prints the best matches, each with its date.
-  proot-distro login debian -- python3 /root/.claude/recall.py "bakery voicemail"
-
-Phone
-- termux-notification, termux-clipboard-get, termux-open-url, adb.
-
-Not available
-- No web search. No file-editing tool; read and change files with shell commands, and only when asked.
+Built in, no command needed
+- Web search and reading a public web page are done by the provider's own tools in this client.
+- George's core rules and his profile already ride on every call.

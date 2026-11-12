@@ -1,0 +1,7 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# cards : list every tool card with its one-line purpose.
+here=$(dirname "$(readlink -f "$0")")
+for f in "$here"/../cards/*.md; do
+  [ -f "$f" ] || continue
+  printf '%-14s %s\n' "$(basename "$f" .md)" "$(sed -n '1s/^# *[a-z0-9-]* *— *//p' "$f")"
+done

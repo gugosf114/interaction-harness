@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# bakery-stats [DAYS] : the bakery's numbers for the last DAYS days (default 7), read from Google, Meta and Pinterest.
+# It runs /root/mbc-analytics/mbc-stats.py on the Debian side with George's own Google account selected for gcloud.
+exec proot-distro login debian -- env CLOUDSDK_CORE_ACCOUNT=gugosf@gmail.com python3 /root/mbc-analytics/mbc-stats.py "$@"
