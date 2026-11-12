@@ -15,6 +15,7 @@ tests never read the phone's real chats.
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -343,8 +344,45 @@ def session_fingerprints(session) -> set:
     return prints
 
 
+def search_one(corpus: dict, path, text: str, weights: dict, pairs: list, size: int, before_row, skip: set, deadline: Deadline) -> dict:
+    """One index: its best rows and their best windows. Runs in its own thread with its own connection."""
+    table, reader = READERS[corpus['kind']]
+    began = time.monotonic()
+    out = {'found': [], 'searched': None, 'error': None, 'timed_out': False}
+    connection = None
+    try:
+        connection = open_index(path, deadline)
+        arguments = (connection, match_expression(weights, pairs), CANDIDATES)
+        rows = list(reader(*arguments, before_row) if corpus['kind'] == 'lanes' else reader(*arguments))
+        for row in rows:
+            if corpus['kind'] == 'lanes' and fingerprint(row['asked'], row['answer']) in skip:
+                continue
+            window = best_window(row['body'], weights, size, pairs)
+            if window:
+                out['found'].append((row, corpus['name'], *window))
+        out['searched'] = {'name': corpus['name'], 'rows': len(rows), 'ms': round((time.monotonic() - began) * 1000)}
+    except sqlite3.Error as exc:
+        if deadline.passed() or 'interrupt' in str(exc).lower():
+            out['timed_out'] = True
+        else:
+            out['error'] = f"{corpus['name']}: {type(exc).__name__}: {str(exc)[:120]}"
+    except Exception as exc:   # one broken index must never stop a turn
+        out['error'] = f"{corpus['name']}: {type(exc).__name__}: {str(exc)[:120]}"
+    finally:
+        if connection is not None:
+            try:
+                connection.close()
+            except sqlite3.Error:
+                pass
+    return out
+
+
 def search(text: str, *, state=None, session=None, before_row=None, corpora=None, limit=None, size=None, timeout=None) -> dict:
-    """Search every index for the key words of `text`. Never raises. Returns passages, words, timing and any errors."""
+    """Search every index for the key words of `text`. Never raises. Returns passages, words, timing and any errors.
+
+    The key words are weighed on the first index that opens. Then every index is searched at the same
+    time, each in its own thread, so the search takes as long as the slowest index, not their sum.
+    """
     started = time.monotonic()
     chosen = CORPORA if corpora is None else corpora
     numbers = settings(state) if state is not None else {'passages': MAX_PASSAGES, 'passage_chars': PASSAGE_CHARS, 'timeout_seconds': TIMEOUT_SECONDS}
@@ -354,42 +392,30 @@ def search(text: str, *, state=None, session=None, before_row=None, corpora=None
     result = {'passages': [], 'words': [], 'errors': [], 'timed_out': False, 'searched': []}
     weights: dict | None = None
     pairs: list = []
-    found = []
     skip = session_fingerprints(session)
+    ready = []
     for corpus in chosen or []:
         path = corpus.get('path') or (Path(state) / 'history.db' if state is not None else None)
-        table, reader = READERS[corpus['kind']]
-        if path is None or not Path(path).is_file():
-            continue
+        if path is not None and Path(path).is_file():
+            ready.append((corpus, path))
+    for corpus, path in ready:
+        if weights is not None:
+            break
         if deadline.passed():
             result['timed_out'] = True
             break
-        began = time.monotonic()
         connection = None
         try:
             connection = open_index(path, deadline)
-            if weights is None:
-                # The first index that opens sets the weights. It is the largest current one on this phone.
-                weights = key_words(text, connection, table)
-                pairs = phrases(text, weights)
-                result['words'] = list(weights)
-                if not weights:
-                    break
-            arguments = (connection, match_expression(weights, pairs), CANDIDATES)
-            rows = list(reader(*arguments, before_row) if corpus['kind'] == 'lanes' else reader(*arguments))
-            for row in rows:
-                if corpus['kind'] == 'lanes' and fingerprint(row['asked'], row['answer']) in skip:
-                    continue
-                window = best_window(row['body'], weights, size, pairs)
-                if window:
-                    found.append((row, corpus['name'], *window))
-            result['searched'].append({'name': corpus['name'], 'rows': len(rows), 'ms': round((time.monotonic() - began) * 1000)})
+            weights = key_words(text, connection, READERS[corpus['kind']][0])
+            pairs = phrases(text, weights)
+            result['words'] = list(weights)
         except sqlite3.Error as exc:
             if deadline.passed() or 'interrupt' in str(exc).lower():
                 result['timed_out'] = True
             else:
                 result['errors'].append(f"{corpus['name']}: {type(exc).__name__}: {str(exc)[:120]}")
-        except Exception as exc:   # one broken index must never stop a turn
+        except Exception as exc:
             result['errors'].append(f"{corpus['name']}: {type(exc).__name__}: {str(exc)[:120]}")
         finally:
             if connection is not None:
@@ -397,6 +423,25 @@ def search(text: str, *, state=None, session=None, before_row=None, corpora=None
                     connection.close()
                 except sqlite3.Error:
                     pass
+    found = []
+    if weights:
+        pool = ThreadPoolExecutor(max_workers=len(ready))
+        jobs = [pool.submit(search_one, corpus, path, text, weights, pairs, size, before_row, skip, deadline) for corpus, path in ready]
+        # The progress handler stops each query at the deadline; the extra second covers the last row's window scan.
+        done, late = wait(jobs, timeout=max(0.0, deadline.left()) + 1.0)
+        pool.shutdown(wait=False, cancel_futures=True)
+        if late:
+            result['timed_out'] = True
+        for job in jobs:
+            if job not in done:
+                continue
+            part = job.result()
+            found.extend(part['found'])
+            if part['searched']:
+                result['searched'].append(part['searched'])
+            if part['error']:
+                result['errors'].append(part['error'])
+            result['timed_out'] = result['timed_out'] or part['timed_out']
     if weights and found:
         result['passages'] = choose(found, weights, limit)
     result['elapsed_ms'] = round((time.monotonic() - started) * 1000)
