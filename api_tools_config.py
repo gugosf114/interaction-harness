@@ -91,6 +91,18 @@ class Settings:
             self.enabled.update(web_search=value,web_fetch=value)
         self.options = {**copy.deepcopy(DEFAULT_OPTIONS), **saved.get('options', {}), **(options or {})}
         self.effective = {name for name, on in self.enabled.items() if on and engine in TOOLS[name][0]}
+        # A tool that is on but has nothing to work with steps aside instead of stopping the call.
+        # Asked for by flag, it stays in, and the missing setting is reported as an error.
+        needs = {'skills': bool(self.options['anthropic_skills' if engine == 'anthropic' else 'openai_skills']),
+                 'file_search': bool(self.options['vector_store_ids']),
+                 'mcp_remote': str(self.options['mcp_url']).startswith('https://')}
+        self.unset = {name for name, ready in needs.items() if name in self.effective and not ready and name not in self.asked}
+        # OpenAI has one shell tool type. With both shells on, the one asked for by flag wins; with neither
+        # asked, skills need the hosted shell, and otherwise the phone's own shell stays.
+        if engine == 'openai' and {'shell', 'hosted_shell'} <= self.effective and not {'shell', 'hosted_shell'} <= self.asked:
+            hosted = 'hosted_shell' in self.asked or ('shell' not in self.asked and 'skills' in self.effective - self.unset)
+            self.unset.add('shell' if hosted else 'hosted_shell')
+        self.effective -= self.unset
         if 'skills' in self.effective: self.effective.add('code_execution' if engine == 'anthropic' else 'hosted_shell')
         if 'programmatic' in self.effective:
             self.effective.add('functions')
@@ -117,6 +129,12 @@ class Settings:
             state = 'on' if self.on(name) else 'off'
             if self.engine not in lanes: status = 'not offered on this lane'
             elif name in errors: status = 'unavailable: ' + errors[name]
+            elif name in self.unset:
+                status = {'skills': 'switched on; steps aside until a skill is listed in tools.json options',
+                          'file_search': 'switched on; steps aside until vector_store_ids is set in tools.json options',
+                          'mcp_remote': 'switched on; steps aside until an https mcp_url is set in tools.json options',
+                          'shell': 'switched on; steps aside for the hosted shell on this lane',
+                          'hosted_shell': 'switched on; steps aside for the local shell on this lane'}[name]
             else: status = 'enabled' if self.on(name) else 'available to enable'
             lines.append(f'{flag_name(name)}: {state}; {"/".join(lanes)}; {purpose} {status}')
         return '\n'.join(lines)+'\n'
@@ -186,7 +204,7 @@ def provider_tools(settings, base, mcp_catalog=()):
         if 'mcp_remote' in getattr(settings,'asked',()):raise ValueError('Remote MCP needs an HTTPS mcp_url in tools.json options.')
     elif on('mcp_remote'):
         if engine=='openai':
-            definition={'type':'mcp','server_label':'phone','server_url':options['mcp_url'],'require_approval':'always'}
+            definition={'type':'mcp','server_label':'phone','server_url':options['mcp_url'],'require_approval':'never'}
             if options['mcp_allowed_tools']: definition['allowed_tools']=options['mcp_allowed_tools']
             tools.append(definition)
         else:
