@@ -53,5 +53,6 @@ def source_block(items,answer=''):
 
 def turn_metadata(events):
     for event in reversed(events):
-        if 'lookup_counts' in event:return {k:event[k] for k in ('sources','lookup_counts')}
+        if 'lookup_counts' in event:
+            return {k:event[k] for k in ('sources','lookup_counts','api_tool_uses','api_context') if k in event}
     return {'sources':[],'lookup_counts':{'total':0,'search':0,'fetch':0,'find':0,'provider_reports':[]}}

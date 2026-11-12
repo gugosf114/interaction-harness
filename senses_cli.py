@@ -35,9 +35,13 @@ def prepare(args):return collect(args.images,args.files,args.engine)
 
 def saved_metadata(row):
     return {'sources':json.loads(row.get('sources_json') or '[]'),
+            'api_tool_uses':json.loads(row.get('api_tool_uses_json') or '[]'),
             'lookup_counts':json.loads(row.get('lookup_counts_json') or '{"total":0}')}
 
 
 def recall_violation(reply,row,metadata):
+    from api_tool_gate import violation as api_violation
+    error=api_violation(reply.direct_answer,metadata.get('api_tool_uses',[]))
+    if error:return error
     allowed=(row.get('normalized_input') or row.get('raw_input') or '')+' '+' '.join(metadata['lookup_counts'].get('allowed_urls',[]))
     return violation(reply.direct_answer,metadata['lookup_counts'],metadata['sources'],allowed)

@@ -405,7 +405,7 @@ def request_reply(
     effort: str = DEFAULT_EFFORT, timeout: float = 90,
     log_path: Path | None = None, events: list | None = None, history: list | None = None,
     execution_confirmed: bool = False, request_context: str | None = None,
-    web: bool = True, web_max: int = 5, attachments=None,
+    web: bool = True, web_max: int = 5, attachments=None, api_runtime=None, native_tool_evidence=None,
 ) -> HarnessReply:
     if len(raw_input) > MAX_INPUT_CHARS:
         raise HarnessError(f'Input exceeds {MAX_INPUT_CHARS} characters.')
@@ -432,7 +432,7 @@ def request_reply(
     ]
     allowed_text=json.dumps(messages[len(system_pages):],ensure_ascii=False)+' '+(request_context or '')
     schema = api_schema()
-    senses=TurnSenses(engine,schema,web,web_max)
+    senses=TurnSenses(engine,schema,web,web_max,runtime=api_runtime)
     senses.counts['allowed_urls']=sorted(urls(allowed_text))
     for attempt in (1, 2):
         started = time.monotonic()
@@ -470,9 +470,15 @@ def request_reply(
                 blocks=[b for b in response.content if b.type=='tool_use' and b.name=='emit_reply']
                 raw_response=json.dumps(blocks[0].input) if len(blocks)==1 else '{}'
             try:
-                reply = validate_reply(raw_response, raw_input, execution_confirmed=execution_confirmed,
+                supported=api_runtime.successful_work if api_runtime and api_runtime.has_work else execution_confirmed
+                reply = validate_reply(raw_response, raw_input, execution_confirmed=supported,
                                        request_context=request_context)
-                reason=lookup_violation(reply.direct_answer,senses.counts,senses.metadata()['sources'],allowed_text)
+                tool_evidence=json.dumps(api_runtime.receipts,ensure_ascii=False) if api_runtime else ''
+                reason=lookup_violation(reply.direct_answer,senses.counts,senses.metadata()['sources'],allowed_text+' '+tool_evidence)
+                if reason:raise GateError(reason)
+                from api_tool_gate import violation as api_tool_violation
+                receipts=(api_runtime.receipts if api_runtime else [])+([native_tool_evidence] if native_tool_evidence else [])
+                reason=api_tool_violation(reply.direct_answer,receipts)
                 if reason:raise GateError(reason)
             except OpeningScrubError:
                 event['status']='empty_after_scrub'
@@ -496,6 +502,8 @@ def request_reply(
             event['status'] = 'authentication_error'
             raise HarnessError('The API key was rejected.') from exc
         except (PermissionDeniedError, anthropic.PermissionDeniedError) as exc:
+            if api_runtime:api_runtime.api_error(exc)
+            event['provider_error']=getattr(exc,'body',None)
             event['status'] = 'permission_error'
             raise HarnessError('This API account cannot access the requested model.') from exc
         except (RateLimitError, anthropic.RateLimitError) as exc:
@@ -508,12 +516,15 @@ def request_reply(
             event['status'] = 'connection_error'
             raise HarnessError('The API connection failed.') from exc
         except (APIStatusError, anthropic.APIStatusError) as exc:
+            if api_runtime:api_runtime.api_error(exc)
             event['status'] = 'api_error'
             event['http_status'] = exc.status_code
             event['provider_error'] = getattr(exc,'body',None)
             raise HarnessError(f'The API rejected this request (HTTP {exc.status_code}).') from exc
         finally:
+            if api_runtime:api_runtime.close()
             event.update(senses.metadata())
+            if native_tool_evidence:event.setdefault('api_tool_uses',[]).append(native_tool_evidence)
             if senses.last_usage:event.setdefault('usage',senses.last_usage)
             event['provider_response_ids']=senses.last_responses
             event['elapsed_ms'] = round((time.monotonic() - started) * 1000)

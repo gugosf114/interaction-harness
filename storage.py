@@ -165,7 +165,7 @@ class Store:
             for name in METRIC_COLUMNS:
                 if name not in columns:
                     self.db.execute(f'ALTER TABLE history ADD COLUMN {name} INTEGER')
-            for name in ('sources_json','lookup_counts_json','attachments_json'):
+            for name in ('sources_json','lookup_counts_json','attachments_json','api_tool_uses_json','api_context_json'):
                 if name not in columns:self.db.execute(f'ALTER TABLE history ADD COLUMN {name} TEXT')
 
     def close(self):
@@ -184,6 +184,7 @@ class Store:
                       **request_metrics(events))
         metadata=turn_metadata(events)
         fields.update(sources_json=json.dumps(metadata['sources']),lookup_counts_json=json.dumps(metadata['lookup_counts']))
+        fields.update(api_tool_uses_json=json.dumps(metadata.get('api_tool_uses',[])),api_context_json=json.dumps(metadata.get('api_context')))
         if reply:
             fields.update(reply.model_dump())
         if execution is not None:
@@ -256,10 +257,17 @@ def history_messages(exchanges, max_chars=24000):
             {'role':'assistant','content':json.dumps(record,ensure_ascii=False)},
         ]
         if exchange.get('attachments'):pair[0]['attachments']=exchange['attachments']
+        if exchange.get('loop_context'):pair.insert(0,{'role':'user','content':exchange['loop_context']})
         if exchange.get('sources'):
             pair.append({'role':'user','content':json.dumps({'type':'source_record','sources':exchange['sources']})})
         if exchange.get('execution_result') is not None:
             pair.append(execution_message(exchange))
+        if exchange.get('api_tool_uses'):
+            records=exchange['api_tool_uses']
+            observation={'role':'user','content':json.dumps({'type':'api_tool_observations','uses':records},ensure_ascii=False)}
+            pictures=[a for r in records for a in r.get('execution',{}).get('attachments',[])]
+            if pictures:observation['attachments']=pictures
+            pair.append(observation)
         # Advice the operator asked for sits after its exchange, so everything before it stays byte-identical.
         pair.extend({'role':'user','content':advisor_note(note)} for note in exchange.get('advisor_notes') or [])
         size = sum(len(p['content'])+len(json.dumps(p.get('attachments',[]))) for p in pair)

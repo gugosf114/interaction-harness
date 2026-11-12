@@ -53,7 +53,8 @@ def add_usage(total,current):
 
 
 class TurnSenses:
-    def __init__(self,engine,schema,web=True,web_max=5):
+    def __init__(self,engine,schema,web=True,web_max=5,runtime=None):
+        self.runtime=runtime
         self.engine=engine;self.web=web;self.web_max=web_max
         self.tools=tool_list(engine,schema,web,web_max)
         self.sources=[];self.seen=set();self.call_kinds={};self.result_ids=set();self.errors=[]
@@ -61,7 +62,7 @@ class TurnSenses:
         self.last_usage={};self.last_responses=[];self.paused_content=[]
 
     def metadata(self):
-        return {'sources':unique_sources(self.sources),'lookup_counts':copy.deepcopy(self.counts),
+        return {**(self.runtime.metadata() if self.runtime else {}),'sources':unique_sources(self.sources),'lookup_counts':copy.deepcopy(self.counts),
                 'web_tools_sha256':hashlib.sha256(json.dumps(self.tools,sort_keys=True,separators=(',',':')).encode()).hexdigest()}
 
     def observe(self,response):
@@ -114,6 +115,9 @@ class TurnSenses:
         if self.counts['total']>self.web_max:raise SensesError('Provider exceeded the turn web lookup ceiling; no answer was displayed.')
 
     def send(self,client,*,model,effort,max_output_tokens,messages,system_pages,schema,prefix_hash,system_blocks=None):
+        if self.runtime:
+            return self.runtime.send(self,client,model=model,effort=effort,max_output_tokens=max_output_tokens,
+                messages=messages,system_pages=system_pages,schema=schema,prefix_hash=prefix_hash,system_blocks=system_blocks)
         self.last_usage={};self.last_responses=[]
         prepared=materialize(messages,self.engine)
         if self.engine=='openai':
@@ -130,6 +134,7 @@ class TurnSenses:
             response=client.responses.create(**params);self.observe(response)
         else:
             params=dict(model=model,max_tokens=max_output_tokens,thinking={'type':'adaptive'},output_config={'effort':effort},
+                cache_control={'type':'ephemeral'},
                 system=system_blocks if system_blocks is not None else [{'type':'text','text':page,'cache_control':{'type':'ephemeral'}} for page in system_pages],
                 messages=prepared[len(system_pages):],tools=copy.deepcopy(self.tools),
                 tool_choice={'type':'auto','disable_parallel_tool_use':True})
@@ -156,6 +161,7 @@ class TurnSenses:
         return response
 
     def repair(self,messages,response,reason):
+        if self.runtime:return self.runtime.repair(response,reason)
         text=('Local validation rejected the reply: '+reason+' Return a corrected four-field reply for the original request. '
               'Preserve facts and meaning. Do not invent certainty or tool results.')
         if self.engine=='anthropic':

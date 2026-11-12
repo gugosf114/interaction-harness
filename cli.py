@@ -9,6 +9,7 @@ import sys
 import harness as h
 import advisor
 import senses_cli
+import api_tools_cli
 from execution_images import prepare_execution
 from lookup_gate import turn_metadata
 from phonetics import normalize
@@ -57,7 +58,7 @@ def run_chat(args, model):
     if args.yes: options.append('--yes')
     options.extend(senses_cli.common_options(args))
     last_status=0
-    if args.text: last_status=main([*options,*senses_cli.attachment_options(args),'--',' '.join(args.text)])
+    if args.text: last_status=main([*options,*api_tools_cli.options(args),*senses_cli.attachment_options(args),'--',' '.join(args.text)])
     while True:
         try:
             # Prompts stay off stdout so redirected output remains answer-only.
@@ -74,9 +75,12 @@ def run_chat(args, model):
             if not raw.strip(): continue
             # Only a line the operator types reaches the advisor. It answers him and does not make the working model speak.
             if advisor.is_trigger(raw):last_status=main([*options,*advisor.chat_arguments(raw,args)]);continue
+            try:
+                if api_tools_cli.chat_command(raw,args,h.STATE,model):continue
+            except ValueError as exc:print(str(exc),file=sys.stderr);last_status=2;continue
             try:attachment_flags,raw=senses_cli.chat_input(raw)
             except ValueError as exc:print(str(exc),file=sys.stderr);last_status=2;continue
-            last_status=main([*options,*attachment_flags,'--',raw])
+            last_status=main([*options,*api_tools_cli.options(args),*attachment_flags,'--',raw])
             if last_status==130: return 130
         except KeyboardInterrupt:
             print('',file=sys.stderr); return 130
@@ -108,6 +112,7 @@ def main(argv=None):
     parser.add_argument('--listen-timeout',type=int,default=90)
     senses_cli.add_flags(parser)
     advisor.add_flags(parser)
+    api_tools_cli.add_flags(parser)
     parser.add_argument('text',nargs='*',help='Quoted input, or pipe text on stdin.')
     args=parser.parse_args(argv)
     senses_cli.validate_args(parser,args)
@@ -127,6 +132,9 @@ def main(argv=None):
     if args.recall is not None and (args.text or args.listen or args.execute): parser.error('--recall searches history without input or execution.')
     model=args.model or os.environ.get('OPENAI_MODEL' if args.engine=='openai' else 'ANTHROPIC_MODEL') or (h.DEFAULT_MODEL if args.engine=='openai' else h.ANTHROPIC_MODEL)
     if args.advisor is not None:return advisor.run(args,model)
+    if args.tools:
+        try:sys.stdout.write(api_tools_cli.settings(args,h.STATE).listing(model));return 0
+        except (ValueError,OSError) as exc:print(str(exc),file=sys.stderr);return 2
     if args.chat or (not args.text and not args.listen and args.recall is None and sys.stdin.isatty()):
         return run_chat(args,model)
     store=None; row_id=None; events=[]; reply=None; execution=None
@@ -171,12 +179,15 @@ def main(argv=None):
                 current_raw=raw if step==1 else current
                 turn_attachments=attached if step==1 else []
                 row_id=store.begin(current_raw,current,args.engine,model,sid,attachments=turn_attachments)
-                past=history_messages(session['turns'],args.history_chars)
+                past=api_tools_cli.history(session['turns'],history_messages,args.history_chars,args.engine,
+                                          api_tools_cli.settings(args,h.STATE).on('compaction'))
                 if args.loop:
                     # Original task and latest actual result survive a small rolling window.
-                    # This first record must not change between turns: no counters, no clocks.
-                    past.insert(0,{'role':'user','content':json.dumps({'client_mode':'agent_loop',
-                        'original_task':cleaned,'max_turns':ceiling},ensure_ascii=False)})
+                    # Keep each task's context with its exchange. A new task must not
+                    # replace the first history bytes and invalidate the conversation cache.
+                    loop_context={'role':'user','content':json.dumps({'client_mode':'agent_loop',
+                        'original_task':cleaned,'max_turns':ceiling},ensure_ascii=False)}
+                    if loop_context not in past:past.append(loop_context)
                     if last_exchange is not None:
                         observation=execution_message(last_exchange)
                         if observation not in past:past.append(observation)
@@ -189,9 +200,12 @@ def main(argv=None):
                                    and past[-1-notes]==execution_message(latest))
                 reply=h.request_reply(current,engine=args.engine,model=model,effort=args.effort,timeout=args.timeout,
                                       log_path=args.usage_log,events=events,history=past,execution_confirmed=supported,
-                                      request_context=cleaned,web=not args.no_web,web_max=args.web_max,attachments=turn_attachments)
+                                      request_context=cleaned,web=not args.no_web,web_max=args.web_max,attachments=turn_attachments,
+                                      api_runtime=api_tools_cli.runtime(args,h.STATE,sid,native),
+                                      native_tool_evidence=api_tools_cli.native_evidence(last_exchange if args.loop else latest))
                 store.finish(row_id,reply,events)
                 exchange={'raw_input':current_raw,'normalized_input':current,'reply':reply.model_dump(),'engine':args.engine,'model':model}
+                if args.loop and step==1:exchange['loop_context']=loop_context['content']
                 metadata=turn_metadata(events);exchange.update(metadata)
                 if turn_attachments:exchange['attachments']=turn_attachments
                 if args.loop:exchange['loop_step']=step
