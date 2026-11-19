@@ -18,7 +18,7 @@ ALIAS_BEGIN = '# BEGIN interaction-harness shortcuts'
 ALIAS_END = '# END interaction-harness shortcuts'
 # Used when ~/.bashrc has no managed block. The block wins, so a lane added there is a job lane at once.
 BUILTIN_LANES = {
-    'george': ['--engine', 'anthropic', '--model', 'claude-opus-5-5', '--effort', 'max', '--loop', '-y'],
+    'g2': ['--engine', 'anthropic', '--model', 'claude-opus-5-5', '--effort', 'max', '--loop', '-y'],
     'g1': ['--engine', 'openai', '--model', 'gpt-6.1-sol', '--effort', 'max', '--loop', '-y'],
 }
 
@@ -124,7 +124,7 @@ def default_lane(settings=None, table=None) -> str:
     wanted = (settings or {}).get('default_lane')
     if isinstance(wanted, str) and wanted in table:
         return wanted
-    return 'george' if 'george' in table else sorted(table)[0]
+    return 'g2' if 'g2' in table else sorted(table)[0]
 
 
 def harness_command(settings=None) -> list:

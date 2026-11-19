@@ -1,7 +1,7 @@
 """The clock door: state/schedule.json lists jobs at a time of day or every N minutes.
 
 [
-  {"name": "morning", "at": "08:00", "lane": "george", "task": "Read my Berkeley inbox and list what needs me."},
+  {"name": "morning", "at": "08:00", "lane": "g2", "task": "Read my Berkeley inbox and list what needs me."},
   {"name": "battery", "every_minutes": 30, "lane": "g1", "task": "Report the battery level."}
 ]
 "at" is the phone's local time, HH:MM. Optional "days": ["mon", "tue", ...]. Optional "session": a fixed session name.

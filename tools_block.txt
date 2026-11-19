@@ -53,7 +53,7 @@ The families
 - boot: what starts when the phone boots, and how to check and restart each piece. Print: card boot
 - chats: read what George's other AI sessions (Claude Code, Codex) are saying and doing right now. Print: card chats
 - lanes: this client's own sessions: list, read, fork, rewind, cut, splice, the golden session, export to PDF. Print: card lanes
-- usage: tokens and calls today, this week and this month on george's and g1's API accounts. Print: card usage
+- usage: tokens and calls today, this week and this month on g2's and g1's API accounts. Print: card usage
 - lessons: keep George's correction for good: a fact line on every later call, or a filter rule in the gate. Print: card lessons
 - self: change this harness's own code: working copy, test, land on main, update the live folder. Print: card self
 - skills: George's skill packs for kinds of jobs: Word, Excel, PowerPoint, PDF, research, code review, legal, data, design and more. Before a job that matches one, print it with skill show NAME and follow it. Print: card skills

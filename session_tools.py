@@ -30,7 +30,7 @@ from storage import NAME, atomic_json, now, private_dir
 
 ROOT = Path(__file__).resolve().parent
 GOLDEN_FILE = 'golden-session.json'
-LANES = {'anthropic': 'george', 'openai': 'g1'}
+LANES = {'anthropic': 'g2', 'openai': 'g1'}
 DOWNLOADS = '/sdcard/Download'
 PHONE_HOME = '/data/data/com.termux/files/home'
 CONTINUATION = 'Continue the original task using the recorded execution observation.'

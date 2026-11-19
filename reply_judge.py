@@ -1,6 +1,6 @@
 """The judge: a second model, on the other engine, reads each reply before George sees it.
 
-After a reply passes the local gate, one stateless call goes to the other engine (from george to
+After a reply passes the local gate, one stateless call goes to the other engine (from g2 to
 gpt-6.1-sol, from g1 to claude-opus-5-5). It carries a fixed prompt and one packet: George's request,
 the command results recorded for this request, the past-chat notes the client attached to it, and the reply.
 No session history, no operator pages,

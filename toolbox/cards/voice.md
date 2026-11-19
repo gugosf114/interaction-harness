@@ -19,7 +19,7 @@ Spoken answers in George's Claude Code sessions
   deb voice home        normal sound routing
   The switch is a file that Claude Code's own hook reads.
 
-Spoken answers in george and g1
+Spoken answers in g2 and g1
   Each final answer is read aloud with `say`. In a chat: /voice full (whole answer), /voice short
   (first sentence), /voice off, /voice on. The setting is in the harness's state/mods.json.
   Lane chats, daemon jobs and talk take turns through one speaker lock.

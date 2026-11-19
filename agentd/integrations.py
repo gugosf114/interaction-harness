@@ -75,9 +75,9 @@ def point_voice(paths, public_url):
     tools = model.setdefault('tools', [])
     existing = next((t for t in tools if t.get('function', {}).get('name') == 'lane_job'), None)
     descriptor = {'type': 'function', 'function': {'name': 'lane_job',
-        'description': 'Give a task to George\'s g1 or george lane. Returns a job number at once. The full answer is sent into this same call when it finishes.',
+        'description': 'Give a task to George\'s g1 or g2 lane. Returns a job number at once. The full answer is sent into this same call when it finishes.',
         'parameters': {'type': 'object', 'properties': {'task': {'type':'string'},
-                        'lane': {'type':'string','enum':['g1','george']}}, 'required':['task','lane']}},
+                        'lane': {'type':'string','enum':['g1','g2']}}, 'required':['task','lane']}},
         'server': {'url':public_url.rstrip('/') + '/vapi/tools', 'timeoutSeconds':30,
                    'headers':{'X-Line-Key':conf['voice']['key']}}}
     if existing:

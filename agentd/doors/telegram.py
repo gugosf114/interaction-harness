@@ -2,7 +2,7 @@
 
 Two roads, one door name.
 1. The box bridge. George's bot (t.me/Abridge114_bot) is long-polled by /root/agent-bridge/scripts/telegram_bridge.py on
-   the always-on box, and Telegram lets only one program poll a bot. The bridge's /lane, /g1 and /george commands post
+   the always-on box, and Telegram lets only one program poll a bot. The bridge's /lane, /g1 and /g2 commands post
    the task here over Tailscale (POST /api/jobs with "door": "telegram") and send the answer back to George's chat.
 2. Direct. With "token" (a bot token) and "chat_ids" in the "telegram" part of state/doors.json, this door polls that
    bot itself: every text from a listed chat becomes a job. "/lane NAME TASK" picks a lane.
@@ -67,7 +67,7 @@ class TelegramDoor(Door):
             return
         if not token:
             self.interval = 30
-            self.note = 'through the box bridge (/lane, /g1, /george); no direct bot token in doors.json'
+            self.note = 'through the box bridge (/lane, /g1, /g2); no direct bot token in doors.json'
             return
         self.interval = 1
         offset = int(self.daemon.queue.kv_get('telegram_offset', 0) or 0)

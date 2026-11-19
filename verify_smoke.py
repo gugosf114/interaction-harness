@@ -26,7 +26,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--engine',choices=['openai','anthropic'],required=True)
     args=parser.parse_args()
-    alias='g1' if args.engine=='openai' else 'george'
+    alias='g1' if args.engine=='openai' else 'g2'
     model='gpt-6.1-sol' if args.engine=='openai' else 'claude-opus-5-5'
     launcher=shlex.quote(str(ROOT/'harness'))+' --engine '+args.engine+' --model '+model+' --effort max'
     label='OpenAI' if args.engine=='openai' else 'Claude'

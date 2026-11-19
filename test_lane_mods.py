@@ -411,7 +411,7 @@ class UsageMeter(unittest.TestCase):
             hist = usage_meter.from_history(state / 'history.db', starts)
             self.assertEqual(hist['anthropic']['today'], {'calls': 1, 'input': 115, 'output': 7, 'cache_read': 100})
             text = usage_meter.report(state, now=now, providers=False)
-            self.assertIn('george', text)
+            self.assertIn('g2', text)
             self.assertIn('g1', text)
 
     def test_provider_refusal_is_printed(self):
