@@ -109,7 +109,7 @@ class LaneTests(unittest.TestCase):
     # ---- registry ----
     def test_registry_shortcuts_unique(self):
         shortcuts = sorted(lane.shortcut for lane in extra_lanes.LANES.values())
-        self.assertEqual(shortcuts, ['g2', 'g3', 'g4', 'gv'])
+        self.assertEqual(shortcuts, ['g3', 'g4', 'g5', 'gv'])
         for name in ('gemini', 'openrouter', 'glm', 'vertex'):
             self.assertIn(name, extra_lanes.LANES)
             self.assertTrue(extra_lanes.is_lane(name))

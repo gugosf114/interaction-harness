@@ -242,7 +242,7 @@ def local_date(stamp) -> str:
 
 SOURCE_NAMES = {'claude': 'claude-code', 'claude_code': 'claude-code', 'claude_web': 'claude-web', 'codex': 'codex',
                 'gemini': 'gemini', 'chatgpt': 'chatgpt', 'antigravity': 'antigravity'}
-LANES = {'anthropic': 'george', 'openai': 'g1'}
+LANES = {'anthropic': 'g2', 'openai': 'g1'}
 
 
 def read_turns(connection, expression, limit):

@@ -160,7 +160,7 @@ Second gate, typed in a chat:
                         habit).
 
 More lanes, in the shell (README: More lanes):
-  g2 "QUESTION"         Gemini (gemini-4-carbon). Hosted Google Search on.
+  g5 "QUESTION"         Gemini (gemini-4-carbon). Hosted Google Search on.
   g3 "QUESTION"         Open models through one OpenAI-compatible key (OpenRouter).
                         Needs a key: save_lane_key.py openrouter. Web plugin on.
   g4 "QUESTION"         George's own GLM model on Modal. Plain-text lane; answers,
@@ -205,7 +205,7 @@ Always on, typed in the shell (README: Always on):
   talk [--lane L] [--seconds N] [--clip FILE]
                         A spoken conversation with a lane. Say "stop" to end.
 
-Mods, typed at the > prompt of a george or g1 chat (each ships on):
+Mods, typed at the > prompt of a g2 or g1 chat (each ships on):
   /mods                 every mod, on or off, with one line on what it does
   /on NAME, /off NAME   switch one mod: length, plain-words, receipts, no-background,
                         undertaker, proof, narrator, tree, voice, voice-v,
@@ -238,7 +238,7 @@ Skills and apps, typed in the shell (a lane types them too; card skills, card ap
 Chat screen:
   --plain                       Turn off colors (also NO_COLOR).
   /help                         Every slash command and its one-line description.
-  /model NAME                   Change model and lane; g1 and george are aliases.
+  /model NAME                   Change model and lane; g1 and g2 are aliases.
   /effort LEVEL                 low, medium, high, xhigh, max.
   /new, /sessions               New session; list saved sessions.
   /session NAME, /continue      Open a session; open the last saved session.

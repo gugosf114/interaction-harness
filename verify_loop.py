@@ -62,7 +62,7 @@ def main():
            '\nAfter receiving its execution observation, in the second turn propose exactly this command: '+commands[1]+
            '\nAfter receiving the read result, give a final answer containing the observed marker with execution_payload null. '
            'Use two separate command payloads. Do not combine steps or run extra commands.')
-    alias='g1' if args.engine=='openai' else 'george'
+    alias='g1' if args.engine=='openai' else 'g2'
     model='gpt-6.1-sol' if args.engine=='openai' else 'claude-opus-5-5'
     # The aliases carry --loop -y, so they cannot show the y/N prompt. The approval test calls this
     # folder's launcher with the alias's other flags and no -y. The --yes test runs the alias itself.

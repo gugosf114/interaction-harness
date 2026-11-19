@@ -38,14 +38,14 @@ def install(namespace, config_file=None):
     def handle(text):
         words = text.strip().split(None, 1)
         command = words[0].split('@', 1)[0].lower() if words else ''
-        if command not in ('/lane', '/g1', '/george'):
+        if command not in ('/lane', '/g1', '/g2'):
             return original(text)
         rest = words[1].strip() if len(words) > 1 else ''
         lane = command[1:] if command != '/lane' else None
         if command == '/lane':
             pair = rest.split(None, 1)
             if len(pair) != 2:
-                return namespace['send']('Use /lane NAME TASK, /g1 TASK, or /george TASK.')
+                return namespace['send']('Use /lane NAME TASK, /g1 TASK, or /g2 TASK.')
             lane, rest = pair
         if not rest:
             return namespace['send']('A lane job needs a task.')

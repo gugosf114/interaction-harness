@@ -40,7 +40,7 @@ class Repairs(unittest.TestCase):
         try:
             a = q.add('g1', 'a', session='same')
             b = q.add('g1', 'b', session='same')
-            c = q.add('george', 'c', session='other')
+            c = q.add('g2', 'c', session='other')
             self.assertEqual(q.claim()['id'], a['id'])
             self.assertEqual(q.claim()['id'], c['id'])
             self.assertIsNone(q.claim())

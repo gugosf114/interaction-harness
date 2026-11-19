@@ -1,7 +1,7 @@
 """The event door: state/triggers.json runs a task template when something arrives on the phone.
 
 [
-  {"name": "boss mail", "when": "mail", "mailbox": "berkeley", "match": "invoice", "lane": "george",
+  {"name": "boss mail", "when": "mail", "mailbox": "berkeley", "match": "invoice", "lane": "g2",
    "task": "A new Berkeley mail arrived. Read it and tell me what it asks:\n{text}"},
   {"name": "whatsapp", "when": "notification", "app": "com.whatsapp", "task": "Summarize this message: {text}"},
   {"name": "yana", "when": "sms", "from": "+14155550100", "task": "Yana texted: {text}. Draft a reply."}

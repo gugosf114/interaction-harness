@@ -7,7 +7,7 @@ harness.request_reply stays one dispatch branch.
 
 | Shortcut | --engine     | Model (default)       | Key                           | Reply |
 |----------|--------------|-----------------------|-------------------------------|-------|
-| g2       | gemini       | gemini-4-carbon       | state/gemini-api-key          | strict four-field JSON, web via Google Search |
+| g5       | gemini       | gemini-4-carbon       | state/gemini-api-key          | strict four-field JSON, web via Google Search |
 | g3       | openrouter   | z-ai/glm-5.3          | state/openrouter-api-key      | strict four-field JSON, web via the web plugin |
 | g4       | glm          | glm-george (LoRA v11) | none (public Modal endpoint)  | plain text wrapped as an observation |
 | gv       | vertex       | claude-opus-5-5       | gcloud token (ADC)            | strict four-field JSON (emit_reply), web via web_search |

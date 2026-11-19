@@ -130,7 +130,7 @@ class SearchTests(RecallCase):
         store.close()
         result = rn.search('Who was the locksmith for the deadbolt?', state=self.state, before_row=later)
         top = result['passages'][0]
-        self.assertEqual((top['source'], top['chat']), ('george-lane', 'lane-a'))
+        self.assertEqual((top['source'], top['chat']), ('g2-lane', 'lane-a'))
         self.assertIn('Zavarian', top['text'])
         # The exchange already in this session is not handed back.
         session = {'turns': [{'raw_input': 'Which locksmith fixed the bakery deadbolt?',

@@ -108,7 +108,7 @@ def cmd_job(argv, paths=None) -> int:
     parser = argparse.ArgumentParser(prog='job', description='Hand a task to a lane. It runs in the background.')
     sub = parser.add_subparsers(dest='verb', required=True)
     add = sub.add_parser('add', help='Queue a task. Prints the job id at once.')
-    add.add_argument('--lane', help='george, g1, or any lane in the ~/.bashrc shortcut block.')
+    add.add_argument('--lane', help='g2, g1, or any lane in the ~/.bashrc shortcut block.')
     add.add_argument('--session', metavar='NAME', help='Continue this harness session. Default: a new session for the job.')
     add.add_argument('task', nargs='+', help='The task in words.')
     listing = sub.add_parser('list', help='Every job with its state. The same as: jobs')

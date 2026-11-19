@@ -154,7 +154,7 @@ def speak(text):
 
 def main(argv=None, paths=None) -> int:
     parser = argparse.ArgumentParser(prog='talk', description='A spoken conversation with a lane.')
-    parser.add_argument('--lane', help='george, g1, or any lane in the ~/.bashrc shortcut block.')
+    parser.add_argument('--lane', help='g2, g1, or any lane in the ~/.bashrc shortcut block.')
     parser.add_argument('--session', help='Continue this harness session. Default: a new talk-TIME session.')
     parser.add_argument('--seconds', type=int, default=60, help='Longest recording per turn (default 60, at most 600).')
     parser.add_argument('--clip', action='append', default=[], metavar='FILE',

@@ -1,5 +1,7 @@
 # Interaction harness
 
+**Shortcut names changed on Nov 19, 2026.** The Claude shortcut `george` is now `g2`, because the operator's name is also George. Gemini moved from `g2` to `g5`. The lanes are `g1` OpenAI, `g2` Claude, `g3` open models, `g4` GLM, `g5` Gemini, `gv` Vertex. Every proof in this file dated before Nov 19 ran under the old names; the text below uses the new ones.
+
 A native Termux command with OpenAI and Anthropic backends, a shared four-field reply schema, a local display gate, full-history sessions, SQLite recall, confirmed shell execution, and Android dictation.
 
 ## Quick use
@@ -26,9 +28,9 @@ These exports are read by the Termux launcher and passed into the isolated Debia
 The managed aliases in `~/.bashrc` are:
 
 ```sh
-george                         # Claude Opus 5.5, high thinking
+g2                            # Claude Opus 5.5, high thinking
 g1                            # GPT-6.1 Sol, high reasoning
-george "my quick question"      # One answer, then exit
+g2 "my quick question"         # One answer, then exit
 g1 "my quick question"         # One answer, then exit
 ```
 
@@ -36,10 +38,10 @@ In an existing Bash window, load the new aliases once with `. ~/.bashrc`. New Ba
 
 Launching either shortcut with no question opens a continuous chat. Type a message at `> ` and press Enter. The same session stays attached to every turn. Type `exit` or `quit` to leave; Ctrl-D also leaves. No `-c` is needed between messages. Prompts go to stderr; stdout remains answer-and-command text only. There is no greeting banner.
 
-Each launch starts a new session unless you use `george -c`, `g1 -c`, or `--session NAME`. Full session history and SQLite history apply to chat mode. API/gate errors are shown briefly and the next input remains available. Exit returns the last turn's status; Ctrl-C returns 130.
+Each launch starts a new session unless you use `g2 -c`, `g1 -c`, or `--session NAME`. Full session history and SQLite history apply to chat mode. API/gate errors are shown briefly and the next input remains available. Exit returns the last turn's status; Ctrl-C returns 130.
 
 ```sh
-george --session audit
+g2 --session audit
 g1 --session work
 ~/interaction-harness/harness --chat
 printf '%s\n' 'First message' 'Second message' 'quit' | ~/interaction-harness/harness --chat
@@ -118,9 +120,9 @@ Approved commands run with native Termux Bash and noninteractive stdin. stdout a
 
 ```sh
 g1 --loop "Create a temporary file, then read it back."
-george --loop --max-turns 8 "Inspect this log and verify the fix."
+g2 --loop --max-turns 8 "Inspect this log and verify the fix."
 g1 --loop -y "Create a temporary file, then read it back."
-george --chat --loop --session maintenance
+g2 --chat --loop --session maintenance
 ```
 
 `--loop` implies execution mode. The client requests one four-field reply, displays it through the existing gate, asks for command approval, runs the approved payload in native Termux, and records stdout, stderr, and exit status. It then sends that result back as a separate `execution_observation` data message and asks for the next step. The first loop record holds the original task and the turn ceiling and never changes between turns; each continuation message names its own turn ("This is model turn 2 of 5."). Command output is data, not a new instruction or source of approval. Only the CLI `-y` flag enables automatic confirmation; the model cannot set it through its four-field reply.
@@ -166,9 +168,9 @@ George can ask the other model for a second opinion on the work in front of him.
 **Start it.**
 
 ```sh
-/advisor                              # typed at the > prompt of a george or g1 chat
+/advisor                              # typed at the > prompt of a g2 or g1 chat
 /advisor why did that command fail?   # with his own question for the reviewer
-george -c --advisor "QUESTION"        # outside a chat, for the last session
+g2 -c --advisor "QUESTION"        # outside a chat, for the last session
 g1 --session NAME --advisor           # outside a chat, for a named session; the question is optional
 ```
 
@@ -181,7 +183,7 @@ The working model cannot start it. It is not a tool, it is on no card and on no 
 - `operator_question`: George's own question, when he gave one.
 - The size cap is 600,000 characters. A larger packet is refused with one short error before any call. Nothing is cut to fit.
 
-**The call.** It goes to the other engine: from `george` to `gpt-6.1-sol`, from `g1` to `claude-opus-5-5`, at the lane's own `--effort` and `--timeout`. It is stateless. It carries the reviewer prompt and the packet, and nothing else: no session history, no frozen prefix, no tools page, no rules or profile pages, no web tools, no reply schema. The reviewer prompt is:
+**The call.** It goes to the other engine: from `g2` to `gpt-6.1-sol`, from `g1` to `claude-opus-5-5`, at the lane's own `--effort` and `--timeout`. It is stateless. It carries the reviewer prompt and the packet, and nothing else: no session history, no frozen prefix, no tools page, no rules or profile pages, no web tools, no reply schema. The reviewer prompt is:
 
 > You are an outside reviewer of another model's work. State the root cause, then the next command or fix. At most three short bullets. No greeting, no praise, no reassurance.
 
@@ -201,7 +203,7 @@ No temperature is sent. Both providers refuse one on these models (checked live,
 - One row goes into `history.db` with status `advisor` (or `advisor_error`), the advising engine and model, `/advisor QUESTION` as the input, the advice, and the token usage. `--recall` does not show advisor rows. One `usage.jsonl` record with `kind: advisor` holds the sizes and the usage, and no packet or advice text.
 - `/advisor` does not make the working model speak. George's next message does.
 
-**Live proof (Nov 11, 2026).** Once on each lane, through the real launcher with `--effort max --loop -y` and an isolated state folder: a loop task that ends in a failing `ls` (exit 2), then `/advisor`, then one more question. On `george`, gpt-6.1-sol answered in two bullets under the label, and Claude's next answer restated the note. On `g1`, claude-opus-5-5 answered in three bullets, and GPT's next answer restated the note. Both chats exited 0. The working lane's next call still read its cache: 13,939 tokens on Claude and 10,749 on GPT. The advisor call used 501 input and 459 output tokens on GPT, and 635 input and 1,815 output tokens on Claude.
+**Live proof (Nov 11, 2026).** Once on each lane, through the real launcher with `--effort max --loop -y` and an isolated state folder: a loop task that ends in a failing `ls` (exit 2), then `/advisor`, then one more question. On `g2`, gpt-6.1-sol answered in two bullets under the label, and Claude's next answer restated the note. On `g1`, claude-opus-5-5 answered in three bullets, and GPT's next answer restated the note. Both chats exited 0. The working lane's next call still read its cache: 13,939 tokens on Claude and 10,749 on GPT. The advisor call used 501 input and 459 output tokens on GPT, and 635 input and 1,815 output tokens on Claude.
 
 The code is in `advisor.py`. `cli.py` holds the trigger and the two flags, and `storage.py` holds `advisor_note`. Tests: `test_advisor.py`.
 
@@ -224,8 +226,8 @@ The same search by hand: `past-chats WORDS` and `past-chats --open REF [N]` (`ca
 **Sessions.** One exchange is one message from George and every model turn that answered it.
 
 ```sh
-george --fork audit audit-b -- "Try the other fix."   # new session audit-b, a full copy of audit; audit is unchanged
-george --from golden-page "Start here."                 # a new session that starts as a copy of golden-page
+g2 --fork audit audit-b -- "Try the other fix."   # new session audit-b, a full copy of audit; audit is unchanged
+g2 --from golden-page "Start here."                 # a new session that starts as a copy of golden-page
 session golden golden-page                              # every new chat starts as a copy of it; --new skips it
 session golden --clear
 sessions                                                # date, name, lane, exchanges, first line
@@ -318,7 +320,7 @@ Domain defaults include apps whose declared link needs a URL path, such as `http
 
 ## Rules and profile pages
 
-`george` and `g1` used to start every call knowing nothing about the operator. Each call now carries the operator's own pages, read from the files he already keeps. Git holds the mechanism only. The text of the pages never enters the repository.
+`g2` and `g1` used to start every call knowing nothing about the operator. Each call now carries the operator's own pages, read from the files he already keeps. Git holds the mechanism only. The text of the pages never enters the repository.
 
 **The list.** `state/pages.json` in this installation. Git ignores `state/`. Each entry has a `label`, an absolute `path`, and an optional `sections` list of exact heading lines:
 
@@ -386,11 +388,11 @@ Both engines have hosted web search and page fetching enabled by default. `--no-
 
 ```sh
 g1 "Search the web for today's official Python release news."
-george "Fetch https://example.com and give me its title."
+g2 "Fetch https://example.com and give me its title."
 g1 --no-web "What does chmod 640 mean?"
-george --web-max 8 "Search for the latest announcement and read its page."
+g2 --web-max 8 "Search for the latest announcement and read its page."
 g1 --image ~/picture.png "What is shown here?"
-george --file /sdcard/Download/report.pdf "Read the second chart."
+g2 --file /sdcard/Download/report.pdf "Read the second chart."
 ```
 
 `--image PATH` and `--file PATH` are repeatable. Images can be PNG, JPEG, WebP, or GIF; files must be PDF. The file signature determines the type, regardless of its extension. Paths beginning with `~` mean the Termux home, `/sdcard` paths work through Debian, and relative paths use the folder from which the native launcher was started. In chat, use one line such as `/image "/sdcard/Download/a b.png" What number is shown?` or `/file ~/report.pdf What does page two say?`.
@@ -432,7 +434,7 @@ screen key KEYCODE [--target TARGET]
 look /sdcard/Download/picture.png
 
 g1 --loop "Take a picture of hidden screen work and tell me what app is showing."
-george --loop "Use look /sdcard/Download/order.pdf and read its delivery date."
+g2 --loop "Use look /sdcard/Download/order.pdf and read its delivery date."
 ```
 
 Install with `sh toolbox/install.sh` after choosing this version for use. The
@@ -498,19 +500,19 @@ answers must also be compared with their saved PNGs.
 
 ## API tools
 
-`g1 --tools` and `george --tools` list every API tool, its default state, its provider, and any recorded provider refusal. There are 26 switches covering 39 provider/tool pairs. The final answer still passes through the same four-field schema and display gates. The frozen prefix is unchanged.
+`g1 --tools` and `g2 --tools` list every API tool, its default state, its provider, and any recorded provider refusal. There are 26 switches covering 39 provider/tool pairs. The final answer still passes through the same four-field schema and display gates. The frozen prefix is unchanged.
 
 **On but not set up.** A tool that is switched on with nothing to work with leaves the request instead of stopping the call: `skills` with no skill listed, `file_search` with no `vector_store_ids`, `mcp_remote` with no https `mcp_url`. Asked for by flag, it stays in and the missing setting is an error. OpenAI answers HTTP 400 `code_interpreter and shell with an OpenAI-managed container cannot be used together at the same time` for code execution with either shell, so on that lane one of `code_execution`, `shell` and `hosted_shell` stays: the one asked for by flag, else the hosted shell when skills are set up, else code execution. The phone's commands still run through the function and custom tools. `--tools` names what stepped aside. OpenAI remote MCP is sent with `require_approval: never`.
 
 ```sh
 g1 --tools
-george --tools
+g2 --tools
 g1 --loop --shell "Run pwd and report the path."
-george --loop --memory "Save a note that the test shelf is blue."
-george --loop --memory --new "Read the saved shelf note."
+g2 --loop --memory "Save a note that the test shelf is blue."
+g2 --loop --memory --new "Read the saved shelf note."
 g1 --loop --mcp-local "List the last five notifications on my phone."
 g1 --loop --mcp-remote "List the last five notifications on my phone."
-george --loop --computer --computer-target hidden:NAME "Take a screenshot."
+g2 --loop --computer --computer-target hidden:NAME "Take a screenshot."
 g1 --files --file /path/to/document.pdf "Read this document."
 g1 --image-generation "Make a small blue circle."
 ```
@@ -582,7 +584,7 @@ The local gate filters wording with patterns in code. The second gate adds what 
 
 ### The judge
 
-After a reply passes the local gate, a second model on the other engine reads it before George sees it: `gpt-6.1-sol` judges the `george` lane, `claude-opus-5-5` judges the `g1` lane, at the lane's own `--effort` and `--timeout`. Every reply is judged, each step of a `--loop` run included.
+After a reply passes the local gate, a second model on the other engine reads it before George sees it: `gpt-6.1-sol` judges the `g2` lane, `claude-opus-5-5` judges the `g1` lane, at the lane's own `--effort` and `--timeout`. Every reply is judged, each step of a `--loop` run included.
 
 **The call.** One stateless request. It carries a fixed prompt and one JSON packet, and nothing else: no session history, no operator pages, no tools.
 
@@ -697,18 +699,18 @@ Code: `self_update.py`; the commands are `toolbox/bin/self-clone` and `toolbox/b
 
 **Live proof (Nov 12, 2026).** Run from the live folder on each lane, `--effort max --loop -y`, isolated state folder. Every run exited 0, and each change was landed on `main` by the lane itself.
 
-- `verify_second_gate.py --case self`: the lane was told to add one sentence to `CUT_SENTENCES` with a test. It printed `card self`, ran `self-clone`, made the edit with `edit-exact`, ran the one test file, and ran `self-update`, which exited 0. `george` landed `529925a` ("Let me know how it goes."; 678 tests and the 4 native tests passed). `g1` landed `44a2018` ("Have a great day."; 679 and 4). After each run `main` and the live folder were at the lane's commit, and the live gate cut the sentence.
-- `/wrong` to code: a chat answer ended with a planted closing line, then `/wrong Never end an answer with "…". This habit goes in code…`. The lane chose the code bin, followed `card self` and landed the change. `george` landed `4f190f0` ("Take care."; 713 and 4). `g1` used `self-update --row 2` and landed `50d4aee` ("All the best."; 717 and 4); its commit message ends with `Correction: history row 2`, and the correction row holds the commit.
+- `verify_second_gate.py --case self`: the lane was told to add one sentence to `CUT_SENTENCES` with a test. It printed `card self`, ran `self-clone`, made the edit with `edit-exact`, ran the one test file, and ran `self-update`, which exited 0. `g2` landed `529925a` ("Let me know how it goes."; 678 tests and the 4 native tests passed). `g1` landed `44a2018` ("Have a great day."; 679 and 4). After each run `main` and the live folder were at the lane's commit, and the live gate cut the sentence.
+- `/wrong` to code: a chat answer ended with a planted closing line, then `/wrong Never end an answer with "…". This habit goes in code…`. The lane chose the code bin, followed `card self` and landed the change. `g2` landed `4f190f0` ("Take care."; 713 and 4). `g1` used `self-update --row 2` and landed `50d4aee` ("All the best."; 717 and 4); its commit message ends with `Correction: history row 2`, and the correction row holds the commit.
 - These four sentences came from the proof, not from George. They are closing lines with no content. To take one back out: delete its line in `habit_checks.py` and its test in `test_habit_checks.py`, then `self-update`.
 
 ## Always on
 
 A lane used to exist only while a Termux window was open. `agentd` is a service that runs without one. It takes tasks from several doors, runs each as a background job, and tells George the result. The code is in `agentd/`. Each job runs the existing `harness` command as a subprocess; the request code is unchanged.
 
-**A job** is a lane, a session name and a task in words. The lane's flags come from the `george`/`g1` shortcut block in `~/.bashrc` (a lane added there is a job lane at once), plus `lanes` in `state/agentd.json`. Every job runs with `--loop -y`. The task goes in on stdin. Each job has its own runner process and its own fresh session (`job-ID-xxxx`) unless `--session` names one. Jobs run in parallel with no cap. Jobs that name the same session wait for one another, so their saved answers and commands stay separate. Repeated voice webhooks with the same call and tool id reuse the first job. Every turn lands in `state/history.db` like any other turn, and `job show` reads it back from there.
+**A job** is a lane, a session name and a task in words. The lane's flags come from the `g2`/`g1` shortcut block in `~/.bashrc` (a lane added there is a job lane at once), plus `lanes` in `state/agentd.json`. Every job runs with `--loop -y`. The task goes in on stdin. Each job has its own runner process and its own fresh session (`job-ID-xxxx`) unless `--session` names one. Jobs run in parallel with no cap. Jobs that name the same session wait for one another, so their saved answers and commands stay separate. Repeated voice webhooks with the same call and tool id reuse the first job. Every turn lands in `state/history.db` like any other turn, and `job show` reads it back from there.
 
 ```sh
-job add "Check the battery and the Wi-Fi name."      # prints: job 7 queued on george (session job-7-1a2b)
+job add "Check the battery and the Wi-Fi name."      # prints: job 7 queued on g2 (session job-7-1a2b)
 job add --lane g1 --session audit "Continue the audit."
 jobs                                                # one row per job: id, state, lane, door, time, task
 job show 7 [--full]                                 # the full answer and every command it ran (--full: each step and its output)
@@ -742,7 +744,7 @@ agentd start | stop | restart | log [N] | url | password
 |---|---|---|
 | Folder | A text file dropped in `state/inbox/`. Optional first lines `lane: NAME` and `session: NAME`. | `state/outbox/NAME.answer.txt`. The dropped file moves to `state/inbox/taken/`. |
 | Text message | A text that starts with the keyword (`sms.keyword`, default `lane`): `lane g1 what is the battery`. Only from `sms.numbers`; `*` means anyone. Only texts that arrive after the service first looks count. | A text back to the sender: `g1 job 12 started.`, then `g1 job 12 done: ANSWER`. |
-| Telegram | The existing `telegram_bridge.py` loads `telegram_lane.py`; `/lane NAME TASK`, `/g1 TASK` and `/george TASK` post to this phone over Tailscale. `telegram.mode: "bridge"` keeps its existing poller. The saved token returns results from this service. Without bridge mode, a configured token and chat list use direct polling. | The same Telegram chat. |
+| Telegram | The existing `telegram_bridge.py` loads `telegram_lane.py`; `/lane NAME TASK`, `/g1 TASK` and `/g2 TASK` post to this phone over Tailscale. `telegram.mode: "bridge"` keeps its existing poller. The saved token returns results from this service. Without bridge mode, a configured token and chat list use direct polling. | The same Telegram chat. |
 | Voice line | On a call to 650-252-3543 the personal fast assistant's `lane_job(task, lane)` tool reaches this phone's `POST /vapi/tools` with its own `X-Line-Key`. `agentd wire-voice` installs the tool and starts its own Cloudflare tunnel. The daemon restores the tunnel and updates that tool's address if it changes. The existing brain tools keep their own routes. | Into the same call: context is added silently, then Vapi `say` reads the exact gated answer. A finished call keeps its result in the queue. |
 | Clock | `state/schedule.json`, see below. | Notification, and speech when it is on. |
 | Events | `state/triggers.json`, see below. | Notification, and speech when it is on. |
@@ -752,7 +754,7 @@ agentd start | stop | restart | log [N] | url | password
 
 ```json
 [
-  {"name": "morning", "at": "08:00", "lane": "george", "task": "Read my Berkeley inbox and list what needs me."},
+  {"name": "morning", "at": "08:00", "lane": "g2", "task": "Read my Berkeley inbox and list what needs me."},
   {"name": "battery", "every_minutes": 30, "lane": "g1", "task": "Report the battery level."}
 ]
 ```
@@ -829,7 +831,7 @@ George's Claude Code setup acts around every turn with mods (`/root/.claude/mods
 - `reindex` and `voiceline` (from the two `SessionStart` hooks): when a chat opens, the past-chat search index is brought up to date, and the phone call line is started when its `WANTED` file exists.
 - `autopilot` (from `mods/autopilot`): `/autopilot GOAL` runs one loop run per step with the mod's own step prompt, until a step ends with `AUTOPILOT: COMPLETE` or `AUTOPILOT: BLOCKED`, or 150 steps, or 10 hours, or Ctrl-C. Log, questions and result go to `state/autopilot/`. `/autopilot status`, `/autopilot go`.
 
-The small model is `claude-haiku-5-5` on `george` and `gpt-6-luna` on `g1`, on the lane's own key. Both use `max` effort and 128,000 output tokens. Claude uses buffered streaming with adaptive thinking. Incomplete helper replies produce no marks. Each call is one `usage.jsonl` record with `kind` `mod:proof` or `mod:tree`; hook work uses `hook:NAME` and is excluded from API call counts. Model failures retain the exact error in the private log.
+The small model is `claude-haiku-5-5` on `g2` and `gpt-6-luna` on `g1`, on the lane's own key. Both use `max` effort and 128,000 output tokens. Claude uses buffered streaming with adaptive thinking. Incomplete helper replies produce no marks. Each call is one `usage.jsonl` record with `kind` `mod:proof` or `mod:tree`; hook work uses `hook:NAME` and is excluded from API call counts. Model failures retain the exact error in the private log.
 
 **Usage.** `usage` (`/usage` in chat; `usage --local` skips provider calls) prints tokens and calls today, this week from Monday and this month for both API accounts. It reads `usage.jsonl` plus `judge.jsonl`, counts each provider response once, and separately reports saved model turns from `history.db`. Hook, recall and correction records are not model calls. Phone time-zone rules handle DST and a week crossing a month. Each provider gets exact start/end times for each window: Anthropic `GET /v1/organizations/analytics/usage` with beta `analytics-usage-cost-2026-08-24`, OpenAI `GET /v1/organization/usage/completions`. Both need an admin key in `state/anthropic-admin-key` / `state/openai-admin-key` or `ANTHROPIC_ADMIN_KEY` / `OPENAI_ADMIN_KEY`. The lane keys return Anthropic HTTP 401 (Admin or organization-scoped key required) and OpenAI HTTP 403 (`api.usage.read` missing). `HARNESS_STATE_DIR` chooses the local records.
 
@@ -870,7 +872,7 @@ To change the page: edit `prefix_block.txt`, put its new SHA-256 in `PREFIX_SHA2
 - It sits after the request, so everything before it is byte-identical to a request without it. It is never saved with a turn: the history does not keep old stamps, and every loop request minus its stamp is a byte-for-byte prefix of the next.
 - On Claude the automatic conversation marker lands on the last block, which is the stamp, and the next request never repeats a stamp at that place. `stamp.cache_before_stamp` puts an explicit marker on the block before the stamp, so the next request reads the whole conversation back. The automatic marker stays too: inside one model turn the request grows behind the stamp (provider tool steps, a paused web lookup), and the automatic marker follows that growth. That makes four markers, Anthropic's limit: two on the system pages, one before the stamp, the automatic one. With no free slot the automatic one is given up. Checked live on Nov 11, 2026 (claude-opus-5-5): the four markers were accepted, and the third step of a turn read 25,269 tokens from cache where the explicit marker alone read 21,627 and paid for 3,667 again. With the memory tool on, the client's memory folder check is appended after the stamp; the explicit marker still sits on the request.
 - A corrective retry keeps the stamp and adds the correction after it. Provider compaction keeps the current request and the stamp out of the summary.
-- `/off stamp` and `/on stamp` switch it, typed at the `>` prompt or as the whole question (`george "/off stamp"`). No model call is made. The switch is `stamp` in `switches.json` in the state folder. It ships on.
+- `/off stamp` and `/on stamp` switch it, typed at the `>` prompt or as the whole question (`g2 "/off stamp"`). No model call is made. The switch is `stamp` in `switches.json` in the state folder. It ships on.
 - Each usage record holds `stamp_sha256`, the digest of the record sent, or `null` when it is off.
 - A missing or unreadable rules file, a missing heading, or a section with no numbered bold headline ends the run with one short error (exit code 2) before any API call.
 - Like the page list, it is switched on only by the command-line entry point (`harness.STAMP_SOURCE`), so the unit tests never read the operator's real rules.
@@ -879,7 +881,7 @@ Code: `stamp.py`; hooks in `harness.py` (`load_stamp`, the tail of `messages`), 
 
 **Faults the live proof turned up, fixed here.** A loop task whose words repeat an earlier task in the same session was sent without its own `agent_loop` record but saved with one, so the next request no longer began with the bytes of the one before it and the cache missed; a new task now always brings its own record. An OpenAI web item newer than the installed SDK made the SDK print serialization warnings on the operator's screen; `senses.dump` now dumps without warnings. The aliases carry `--loop -y`, so `verify_loop.py` (approval mode) and `verify_smoke.py` call the launcher with the alias's engine, model and effort, and `verify_repl.py` checks `max` effort. Every mod ships on, so each live verifier read its test answers aloud, and the mods' lines around the answer and their usage records failed the verifiers' checks (`verify-live`, `verify_smoke.py` and `verify_repl.py` all failed on main). A verifier's own state folder now starts with the four mods around the answer off (`voice`, `proof`, `tree`, `narrator`); the mods inside the gate stay on. The verifiers count model turns only, not the `kind: recall` and `kind: mod:...` usage records, and the stderr line of a bounced answer check is not an error (`verify_quiet.py`).
 
-**Live proof (Nov 11, 2026).** From the live folder at the landed commit, through the real `george` and `g1` aliases (`--effort max --loop -y`), each run in an isolated state folder.
+**Live proof (Nov 11, 2026).** From the live folder at the landed commit, through the real `g2` and `g1` aliases (`--effort max --loop -y`), each run in an isolated state folder.
 
 - Every live verifier, both lanes, exit code 0 each: `verify-live` (eight cases; the dictated "show mod six four zero" is read as `chmod 640` with no dictionary on the page), `verify_smoke.py`, `verify_repl.py`, `verify_loop.py`, `verify_loop.py --yes`, `verify_senses.py` (seven cases). `test_native_terminal.py` passed its four tests in native Termux.
 - The cache: the first `verify-live` call on the new page read 0 tokens from cache and the second read 13,294 on GPT-6.1 Sol and 17,240 on Claude Opus 5.5.
@@ -888,13 +890,13 @@ Code: `stamp.py`; hooks in `harness.py` (`load_stamp`, the tail of `messages`), 
 - Five questions that are not about computers, each lane, exit 0 each. A two-line reply to a customer asking for a quote: a draft, no command. Compound interest: a plain worked example. "What's the weather in Daly City right now": a hosted lookup on both lanes (Claude printed eight sources). "I was thinking maybe we could look at the site later": an observation with no command on both lanes; Claude answered "The site has not been opened or checked in this session." "You're wrong, 2+2 is 5": both lanes held 4.
 - The Gemini lane (`--engine gemini`) answered yes to the stamp question, exit 0. The GLM lane (`--engine glm`) answered a question with the stamp behind it, exit 0, after a cold start of 888 seconds; its usage record holds the stamp's digest. The open-model lane has no key and the Vertex lane has no quota, so the stamp on those two is covered by the offline tests only.
 
-**Two faults in the judge that these runs showed, fixed with it.** The weather answer on `g1` was failed twice as an unsupported claim: OpenAI's weather lookup returns no web address, so the judge saw an empty source list. The packet now carries `context.web_lookups`, the count of hosted lookups in the turn. On `george`, a reply that did the work and then shared an idea with its confidence and its catch, as George's fourth core rule asks, was failed as an unsolicited warning. The judge cannot see his pages, so its prompt now says such an idea is not an unasked limit. After the fix the same two questions passed the judge on the first reply, exit 0 each.
+**Two faults in the judge that these runs showed, fixed with it.** The weather answer on `g1` was failed twice as an unsupported claim: OpenAI's weather lookup returns no web address, so the judge saw an empty source list. The packet now carries `context.web_lookups`, the count of hosted lookups in the turn. On `g2`, a reply that did the work and then shared an idea with its confidence and its catch, as George's fourth core rule asks, was failed as an unsolicited warning. The judge cannot see his pages, so its prompt now says such an idea is not an unasked limit. After the fix the same two questions passed the judge on the first reply, exit 0 each.
 
 **One fault on the plain-text lane, fixed with it.** The GLM model typed the four-field object itself, with single quotes around the keys, as the first page teaches, and the lane showed the whole object as the answer. `lane_base.wrap_text` now takes the `direct_answer` out of such an object; the lane still proposes no command.
 
 ## More lanes
 
-Two lanes shipped first: `george` (Anthropic) and `g1` (OpenAI). Four more brains
+Two lanes shipped first: `g2` (Anthropic) and `g1` (OpenAI). Four more brains
 answer through the same four-field reply, the same display gates, the same pages,
 sessions, history and loop. Each provider is its own module (`gemini_lane.py`,
 `openrouter_lane.py`, `glm_lane.py`, `vertex_lane.py`), built on one shared gate
@@ -905,25 +907,25 @@ Anthropic's Messages over Vertex `rawPredict`).
 
 | Shortcut | `--engine` | Model (default) | Key | Reply | Hosted web |
 |---|---|---|---|---|---|
-| `g2` | `gemini` | `gemini-4-carbon` | `state/gemini-api-key` | strict four-field JSON | Google Search + URL context |
+| `g5` | `gemini` | `gemini-4-carbon` | `state/gemini-api-key` | strict four-field JSON | Google Search + URL context |
 | `g3` | `openrouter` | `z-ai/glm-5.3` | `state/openrouter-api-key` (none yet) | strict four-field JSON | web plugin |
 | `g4` | `glm` | `glm-george` (George's LoRA v11) | none (public Modal endpoint) | plain text, wrapped as an observation | none |
 | `gv` | `vertex` | `claude-opus-5-5` | gcloud token (ADC) | strict four-field JSON (`emit_reply` tool) | `web_search_20250305` |
 
 ```sh
-g2 "Explain chmod 640."
+g5 "Explain chmod 640."
 g3 "Explain chmod 640."
 g4 "Explain chmod 640."
 harness --engine gemini "Explain chmod 640."
 ```
 
-The shortcuts carry the same flags as `george` and `g1` (`--effort max --loop -y`).
+The shortcuts carry the same flags as `g2` and `g1` (`--effort max --loop -y`).
 A lane's default model, endpoint and key are overridable by environment variable
 (`GEMINI_MODEL`, `OPENROUTER_BASE_URL`, `GLM_OPENAI_URL`, `VERTEX_MODEL`, ...) or by
 a saved file in `state/`. A `wrap` lane returns plain text, so it answers but
 proposes no command; a `json` lane returns the strict four fields and can.
 
-- **Gemini (`g2`).** Google's own `generateContent` API, not the OpenAI-compatible
+- **Gemini (`g5`).** Google's own `generateContent` API, not the OpenAI-compatible
   shim, because only the native API carries Grounding with Google Search, URL
   context, inline images and PDFs alongside the strict JSON reply. The strongest
   model the key could call on 2026-11-11, found from a live model list, is
@@ -972,10 +974,10 @@ proposes no command; a `json` lane returns the strict four fields and can.
 
 ```sh
 both "Which is faster, chmod or chown, and why?"
-both --lanes gemini,g1,george "Explain chmod 640."
+both --lanes gemini,openai,anthropic "Explain chmod 640."
 ```
 
-`both "QUESTION"`, and `/both QUESTION` inside a `george` or `g1` chat, send one
+`both "QUESTION"`, and `/both QUESTION` inside a `g2` or `g1` chat, send one
 question to every working lane in parallel. Each answer passes the display gates on
 its own, prints under a fixed label line naming the model (`-- gemini - ...`), and
 is saved to that lane's own session (`both-<lane>`) and to history. `--lanes a,b,c`
@@ -1105,7 +1107,7 @@ commands such as `/advisor`, `/wrong`, `/fork`, `/rewind`, `/mods`, `/voice`, `/
 
 | Command | Action |
 | --- | --- |
-| `/model NAME`, `/effort LEVEL` | Change model/lane or thinking for the next turn. `g1` and `george` are model aliases. |
+| `/model NAME`, `/effort LEVEL` | Change model/lane or thinking for the next turn. `g1` and `g2` are model aliases. |
 | `/new`, `/sessions`, `/session NAME`, `/continue` | Start, list, open or resume sessions. |
 | `/recall WORDS`, `/cost`, `/status` | Search saved answers; show cost; show every setting. |
 | `/clear`, `/copy`, `/save FILE` | Clear only the screen; copy the last answer; save that answer. Quote a path with spaces. |

@@ -20,7 +20,7 @@ from agentd.doors.voice import VoiceDoor, spoken_report, tool_calls
 from agentd import talk, tunnel
 from test_agentd import Base
 
-LANES = ['george', 'g1']
+LANES = ['g2', 'g1']
 
 
 class InboxTests(Base):
@@ -62,7 +62,7 @@ class SmsTests(Base):
     def test_parse_text(self):
         self.assertEqual(parse_text('lane g1 what is the battery', 'lane', LANES), {'lane': 'g1', 'task': 'what is the battery'})
         self.assertEqual(parse_text('Lane: check mail', 'lane', LANES), {'lane': None, 'task': 'check mail'})
-        self.assertEqual(parse_text('LANE George, read it', 'lane', LANES), {'lane': 'george', 'task': 'read it'})
+        self.assertEqual(parse_text('LANE G2, read it', 'lane', LANES), {'lane': 'g2', 'task': 'read it'})
         self.assertIsNone(parse_text('lanes are closed', 'lane', LANES))
         self.assertIsNone(parse_text('hello lane g1 x', 'lane', LANES))
         self.assertIsNone(parse_text('lane', 'lane', LANES))
@@ -107,7 +107,7 @@ class TelegramTests(Base):
     def test_parse_message(self):
         self.assertEqual(parse_message('/lane g1 check the battery', LANES), {'lane': 'g1', 'task': 'check the battery'})
         self.assertEqual(parse_message('/g1 hi there', LANES), {'lane': 'g1', 'task': 'hi there'})
-        self.assertEqual(parse_message('/george@Abridge114_bot read mail', LANES), {'lane': 'george', 'task': 'read mail'})
+        self.assertEqual(parse_message('/g2@Abridge114_bot read mail', LANES), {'lane': 'g2', 'task': 'read mail'})
         self.assertEqual(parse_message('plain words', LANES), {'lane': None, 'task': 'plain words'})
         self.assertEqual(parse_message('/lane do it', LANES), {'lane': None, 'task': 'do it'})
         self.assertIsNone(parse_message('/start', LANES))
@@ -237,7 +237,7 @@ class ScheduleTests(Base):
         self.assertEqual(daemon.queue.list(), [])
         door.poll(datetime.datetime(2026, 11, 11, 8, 2, 10))
         jobs = daemon.queue.list()
-        self.assertEqual([(j['task'], j['door'], j['lane']) for j in jobs], [('tick', 'schedule', 'george'), ('scheduled task', 'schedule', 'g1')])
+        self.assertEqual([(j['task'], j['door'], j['lane']) for j in jobs], [('tick', 'schedule', 'g2'), ('scheduled task', 'schedule', 'g1')])
         door.poll(datetime.datetime(2026, 11, 11, 8, 2, 40))
         self.assertEqual(len(daemon.queue.list()), 2)
 

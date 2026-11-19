@@ -109,7 +109,7 @@ class Base(unittest.TestCase):
 class QueueTests(Base):
     def test_add_gives_an_id_and_a_fresh_session(self):
         queue = Queue(self.paths)
-        one, two = queue.add('g1', 'first task'), queue.add('george', 'second', session='mine')
+        one, two = queue.add('g1', 'first task'), queue.add('g2', 'second', session='mine')
         self.assertEqual((one['id'], one['state'], one['door']), (1, 'queued', 'cli'))
         self.assertTrue(one['session'].startswith('job-1-'))
         self.assertEqual(two['session'], 'mine')
@@ -158,9 +158,9 @@ class QueueTests(Base):
 
 class ConfigTests(Base):
     def test_alias_block_lanes_and_job_flags(self):
-        text = ("# BEGIN interaction-harness shortcuts\nalias george='~/interaction-harness/harness --engine anthropic --effort max'\n"
+        text = ("# BEGIN interaction-harness shortcuts\nalias g2='~/interaction-harness/harness --engine anthropic --effort max'\n"
                 "alias other='ls'\n# END interaction-harness shortcuts\n")
-        self.assertEqual(config.alias_lanes(text), {'george': ['--engine', 'anthropic', '--effort', 'max']})
+        self.assertEqual(config.alias_lanes(text), {'g2': ['--engine', 'anthropic', '--effort', 'max']})
         self.assertEqual(config.job_flags(['--chat', '--engine', 'openai']), ['--engine', 'openai', '--loop', '-y'])
 
     def test_lanes_always_loop_and_approve(self):
@@ -169,7 +169,7 @@ class ConfigTests(Base):
             self.assertIn('--loop', flags)
             self.assertIn('-y', flags)
         self.assertIn('fast', table)
-        self.assertEqual(config.default_lane({}, table), 'george')
+        self.assertEqual(config.default_lane({}, table), 'g2')
 
     def test_doors_file_is_filled_once(self):
         self.paths.doors.unlink()
@@ -221,7 +221,7 @@ class ServiceTests(Base):
 
     def test_two_jobs_run_in_parallel(self):
         daemon = self.daemon()
-        one, two = daemon.add_job('first', lane='g1'), daemon.add_job('second', lane='george')
+        one, two = daemon.add_job('first', lane='g1'), daemon.add_job('second', lane='g2')
         daemon.step()
         states = {daemon.queue.get(one['id'])['state'], daemon.queue.get(two['id'])['state']}
         self.assertTrue(states <= {'starting', 'running', 'done'})

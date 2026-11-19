@@ -13,7 +13,7 @@
    result carries no web address. The judge saw an empty source list, called the answer an
    unsupported claim twice, and the lane paid for a second full reply. The packet now says how
    many hosted lookups ran (context.web_lookups).
-5. On george, a reply that did the work and then shared an idea with its confidence and its catch,
+5. On g2, a reply that did the work and then shared an idea with its confidence and its catch,
    as the operator's fourth core rule asks and the stamp repeats on every turn, was failed by the
    judge as an "unsolicited warning". The judge cannot see the operator's pages, so its prompt
    now says that such an idea is not an unasked limit.

@@ -2,7 +2,7 @@
 """usage: tokens and calls today, this week and this month for each lane's API account.
 
 Rebuilt for the lanes from the usage-alarm mod's /usage-alarm meter. For the lanes, usage is tokens on two
-API accounts: Anthropic (george) and OpenAI (g1). Three sources, each shown on its own:
+API accounts: Anthropic (g2) and OpenAI (g1). Three sources, each shown on its own:
   1. state/history.db   one row per model turn the lanes saved (tokens summed over its retries)
   2. state/usage.jsonl  one record per API request: lane calls, retries, advisor and mod calls
   3. each provider's own usage report, when a key can read it. Both reports need an admin key:
@@ -26,7 +26,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import subprocess
 
 ROOT = Path(__file__).resolve().parent
-LANES = (('anthropic', 'george', 'Anthropic'), ('openai', 'g1', 'OpenAI'))
+LANES = (('anthropic', 'g2', 'Anthropic'), ('openai', 'g1', 'OpenAI'))
 WINDOWS = ('today', 'week', 'month')
 
 

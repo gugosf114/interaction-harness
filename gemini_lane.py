@@ -1,4 +1,4 @@
-"""Gemini through Google's own generateContent API (shortcut g2).
+"""Gemini through Google's own generateContent API (shortcut g5).
 
 The native API, not the OpenAI-compatible one, because only the native API carries
 Grounding with Google Search, URL context, inline images and PDFs together with the
@@ -141,6 +141,6 @@ def send(lane: Lane, call: Call) -> Sent:
                 search=search, fetch=fetch, provider_report=report)
 
 
-LANE = Lane(engine='gemini', shortcut='g2', default_model=MODEL, send=send, reply_mode='json',
+LANE = Lane(engine='gemini', shortcut='g5', default_model=MODEL, send=send, reply_mode='json',
             key_env='GEMINI_API_KEY', key_file='gemini-api-key', model_env='GEMINI_MODEL',
             web='google_search', images=True, pdfs=True)

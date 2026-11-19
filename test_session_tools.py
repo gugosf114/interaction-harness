@@ -117,7 +117,7 @@ class ToolTests(SessionCase):
         st.set_golden(self.state, 'alpha')
         code, out, _ = self.command('list')
         self.assertEqual(code, 0)
-        self.assertRegex(out, r'\* +2026-11-1[01] \d\d:\d\d  alpha  george \(claude-opus-5-5\)\s+2  first question here\n')
+        self.assertRegex(out, r'\* +2026-11-1[01] \d\d:\d\d  alpha  g2 \(claude-opus-5-5\)\s+2  first question here\n')
         self.assertIn('g1 (gpt-6.1-sol)', out)
         self.assertIn('2 sessions.', out)
         self.assertIn('* golden: every new chat starts as a copy of alpha.', out)

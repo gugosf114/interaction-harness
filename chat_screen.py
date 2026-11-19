@@ -364,7 +364,7 @@ def run_chat(args, model, cli):
                 if name == 'model':
                     if not rest or len(rest.split()) != 1: raise ValueError('Use /model NAME.')
                     aliases = {'g1':('openai',h.DEFAULT_MODEL), 'openai':('openai',h.DEFAULT_MODEL),
-                               'george':('anthropic',h.ANTHROPIC_MODEL), 'anthropic':('anthropic',h.ANTHROPIC_MODEL)}
+                               'g2':('anthropic',h.ANTHROPIC_MODEL), 'anthropic':('anthropic',h.ANTHROPIC_MODEL)}
                     engine, chosen = aliases.get(rest, (args.engine, rest))
                     if rest.startswith(('gpt-', 'o1', 'o3', 'o4')): engine = 'openai'
                     elif rest.startswith('claude-'): engine = 'anthropic'
