@@ -320,7 +320,7 @@ Domain defaults include apps whose declared link needs a URL path, such as `http
 
 ## Rules and profile pages
 
-`g2` and `g1` used to start every call knowing nothing about the operator. Each call now carries the operator's own pages, read from the files he already keeps. Git holds the mechanism only. The text of the pages never enters the repository.
+`g2` and `g1` used to start every call knowing nothing about the operator. Each call now carries the operator's own pages, read from the files he already keeps. Git holds the mechanism only. The harness never reads page text from the repository. Insurance copies of the pages in use since Nov 19, 2026 sit in `handoff/operator-pages-2026-11-19/`.
 
 **The list.** `state/pages.json` in this installation. Git ignores `state/`. Each entry has a `label`, an absolute `path`, and an optional `sections` list of exact heading lines:
 
@@ -353,7 +353,9 @@ Domain defaults include apps whose declared link needs a URL path, such as `http
 
 **Where the list is switched on.** `harness.PAGES_FILE` is `None` when the module is imported. Only the command-line entry point, the `__main__` block at the bottom of `harness.py`, sets it to `state/pages.json` in the installation folder, next to the saved keys. `HARNESS_STATE_DIR` does not move it. The unit tests import the module, so they never read the installation's real list. `test_pages.py` points the list at temporary folders.
 
-**On this phone (Nov 11, 2026).** Two entries. `rules` is five sections of `/root/.claude/CLAUDE.md`. `profile` is the whole of `/root/.claude/projects/-root/memory/who-george-is.md`. Sizes from the providers' own usage numbers:
+**On this phone since Nov 19, 2026.** Three entries, 14,536 characters together. `operator` is `/root/.claude/lane-pages/operator.md`: where the model is, who the operator is, what two years of work with models has shown, and where to look. `rules` is the `## Core interaction contract` section of `/root/.claude/CLAUDE.md`, read live, so the four rules and the per-turn stamp share one source. `answering` is `/root/.claude/lane-pages/answering.md`: the reason behind each rule, five real exchanges from the archive, and a one-paragraph recap. The pages follow Anthropic's published prompt guidance: plain statements at normal volume, a reason beside each rule, reference material first, a few real examples, one recap at the end. Checked with one real question on each lane (history rows 31 and 32): both answered from the new pages and both passed the judge. The list before this change is saved as `state/pages.json.before-operator-page-20261119`. The token sizes in the table below are from the Nov 11 pages and have not been measured again.
+
+**On this phone (Nov 11, 2026), replaced on Nov 19.** Two entries. `rules` is five sections of `/root/.claude/CLAUDE.md`. `profile` is the whole of `/root/.claude/projects/-root/memory/who-george-is.md`. Sizes from the providers' own usage numbers:
 
 | Page | Characters | Claude Opus 5.5 tokens | GPT-6.1 Sol tokens |
 |---|---|---|---|
