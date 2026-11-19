@@ -1,0 +1,17 @@
+[
+  {
+    "label": "operator",
+    "path": "/root/.claude/lane-pages/operator.md"
+  },
+  {
+    "label": "rules",
+    "path": "/root/.claude/CLAUDE.md",
+    "sections": [
+      "## Core interaction contract"
+    ]
+  },
+  {
+    "label": "answering",
+    "path": "/root/.claude/lane-pages/answering.md"
+  }
+]
