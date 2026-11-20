@@ -19,6 +19,9 @@ Google Play (the official API, Debian side)
   deb play upload PACKAGE FILE.aab TRACK     This uploads a build to Google Play.
   Packages: com.wimlabs.wim, app.climatepermit.android, com.wimlabs.heirloom, com.wimlabs.noisefile,
   me.aap.fermata.auto.samizdat.
+  deb python3 /root/.play/aso_app.py PACKAGE          the public store page of an app: title, installs, rating
+  deb bash /root/.play/aso_rank.sh OUTDIR 'TERM'      where the apps rank for a search term. Both listed, not run.
+  play-headless and the other headless tools are down: `card bridge`.
 
 Ask search engines to crawl a page
   Bing:

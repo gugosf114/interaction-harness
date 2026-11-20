@@ -25,7 +25,7 @@ Running a skill's work
     deb python3 /sdcard/Download/make_sheet.py
     deb node /sdcard/Download/make_deck.js
     deb python3 SKILL_FOLDER/scripts/recalc.py /sdcard/Download/out.xlsx
-  Installed (2026-11-11): LibreOffice 25.2 (soffice), pandoc, Poppler (pdftoppm, pdftotext), qpdf, weasyprint,
+  335 skills on 2026-11-19 (skill groups). Installed (2026-11-11): LibreOffice 25.2 (soffice), pandoc, Poppler (pdftoppm, pdftotext), qpdf, weasyprint,
   ffmpeg; Python openpyxl, pandas, python-docx, python-pptx, markitdown, pypdf, pdfplumber, reportlab,
   matplotlib, Pillow, pdf2image, pytesseract; npm docx, pptxgenjs, react, react-dom, react-icons, sharp.
   Node finds the npm packages from any folder. Put files for George in /sdcard/Download.

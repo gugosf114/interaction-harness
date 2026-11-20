@@ -14,13 +14,14 @@ Brightness
 
 Wi-Fi
   rish -c 'cmd wifi status' | head -4               "Wifi is enabled" and: Wifi is connected to "NAME"
-  termux-wifi-connectioninfo                             ip, link speed, signal; the name shows as unknown here
+  termux-wifi-connectioninfo                             ip, link speed, signal; the name shows as unknown here.
+                                                         Off Wi-Fi the ip is 0.0.0.0.
   termux-wifi-scaninfo                                   networks in range
   rish -c 'svc wifi enable'  ;  rish -c 'svc wifi disable'       turns Wi-Fi on or off at once
 
 Bluetooth
   rish -c 'settings get global bluetooth_on'             1 is on
-  rish -c 'dumpsys bluetooth_manager' | grep -A12 'Bonded devices'      the paired devices
+  rish -c 'dumpsys bluetooth_manager' | grep -a -A12 'Bonded devices'   the paired devices (4 on 2026-11-19)
   rish -c 'cmd bluetooth_manager enable'  ;  rish -c 'cmd bluetooth_manager disable'      on or off at once
   Connect a paired device: Android has no shell command for it. Open the device list on a hidden screen
   and tap the device's name there (`card screen` taps by picture):
@@ -52,4 +53,5 @@ App permissions
   rish -c 'pm revoke PACKAGE android.permission.CAMERA'  takes it away at once
 
 Known failure
-  rish answers "Server is not running" when Shizuku is down: see `card shizuku`. The adb twin still works.
+  rish answers "Server is not running" or "Request timeout" when Shizuku is down or has lost Termux's
+  permit: see `card shizuku`. The adb twin still works.

@@ -1,6 +1,6 @@
 # Interaction harness
 
-**Shortcut names changed on Nov 19, 2026.** The Claude shortcut `george` is now `g2`, because the operator's name is also George. Gemini moved from `g2` to `g5`. The lanes are `g1` OpenAI, `g2` Claude, `g3` open models, `g4` GLM, `g5` Gemini, `gv` Vertex. Every proof in this file dated before Nov 19 ran under the old names; the text below uses the new ones.
+**Shortcut names changed on Nov 19, 2026.** The Claude shortcut `george` is now `g2`, because the operator's name is also George. Gemini moved from `g2` to `g5`. The lanes are `g1` OpenAI, `g2` Claude, `g3` open models, `g4` GLM, `g5` Gemini, `gv` Vertex. Only `g1` and `g2` are installed as shortcuts on the phone (checked Nov 19, 2026); the others are reached with `harness --engine NAME`. Every proof in this file dated before Nov 19 ran under the old names; the text below uses the new ones.
 
 A native Termux command with OpenAI and Anthropic backends, a shared four-field reply schema, a local display gate, full-history sessions, SQLite recall, confirmed shell execution, and Android dictation.
 
@@ -249,7 +249,7 @@ George's subscription setup can drive his phone, laptop, mail, money tools, bake
 
 **The pieces.**
 
-- `tools_block.txt` — the index. One line per family, ending in `Print: card NAME`. Thirty-six families and 5,171 characters since the Google accounts pass. The first nineteen-family index measured 1,044 tokens on Claude Opus 5.5 and 739 on GPT-6.1 Sol.
+- `tools_block.txt` — the index. One line per family, ending in `Print: card NAME`. Fifty-three families and 7,503 characters since the Nov 19, 2026 audit (thirty-six and 5,171 after the Google accounts pass). The first nineteen-family index measured 1,044 tokens on Claude Opus 5.5 and 739 on GPT-6.1 Sol.
 - `toolbox/cards/NAME.md` — one card per family, each under 4,000 characters: what it does, the exact commands with real argument shapes, what comes back, which side it runs on, and the one known failure.
 - `toolbox/bin/` — the commands the model types. `toolbox/debian/` — the Debian-side halves of some of them.
 - `toolbox/install.sh` — links every file in `toolbox/bin` into `$PREFIX/bin`. Safe to run again. It never replaces a real file.
@@ -300,13 +300,19 @@ sh ~/interaction-harness/toolbox/install.sh
 
 **Still not working when checked (Nov 11, 2026).** Each card states its own failure. In short: `grok` needs George's sign-in (`grok login --device-code`); PayPal transaction search needs a permission only George can add in the PayPal developer dashboard; the MCP server's camera and location tools lack those two app permissions; the name reader for hidden screens does not answer on Android 17, so hidden screens are driven by picture (`card screen`), and the MCP tools see the visible screen only; DroidRun's helper is not enabled; no boot keeper loop is running and Android lists no scheduled timers.
 
+**The audit (Nov 19, 2026).** Every card was checked against the phone, command by command, through `toolbox/hrun.py`. The findings, with the command and exit code behind each line, are in `TOOLS_AUDIT_2026-11-19.md`. Seven families were added: `always-on` (the `job`, `agentd` and `talk` commands had no card), `hidden-screens`, `doors` (every port and listener), `browsers` (every Chrome and its port, and the phone-chrome-agent scripts), `bridge` (the `agent-bridge` command and the tools it carries, with what works on the Pixel), `keys` (key files and secret names, no values) and `connectors` (what Claude Code's connectors map to here). Twenty-seven cards had stale facts and were corrected, among them `boot`, `calls`, `timers`, `models`, `devices` and `agent-scripts`. The phone restarted by itself during the audit, which showed what does and does not come back: see `card boot`.
+
+**Repaired on the phone that day.** Shizuku had lost Termux's permit, so every `rish` call timed out and opened a permission box on the visible screen; the permit was written back. The phone MCP app was given its camera and location permissions. Tailscale stayed off after the restart; it is now the phone's always-on VPN and has a keeper (`~/bin/tailscale_keeper.sh`, boot file `17-tailscale-keeper`, timer 7736), on the Pixel and on the Z Flip 7. A boot file named `start-agent-bridge.off` still ran at the restart, because Termux:Boot runs every file in its folder, and it brought back the notification scripts George had stopped; they were stopped again and the file was moved to `~/.termux/boot-off`.
+
+**Still not working when checked (Nov 19, 2026).** Each card states its own failure. In short: `agy` asks for a Google sign-in; `grok` still needs `grok login --device-code`; PayPal transaction search still lacks its permission; `termux-location` fails (the MCP location tool works); the name reader for hidden screens still does not answer; the Linux hidden browser on port 9222 does not start; `linkedin-headless`, `play-headless`, `bing-places-headless`, `browser-headless`, `pinterest-headless`, `foursquare-headless` and `firebase` lost their browser or key in the move to the Pixel; `inception status` fails; `phone-chrome.sh check` cannot read the accounts.
+
 **Live proof of the whole-phone pass (Nov 11, 2026).** Six questions on each lane, real launcher, `--loop -y`, isolated state: battery level and temperature, set the media volume to its current level, the last five notifications, Wi-Fi state and network name, the Android version through Shizuku, and a node position on a hidden screen through the MCP tools. Ten of twelve passed with exit 0 and matched a direct check. The hidden-screen question did not pass on either lane: the MCP server cannot see a hidden screen, and both models said so.
 
 **Live proof (Nov 11, 2026).** Six questions on each engine, through the real launcher with `--loop -y` and an isolated state folder: a screenshot with its path and size, the Berkeley unread count and newest subject, the bakery site's sessions for seven days, the laptop's hostname, an exact edit of a file, and a one-page PDF in Downloads. Twelve of twelve exited 0 with the right command, and each answer matched a direct check. Every run printed the family's card first, then ran the command from it. With the index in place the second call still read the cache: 13,939 tokens on Claude, 10,810 of 11,584 on GPT-6.1 Sol.
 
 ## Skills and apps
 
-**Skills.** George's setup holds 317 skill entries on this phone: folders with a `SKILL.md` that say how to do one kind of job, sometimes with scripts and reference files. They come from his Claude Code (17), its plugin folders on both sides (111, including plugin commands), his Codex on both sides (14) and its plugins (39), his own projects (22), the downloaded plugin catalogs (44), grok (22), Antigravity on both sides (12) and Python and Node packages (18), and 18 unique archived packs preserved from temporary checkouts. Archived packs retain their supporting files and an `ORIGIN.json` with the original path, date and hash under `~/.local/share/interaction-harness/skill-archives`. Deleted Trash content and old duplicate versions are excluded. The list of folders is `DEFAULT_ROOTS` in `toolbox/bin/skill`; when one name appears in two places, the first folder in that list wins. Claude Code's own reference files for its claude-api skill lived only under `/tmp/claude-0/bundled-skills`, which is wiped; they were copied to `/root/.skills-kept/claude-api` with a short reading guide. Claude Code's built-in commands such as `/code-review` and `/security-review` live inside the program and are not files.
+**Skills.** George's setup held 317 skill entries on this phone on Nov 11, 2026, and 335 on Nov 19 (`skill groups` prints the live count): folders with a `SKILL.md` that say how to do one kind of job, sometimes with scripts and reference files. They come from his Claude Code (17), its plugin folders on both sides (111, including plugin commands), his Codex on both sides (14) and its plugins (39), his own projects (22), the downloaded plugin catalogs (44), grok (22), Antigravity on both sides (12) and Python and Node packages (18), and 18 unique archived packs preserved from temporary checkouts. Archived packs retain their supporting files and an `ORIGIN.json` with the original path, date and hash under `~/.local/share/interaction-harness/skill-archives`. Deleted Trash content and old duplicate versions are excluded. The list of folders is `DEFAULT_ROOTS` in `toolbox/bin/skill`; when one name appears in two places, the first folder in that list wins. Claude Code's own reference files for its claude-api skill lived only under `/tmp/claude-0/bundled-skills`, which is wiped; they were copied to `/root/.skills-kept/claude-api` with a short reading guide. Claude Code's built-in commands such as `/code-review` and `/security-review` live inside the program and are not files.
 
 `skill find WORDS`, `skill show NAME [PART|--all]`, `skill files NAME`, `skill list [GROUP]` and `skill groups` run on the Termux side and read the Debian folders through the proot root. `skill show` prints lane notes before the skill's own text: what the skill's tool names (Read, Write, WebSearch, subagents, MCP connectors, Artifacts) mean in this client, where its folder is, which of its programs are installed and which are missing. The default prints the complete skill in one call; `--all` is an explicit synonym. An optional part number reads a 7,000-character part. Current skills fit the runner's output capture. The index line tells the model to print a matching skill and follow it.
 
@@ -720,7 +726,7 @@ job stop 7
 job wait 7                                          # waits, then prints the answer
 ```
 
-`jobs` is also a bash builtin. `agentd install` adds `alias jobs='job list'` to `~/.bashrc`; in a window that was open before, run `. ~/.bashrc` once.
+`jobs` is also a bash builtin. `agentd install` adds `alias jobs='job list'` to `~/.bashrc`; in a window that was open before, run `. ~/.bashrc` once. A lane's own command shell reads no `~/.bashrc`, so there `jobs` prints nothing and `job list` is the form (`card always-on`).
 
 **When a job ends** George gets a phone notification: title `LANE job ID STATE`, text the first line of the answer. While jobs run, one low pinned notification lists them, one per job. A failed notification stays pending and is retried; Android error text is saved in the service log. The service owns job speech, so the lane does not play a second copy. When spoken answers are on (`deb voice on`: the first line; `deb voice full`: the whole answer) the answer is spoken with `deb say`, one answer at a time. `job show` and the web answer also include recorded API tool actions. The switch is read from the same files `voice` writes.
 
@@ -915,13 +921,13 @@ Anthropic's Messages over Vertex `rawPredict`).
 | `gv` | `vertex` | `claude-opus-5-5` | gcloud token (ADC) | strict four-field JSON (`emit_reply` tool) | `web_search_20250305` |
 
 ```sh
-g5 "Explain chmod 640."
-g3 "Explain chmod 640."
-g4 "Explain chmod 640."
 harness --engine gemini "Explain chmod 640."
+harness --engine openrouter "Explain chmod 640."
+harness --engine glm "Explain chmod 640."
+harness --engine vertex "Explain chmod 640."
 ```
 
-The shortcuts carry the same flags as `g2` and `g1` (`--effort max --loop -y`).
+Checked Nov 19, 2026: only `g1` and `g2` exist in `~/.bashrc` on the phone. `g3`, `g4`, `g5` and `gv` are the names each lane takes when its shortcut is added; until then a lane is reached with `harness --engine NAME`, as above (`harness --engine gemini` answered that day). A shortcut carries the same flags as `g2` and `g1` (`--effort max --loop -y`).
 A lane's default model, endpoint and key are overridable by environment variable
 (`GEMINI_MODEL`, `OPENROUTER_BASE_URL`, `GLM_OPENAI_URL`, `VERTEX_MODEL`, ...) or by
 a saved file in `state/`. A `wrap` lane returns plain text, so it answers but
@@ -975,11 +981,12 @@ proposes no command; a `json` lane returns the strict four fields and can.
 ## Ask several at once
 
 ```sh
-both "Which is faster, chmod or chown, and why?"
-both --lanes gemini,openai,anthropic "Explain chmod 640."
+harness --both "Which is faster, chmod or chown, and why?"
+harness --both --lanes gemini,openai,anthropic "Explain chmod 640."
 ```
 
-`both "QUESTION"`, and `/both QUESTION` inside a `g2` or `g1` chat, send one
+No `both` command is installed on the phone's path (checked Nov 19, 2026); the flag is the shell form.
+`harness --both "QUESTION"`, and `/both QUESTION` inside a `g2` or `g1` chat, send one
 question to every working lane in parallel. Each answer passes the display gates on
 its own, prints under a fixed label line naming the model (`-- gemini - ...`), and
 is saved to that lane's own session (`both-<lane>`) and to history. `--lanes a,b,c`

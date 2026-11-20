@@ -19,6 +19,8 @@ The Chromecast
   deb tv stop                               stops it
   deb catt -d 192.168.1.215 volume 40
   deb catt --help                           every catt command
+  deb bscpylgtvcommand --help               the LG program behind `tv`: any other LG command
 
-Known failure
-  Off the home wifi every command times out or finds nothing. `deb tv scan` shows what is reachable.
+Known failure (checked 2026-11-19)
+  Off the home wifi every command times out or finds nothing: `deb tv scan` printed "No devices found" at
+  4:35 pm away from home, and found the Chromecast at 7:10 pm at home.

@@ -9,12 +9,18 @@ Ask the box (reads)
   curl -s -m 8 http://100.123.176.12:8787/dash/data              the task board as JSON
   curl -s -m 8 http://100.123.176.12:8787/dash/budget            today's brain spend against its daily cap
   curl -s -m 8 http://100.123.176.12:8787/dash/pending           a plan that waits for George's approval, or {}
+  Also reads: /dash/missions (the one-tap jobs), /dash/outbox (results; reading one takes it out).
+  Checked 2026-11-19: health ok, brain true, tunnel false, spend 0 of a 10 dollar daily cap.
 
 Give the box work (each of these makes the brain act)
   curl -s -m 8 -X POST -H 'Content-Type: application/json' -d '{"text":"THE JOB IN WORDS"}' http://100.123.176.12:8787/pad
   curl -s -m 8 -X POST -H 'Content-Type: application/json' -d '{"kind":"note"}' http://100.123.176.12:8787/signal
       /pad queues a job. /signal with kind "note" wakes the brain to read it; kind "summon" means come now.
   curl -s -m 8 -X POST http://100.123.176.12:8787/dash/approve   approves the waiting plan (/dash/reject drops it)
+  POST /dash/laptop/job {"id","verb","args"} runs one thing on the laptop through the box when ssh is down
+  (verbs: run, read_file, write_file, screenshot, desktop, browse, get_active); the answer is at /dash/laptop/result.
+  POST /dash/cmd {"name"} runs one named, fixed command. POST /dash/watch and /dash/memory write a watch or a fact.
+  All of these act. Listed, not run.
 
 What else runs on the box (code in /root/agent-bridge/scripts, read it with `deb sed -n '1,40p' FILE`)
   conductor.py         the server above
@@ -38,6 +44,7 @@ The laptop's helpers
 
 From the phone's home screen
   voice_summon.sh      the "Voice Summon" shortcut: George speaks, the words go to the box as a job
+  The phone's status light and beacons that talked to the box are stopped: `card agent-scripts`.
   ~/.shortcuts         holds it, next to Launch_God_Mode.sh
 
 Plain shell on the laptop and long jobs for Claude there: `card laptop`.

@@ -7,7 +7,9 @@ The voice line: George dials the line and talks to a Claude session that runs in
   deb bash /root/.vapi/bridge/phone.sh off          stops the server and the tunnel
   deb voice-use ROOM                                rings into another open room
   Keys: /root/.gmail/aicalls.env. How it works: deb cat /root/.vapi/bridge/README.md
-  Checked 2026-11-11: server down, tunnel down, room "brain" gone.
+  Checked 2026-11-19: active room brain (up), server up, tunnel up. The number is 650-252-3543.
+  deb voice-session NAME                            opens a new Claude room and points the phone at it at once.
+      It has no help form: any first word, even --help, becomes a room name. Listed, not run.
 
 The caller (Bland): an AI voice phones a business
   deb phone-ask --balance                     -> "$9.97 left on Bland"
@@ -25,6 +27,8 @@ The caller (Bland): an AI voice phones a business
   Key: /root/.bland/key. Profile: /root/.local/state/phone-errands/profile.json.
 
 The same brain from a terminal: deb assistant submit 'JOB' | jobs | status; deb support-chat CARD.txt (`card programs`).
+A call-out by a Vapi assistant: deb python3 /root/.vapi/place_call.py --assistant ID --to +1XXXXXXXXXX --task 'WORDS'
+  This places a real phone call at once. Listed, not run.
 
 Known failure
   The installed tool in /root/.local/share/phone-errands is older than the code in ~/phone-errands.

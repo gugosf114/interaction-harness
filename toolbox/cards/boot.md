@@ -17,6 +17,10 @@ Restart any one by hand:  sh ~/.termux/boot/NAME
       check:  rish -c id              restart one look:  sh ~/bin/shizuku_keeper.sh once
   16-voice-line            keeper loop for the voice line: every 60 s it runs /root/.vapi/bridge/phone.sh ensure
       check:  deb bash /root/.vapi/bridge/phone.sh status     log: ~/.agent-bridge/voice-line.log
+  17-tailscale-keeper      keeper loop that turns Tailscale back on within 60 s (~/bin/tailscale_keeper.sh tick)
+      check:  ping -c 1 -W 3 100.100.100.100      one look:  sh ~/bin/tailscale_keeper.sh once
+  20-agentd                the lane service and its keeper (`card always-on`)
+      check:  agentd status
   heal-adb-shizuku         reopens adb 5555 through Wireless debugging, then restarts Shizuku
       check:  tail -5 ~/.agent-bridge/heal.log
   hidden-chrome            starts the Linux hidden browser inside Debian (/root/hchrome/start.sh, debug port 9222)
@@ -25,18 +29,22 @@ Restart any one by hand:  sh ~/.termux/boot/NAME
       check:  bash ~/hidden-operator/scripts/hidden_supervisor.sh status
   start-sshd               keeps Termux awake and starts sshd
       check:  pgrep -x sshd
-  start-agent-bridge.off   switched off; it used to start the old phone supervisor
 
 Which keeper loops are alive right now
-  ps -eo args | grep -E '[s]hizuku_keeper|[m]cp_door_keeper|[w]ifi_debug_keeper|[1]6-voice-line|[h]idden_supervisor'
+  ps -eo args | grep -E '[s]hizuku_keeper|[m]cp_door_keeper|[w]ifi_debug_keeper|[1]6-voice-line|[h]idden_supervisor|[t]ailscale_keeper|[k]eeper.sh watch'
   One line per live loop. No lines means none is running.
 
-Facts (checked 2026-11-11)
-  sshd, adb on 5555, Shizuku and the MCP door are up.
-  No keeper loop is running, the hidden-screen keeper says "watch: DEAD", the Linux hidden browser on 9222
-  does not answer, the voice line is down, and Android lists no scheduled timers.
-  Starting a file by hand starts its loop again. The loops stop at the next restart of Termux unless
-  Termux:Boot runs them.
+Facts (checked 2026-11-19, 7:10 pm; the phone restarted by itself at 4:54 pm when the battery ran out)
+  After that restart these came back with no hand: sshd, adb on 5555, Shizuku, the MCP door, the two hidden
+  screens, the voice line, the lane service, and seven keeper loops. The Tailscale keeper was added that
+  evening and makes eight.
+  Tailscale did not come back by itself. It is now the phone's always-on VPN and has the keeper above.
+  The Linux hidden browser on 9222 did not start: "hidden chrome did NOT come up" (~/.agent-bridge/hidden-chrome.log).
+  Termux:Boot runs every file in the folder, whatever its name. A file named start-agent-bridge.off ran at
+  that restart and started signal.sh --watch, brain_beacon.sh and timer 7919, which George had stopped that
+  day. They were stopped again and the file now sits in ~/.termux/boot-off. To switch a boot file off,
+  move it out of ~/.termux/boot.
 
 Known failure
   After a phone restart nothing here runs until the Termux:Boot app has been opened once since it was installed.
+  A restart with no Wi-Fi leaves adb and Shizuku down until the phone is back on the home Wi-Fi.

@@ -23,6 +23,8 @@ What the report holds
 Facts
   Each model turn is a paid call. A failed run or report with no recorded source exits nonzero and writes no report.
 
+A single page that blocks the fetch: deb bdata scrape 'URL' prints it as clean text (`card browsers`).
+
 Known failure
   "Claude web lookup failed: url_not_accessible" ends that model turn: one page refused the fetch.
   The run continues by itself (--retries). With --retries 0 it stops there.

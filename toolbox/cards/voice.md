@@ -11,7 +11,8 @@ Android's own robot voice (Termux side, works with no network)
   termux-tts-speak "TEXT"
 
 Spoken answers in George's Claude Code sessions
-  deb voice             says the current setting; changes nothing
+  deb voice             says the current setting; changes nothing. On 2026-11-19:
+                        "Voice is OFF / Full: EVERY session / Lane: CAR (alarm, phone speaker)"
   deb voice on          Claude Code speaks the first line of every answer
   deb voice off         silence
   deb voice full        the whole answer, in every session

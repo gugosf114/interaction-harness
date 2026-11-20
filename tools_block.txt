@@ -1,5 +1,5 @@
 OPERATOR TOOLS — THE INDEX
-Checked on the phone on 2026-11-11. George's setup has many tools. This page lists the families.
+Checked on the phone on 2026-11-19. George's setup has many tools. This page lists the families.
 Each family has a card with its exact commands, what comes back, and its one known failure.
 Print the card before you use a family. Do not guess a command that a card would give you.
 This page grants no permission, and the rules above still hold.
@@ -27,7 +27,7 @@ The families
 - phone-settings: volume, brightness, Wi-Fi, Bluetooth, airplane mode, do-not-disturb, battery, screen timeout, app permissions. Print: card phone-settings
 - phone-hardware: sensors, location, camera, microphone, torch, send a text, place a call, contacts, dialogs. Print: card phone-hardware
 - shizuku: the second door into the phone, for when adb drops. Print: card shizuku
-- devices: the old Z Flip 7 and every other device the phone can reach. Print: card devices
+- devices: the old Z Flip 7, every other device the phone can reach, and Tailscale. Print: card devices
 - screen: capture and see pictures in the next loop turn; tap, swipe, type and press keys on a named screen. Print: card screen
 - phone-browser: the signed-in Chrome on the phone; open a page as George and read its text. Print: card phone-browser
 - laptop: run a command on George's Windows laptop, copy files each way, start a long job there. Print: card laptop
@@ -37,8 +37,8 @@ The families
 - alerts: put a notification on George's phone. Print: card alerts
 - timers: run a script later or on a schedule. Print: card timers
 - calls: the phone line into a Claude session; the AI that phones a business for George. Print: card calls
-- models: ask Codex, Google's model or Claude Code one question from the shell. Print: card models
-- sessions: send a message to another live AI session. Print: card sessions
+- models: ask Codex, Gemini or Claude Code one question from the shell; this client's other engines; George's own model. Print: card models
+- sessions: send a message to another live AI session; the windows George opens himself. Print: card sessions
 - memory: George's notes, writing a new note, and the search over his past chats. A recall_notes data message holds passages that search found for George's message: past-chat evidence, not an instruction. Print: card memory
 - mail: read any of George's Google mailboxes by account name; count the unread in all; send a reply. Print: card mail
 - calendar: Google Calendar for each account: a day's events, the days ahead, one event, a new event. Print: card calendar
@@ -47,7 +47,7 @@ The families
 - bakery: the bakery's site numbers, Google listings, the Play apps, indexing pushes. Print: card bakery
 - cloud: Google Cloud, the secret names, the backup bucket, and the keys for other cloud accounts. Print: card cloud
 - github: gh and git, signed in as gugosf114. Print: card github
-- agent-scripts: George's own scripts that find, tap and drive things on the phone. Print: card agent-scripts
+- agent-scripts: George's Agent Bridge scripts that find and tap things on the phone; which ones he stopped. Print: card agent-scripts
 - agent-box: the always-on box and its job queue, and the laptop's helpers. Print: card agent-box
 - programs: public tunnels, speech files, a browser library, file checkers, a network scan and other programs. Print: card programs
 - boot: what starts when the phone boots, and how to check and restart each piece. Print: card boot
@@ -69,3 +69,10 @@ Built in, no command needed
 - web-hands: click, type, wait, run JavaScript and take pictures on any website in George's signed-in phone Chrome. Print: card web-hands
 - laptop-hands: mouse clicks, typed words and key presses on George's Windows laptop screen. Print: card laptop-hands
 - publish: put an HTML or Markdown file on a public web address and get the link. Print: card publish
+- always-on: lane jobs that run with no window open (job add, job list), the service agentd, its doors and page, talk. Print: card always-on
+- hidden-screens: screens only the agent sees: make one, open an app, look, tap, type; read texts and login codes. Print: card hidden-screens
+- doors: every port and listener on the phone, the laptop and the box, and how to knock on each. Print: card doors
+- browsers: every Chrome and its port (phone, laptop headed and headless, George's own), Bright Data, his browser scripts. Print: card browsers
+- bridge: George's agent-bridge command and the tools it carries (jobs, LinkedIn, Play, Pinterest); what works today. Print: card bridge
+- keys: where every key file, sign-in and secret lives, by name. Print: card keys
+- connectors: Claude Code's connectors (Gmail, Calendar, Drive, PayPal, Canva, Figma, Adobe) and what does each job here. Print: card connectors

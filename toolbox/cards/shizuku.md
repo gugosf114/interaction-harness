@@ -33,6 +33,12 @@ Bring it back
   Log: ~/.agent-bridge/heal.log
 
 Known failure
+  "Request timeout. The connection between the current app (com.termux) and Shizuku app may be blocked":
+  Shizuku lost Termux's permit. Seen 2026-11-19: its list /data/user_de/0/com.android.shell/shizuku.json
+  was empty, and every rish call also opened Shizuku's permission box on George's screen. The keeper only
+  checks that the helper runs, so it did not see this. The fix that worked: write Termux's entry (uid 10344,
+  flags 2) back into that file through adb, then start the helper again with /data/local/tmp/shizuku_starter.
+  The emptied file is kept at /data/local/tmp/shizuku.json.before-audit-1119.
   "Server is not running": the first call after a quiet spell can say this while the helper is alive,
   so rish tries three times by itself. When it still says so, the helper died. It dies whenever
   Android restarts adb's own service. Run the keeper line above, wait a few seconds, and try again.

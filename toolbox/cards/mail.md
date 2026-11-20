@@ -1,8 +1,8 @@
 # mail — read George's Google mailboxes by account name, count the unread, send a reply
 
 Accounts
-  google-accounts            every account: name | address | mail | calendar | drive, for example
-                             "berkeley | gugosf@berkeley.edu | mail: sign-in | calendar: no | drive: no"
+  google-accounts            every account: name | address | mail | calendar | drive. On 2026-11-19: berkeley,
+                             gmail, bakery, gurgen, interior; each line ends "mail: sign-in | calendar: sign-in | drive: sign-in"
   NAME below is a name from that list. The list is the file /root/.gmail/accounts.json.
   Type the google- and mail-unread commands as written, with no deb in front.
 
@@ -31,7 +31,11 @@ Bakery: info@mybakingcreations.com reads with a service key, through its own rea
   deb python3 /root/.gmail/mail.py inbound 5            newest mail from customers, JSON per line
   deb python3 /root/.gmail/mail.py sent 5 "QUERY"       newest sent mail
   The house voice for bakery replies: deb cat /root/.gmail/voice-sheet.md
-  After a sign-in for bakery, the google-mail lines work for it too.
+  The google-mail lines work for bakery too.
+  deb /root/.gmail/idraft.py MSG_ID TO_ADDRESS /FULL/PATH/body.txt     makes a draft reply in that thread
+  deb /root/.gmail/isend.py MSG_ID TO_ADDRESS /FULL/PATH/body.txt      sends a real reply at once
+  deb python3 /root/.gmail/bsend.py MSG_ID /FULL/PATH/body.txt         the same from Berkeley. All three: listed, not run.
+  Every 30 minutes timer 7730 runs /root/.gmail/mailcheck.sh: new bakery mail, voicemail and AI-call notes are texted to Yana.
 
 Connect an account, or add calendar and drive to one
   google-signin              opens Google's consent page on George's screen for every account that lacks

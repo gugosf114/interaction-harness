@@ -20,32 +20,31 @@ Find it and tap it (each acts on George's visible screen at once)
   droidrun.sh run "open Gmail and star the newest mail"      hands a whole goal in words to the DroidRun driver
   droidrun.sh status | activate | setup                      is its helper app reachable; re-enable it; install it
 
-Hidden screens: drive an app George does not see
-  hidden_drive.sh open NAME PACKAGE/ACTIVITY     make sure the screen exists and open the app on it
-  hidden_drive.sh do NAME 'Button text'          find the button by its name, tap it, check the screen changed
-  hidden_drive.sh type NAME 'words'  |  key NAME 66  |  read NAME      type; send a key; list the buttons
-  ui.sh tree | find 'Text' | tap 'Text'          the reader behind it (set HD_NAME=NAME in front)
-  hidden_supervisor.sh status                    which hidden screens are up; whether the keeper loop runs
-  hidden_supervisor.sh ensure | boot | stop      bring every listed screen back; start or stop the keeper loop
-  teach_skill.sh list                            taught skills (none so far)
-  teach_skill.sh new NAME | tap NAME X Y | replay NAME | drop NAME     teach a task once by button pictures, replay it
-  app_map.py --help                              maps an app's screens on a hidden screen, so a later run goes by name
+Hidden screens, reading texts and login codes
+  The newer copies live in /root/hidden-operator: `card hidden-screens`. The copies of hidden_display.sh,
+  hidden_drive.sh, ui.sh and read_sms_code.sh in this folder fail on this phone ("adb: more than one
+  device/emulator", "[sms] no live adb").
 
-Texts
-  read_sms_code.sh latest 5      the last five texts: time, sender, first 70 characters
-  read_sms_code.sh code          the newest login code found in the last few texts
-  read_sms_code.sh wait 120      waits up to 120 s and prints a code the moment a new text brings one
-
-Phone upkeep and signals
+Phone upkeep
   phone_trim.sh                  frees memory: force-stops idle heavy apps, restricts them in the background,
-                                 disables unused Samsung apps, halves the animations. It changes the phone.
-  signal.sh --pending            exit 0 when George pressed the Summon button and is waiting
-  signal.sh --setup | --state work|done|turn|ready | --stop      the red, blue, amber status light in a notification
-  status_beacon.sh               keeps one notification that says whether the laptop is reachable
+                                 disables unused apps, halves the animations. It changes the phone. Listed, not run.
+  grant_termux_api.sh            grants Termux:API every permission it can hold. It changes the phone. Listed, not run.
+  activate_shizuku.sh status     Shizuku's state; `start` starts it (`card shizuku`)
+  wifi_debug_tile.sh             taps the Wireless debugging tile on George's visible screen. Listed, not run.
+  mcp.sh, orch.sh, laptop_task.sh, voice_summon.sh       `card agent-box`, `card laptop`
 
-Known failure (checked 2026-11-11, on the Pixel 11 with Android 17)
-  hidden_drive.sh read, hidden_drive.sh do and ui.sh print nothing: the name reader for hidden screens starts
-  and never answers. hidden_display.sh start says "display exists but shared reader failed". Pictures still
-  work: drive a hidden screen with `card screen`.
-  droidrun.sh status answers "Mobilerun Portal is not enabled as an accessibility service on the device".
-  `droidrun.sh activate` turns it back on.
+Stopped on George's word on 2026-11-19. Do not start them.
+  signal.sh --watch              the red, blue, amber status light in a notification, and the Summon button
+  brain_beacon.sh                buzzed when the always-on box stopped answering
+  status_beacon.sh               one notification that says whether the laptop is reachable
+  phone_supervisor.sh            the old supervisor that kept those alive; its timer 7919 is cancelled
+  signal.sh --pending            still safe to run: exit 0 when George pressed Summon, exit 1 when not
+
+Code for other machines (read it with: deb sed -n '1,40p' /root/agent-bridge/scripts/NAME)
+  conductor.py, conductor_brain.py, box_scheduler.py, telegram_bridge.py, telegram_lane.py, deploy_box.sh    the box
+  laptop_agent.py, windows_desktop.ps1, install_laptop_agent.ps1, grounding_server.py, holo_serve.ps1    the laptop
+
+Known failure (checked 2026-11-19)
+  droidrun.sh status answered "Portal is installed and accessible". When it says the Portal "is not enabled as
+  an accessibility service", `droidrun.sh activate` turns it back on.
+  ground.sh gives x and y for the screen as it is turned at that moment; on a sideways screen they swap.
