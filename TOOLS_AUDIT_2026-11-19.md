@@ -187,4 +187,7 @@ Undo for each: restore the kept `shizuku.json`; `pm revoke` the three permission
 ## Proof
 
 - Full suite, from the working copy, every `test_*.py` module except `test_native_terminal` (49 modules): `Ran 858 tests in 411.373s`, `OK`, exit 0. `test_toolbox.py` now names 53 families.
-- Lane proof: LANE_PLACEHOLDER
+- Landed as pull request #4, squash commit `514a1c3`. The live folder was pulled with `git pull --ff-only` and sits at `514a1c3`; `cards | wc -l` on the phone prints 53.
+- Lane proof, real launcher, real settings, after the cards were live (about 7:40 pm):
+  - `g2` (Claude Opus 5.5): "Is the voice line server on this phone answering on its port right now? Tell me the port number and the HTTP code it answers with." It printed `card calls; card doors`, said "The doors card names port 8790 as the voice line's server", ran `curl -s -m 4 -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8790/`, and answered "Yes. The voice line server answers on port 8790 with HTTP code 200." Exit 0. Direct check right after: the same curl, 200. Port 8790 was on no card before this audit.
+  - `g1` (GPT-6.1 Sol): "Which hidden screens are up on this phone right now? Give each one by name with its display number." It printed `card hidden-screens`, ran `deb bash /root/hidden-operator/bin/op screen list`, and answered "Two hidden screens are up. apps: display 3. web: display 4." Exit 0. Direct check: `deb bash /root/hidden-operator/scripts/hidden_display.sh list`, exit 0, `apps id=3 UP`, `web id=4 UP`. The `op` door was on no card before this audit, and the old card's path for these scripts failed.
