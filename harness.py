@@ -332,10 +332,10 @@ def load_pages() -> list:
 STAMP_SOURCE: Path | None = None
 
 
-def load_stamp() -> dict | None:
+def load_stamp(request_text=None) -> dict | None:
     """The operator_rules_stamp message that ends this request. None when the stamp is off."""
     try:
-        return stamp.tail(STAMP_SOURCE, STATE)
+        return stamp.tail(STAMP_SOURCE, STATE, request_text)
     except stamp.StampError as exc:
         raise HarnessError(str(exc)) from exc
 
@@ -471,7 +471,7 @@ def request_reply(
     extra_pages = load_pages()
     system_pages = base_pages + [page.text for page in extra_pages]
     # The rules stamp goes last, after the request, so everything before it stays byte-identical.
-    stamp_message = load_stamp()
+    stamp_message = load_stamp(request_context or raw_input)
     messages = [
         *({'role': 'system', 'content': page} for page in system_pages),
         *(history or []),

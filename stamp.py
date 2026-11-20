@@ -52,10 +52,25 @@ def headlines(source=SOURCE, heading: str = HEADING) -> list[str]:
     return found
 
 
-def record(rules: list[str]) -> str:
-    """The stamp as JSON text. The same rules always give the same bytes."""
-    return json.dumps({'type': RECORD_TYPE, 'source': 'operator_rules_file', 'rules': list(rules),
-                       'standing': STANDING}, ensure_ascii=False)
+EITHER_OR = ("The message before this record asks A or B. Before you pick, check for a mix of the two "
+             "or a third road that beats both.")
+_OR = re.compile(r'\bor\b')
+_CUE = re.compile(r'\?|\b(do we|do i|should we|should i|shall we|can we|could we|would you|are we|is it|which|'
+                  r'what do you (recommend|think|suggest)|better to)\b')
+
+
+def asks_a_or_b(text) -> bool:
+    """True when the operator's message looks like an either-or question."""
+    words = ' '.join(str(text or '').lower().split())
+    return bool(_OR.search(words) and _CUE.search(words))
+
+
+def record(rules: list[str], either_or: bool = False) -> str:
+    """The stamp as JSON text. The same rules and the same flag always give the same bytes."""
+    body = {'type': RECORD_TYPE, 'source': 'operator_rules_file', 'rules': list(rules), 'standing': STANDING}
+    if either_or:
+        body['either_or'] = EITHER_OR
+    return json.dumps(body, ensure_ascii=False)
 
 
 def is_stamp(message) -> bool:
@@ -140,11 +155,14 @@ def set_switch(state, on: bool) -> None:
     atomic_json(Path(state) / SWITCH_FILE, data)
 
 
-def tail(source, state) -> dict | None:
-    """The message to put last in a request, or None when the stamp is off. The source is not read when off."""
+def tail(source, state, request_text=None) -> dict | None:
+    """The message to put last in a request, or None when the stamp is off. The source is not read when off.
+
+    When the operator's own message looks like an either-or question, the record carries one more line.
+    """
     if source is None or not is_on(state):
         return None
-    return {'role': 'user', 'content': record(headlines(source))}
+    return {'role': 'user', 'content': record(headlines(source), either_or=asks_a_or_b(request_text))}
 
 
 def is_switch(text: str) -> bool:

@@ -518,5 +518,25 @@ class EntryPointTests(unittest.TestCase):
         self.assertIn('/off stamp', (h.ROOT / 'help.txt').read_text())
 
 
+
+class EitherOrTests(unittest.TestCase):
+    def test_flags_either_or_questions_only(self):
+        import stamp
+        self.assertTrue(stamp.asks_a_or_b('Do we do a handoff or compact here'))
+        self.assertTrue(stamp.asks_a_or_b('is it g1 or g2?'))
+        self.assertFalse(stamp.asks_a_or_b('please read this file'))
+        self.assertFalse(stamp.asks_a_or_b('tell me about the box or whatever'))
+        self.assertFalse(stamp.asks_a_or_b(None))
+
+    def test_record_adds_the_line_only_when_flagged(self):
+        import json
+        import stamp
+        plain = json.loads(stamp.record(['A.']))
+        self.assertNotIn('either_or', plain)
+        flagged = json.loads(stamp.record(['A.'], either_or=True))
+        self.assertEqual(flagged['either_or'], stamp.EITHER_OR)
+        self.assertEqual({k: v for k, v in flagged.items() if k != 'either_or'}, plain)
+
+
 if __name__ == '__main__':
     unittest.main()
