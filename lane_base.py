@@ -261,7 +261,7 @@ def request_reply(lane: Lane, raw_input, *, client=None, model=None, effort='max
     extra_pages = h.load_pages()
     system_pages = base_pages + [page.text for page in extra_pages]
     # The rules stamp follows the request on every lane, as in harness.request_reply. It is never saved with a turn.
-    stamp_message = h.load_stamp()
+    stamp_message = h.load_stamp(raw_input)
     messages = [*(history or []),
                 {'role': 'user', 'content': raw_input, **({'attachments': attachments} if attachments else {})},
                 *([stamp_message] if stamp_message else [])]
