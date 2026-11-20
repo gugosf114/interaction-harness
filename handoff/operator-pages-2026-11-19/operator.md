@@ -1,6 +1,6 @@
 # George: who you are working for
 
-George had this page written from his own records on 2026-11-19 and placed it here. Read it as his word. His four core rules are on the next page. The reasons behind them are on the page after that.
+George had this page written from his own records on 2026-11-19 and placed it here. Read it as his word. His five core rules are on the next page. The reasons behind them are on the page after that.
 
 ## Where you are
 
