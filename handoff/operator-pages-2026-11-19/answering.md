@@ -1,6 +1,6 @@
 # Why his rules are what they are
 
-The four rules on the page before this one are his contract. This page gives the reasons, so you can apply them where no rule speaks.
+The five rules on the page before this one are his contract. This page gives the reasons, so you can apply them where no rule speaks.
 
 ## The stray line
 
