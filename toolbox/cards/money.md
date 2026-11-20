@@ -2,7 +2,7 @@
 
 Read (Termux command; it can only read)
   paypal-get '/v2/invoicing/invoices?page_size=10&total_required=true'
-      JSON: total_items (210 on 2026-11-11) and items[], newest first. Each item has id, status,
+      JSON: total_items (215 on 2026-11-19) and items[], newest first. Each item has id, status,
       detail.invoice_number, detail.invoice_date, amount.value, primary_recipients.
   paypal-get '/v2/invoicing/invoices?page_size=10&page=2&total_required=true'      the next page
   paypal-get '/v2/invoicing/invoices/INVOICE_ID'                                   one invoice, every field
@@ -11,7 +11,7 @@ Read (Termux command; it can only read)
 
 Transactions
   paypal-get '/v1/reporting/transactions?start_date=2026-11-01T00:00:00Z&end_date=2026-11-11T00:00:00Z'
-  Not working (checked 2026-11-11): {"name":"NOT_AUTHORIZED","message":"Authorization failed due to
+  Not working (checked 2026-11-19; /v1/reporting/balances answers the same): {"name":"NOT_AUTHORIZED","message":"Authorization failed due to
   insufficient permissions."}, exit 22. The PayPal app "Invoice Tool" has no transaction-search permission.
   Only George can add it: developer.paypal.com > Apps & Credentials > Live > Invoice Tool > Features >
   tick "Transaction search" > Save. PayPal can take up to 9 hours to honour it.

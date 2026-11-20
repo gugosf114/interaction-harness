@@ -7,7 +7,7 @@ The notes (plain files on the Debian side)
   deb cat /root/.claude/projects/-root/memory/MEMORY.md             the index: one line per note, with its file name
   deb cat /root/.claude/projects/-root/memory/NOTE_FILE.md          one note
   deb rg -il 'WORD' /root/.claude/projects/-root/memory             which notes mention a word
-  The index is about 18,700 characters. Read it in two slices:
+  The index is about 19,600 characters and names about 250 note files (2026-11-19). Read it in slices:
   deb sed -n '1,60p' /root/.claude/projects/-root/memory/MEMORY.md
 
 Write a note (native Termux; writes into the memory folder at once)

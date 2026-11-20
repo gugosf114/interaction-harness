@@ -1,6 +1,6 @@
 # yana-phone — Yana's Galaxy S25+ over Tailscale (100.68.147.84)
 
-What is reachable (checked 2026-11-11: both doors answered, model SM-S936U)
+What is reachable (checked 2026-11-19: both doors answered, model SM-S936U)
   Her Termux shell over ssh, and adb over the network. Commands here run on Yana's phone.
 
 Run a command in her Termux
@@ -12,6 +12,7 @@ adb
   deb adb -s 100.68.147.84:5555 shell getprop ro.product.model
   deb bash -c 'adb -s 100.68.147.84:5555 exec-out screencap -p > /sdcard/Download/yana-screen.png'
   The last line saves a picture of what is on her screen.
+  At home her phone is also listed by its Wi-Fi address, 192.168.1.216:5555.
 
 What her phone holds, from the notes
   Termux, Termux:API, a Debian install with Claude Code on George's account, the PayPal live key file,

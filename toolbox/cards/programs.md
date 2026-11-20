@@ -10,7 +10,8 @@ Debian side (put `deb` in front)
   deb edge-tts --voice en-US-AvaNeural --text 'WORDS' --write-media /sdcard/Download/words.mp3      makes an MP3
   deb edge-playback --text 'WORDS'            speaks the words out loud at once
   deb playwright --version                    -> Version 1.65.1. The Python library for driving a browser.
-  deb playwright install chromium             downloads its own browser; none is installed yet
+  deb playwright install chromium             downloads its own browser; none is installed yet, and the
+                                              headless tools on `card bridge` fail for lack of it
   deb apkinfo /FULL/PATH/app.apk              package name, version and permissions of an APK file
   deb check-model /FULL/PATH/model.onnx       checks that an ONNX model file is valid
   deb harvest SESSION_ID 8                    prints the eight best exchanges of one Claude Code session
@@ -26,6 +27,8 @@ Debian side (put `deb` in front)
   deb fork                                    opens a new Claude Code session that starts as a copy of George's
                                               "golden" chat. It is a full chat window, not a one-shot.
   deb v                                       buzzes, listens for 30 seconds, prints what was said
+  deb uv --version ; deb uvx TOOL             the Python tool runner (0.13.7)
+  deb bdata budget                            Bright Data: `card browsers`
 
 Termux side
   nmap -sn 192.168.1.66                       is that address up
@@ -34,7 +37,8 @@ Termux side
   transcripts --help                          the tool that analyses George's saved chat archive
   inception status                            the multi-model cockpit: status | resume | fork | server | pair | cockpit
 
-Known failure (checked 2026-11-11)
-  deb assistant jobs and deb assistant status answer "<urlopen error [Errno 111] Connection refused>":
-  the brain's bridge is not running. `card calls` has the line's status and start commands.
+Known failure (checked 2026-11-19)
+  deb assistant jobs and deb assistant status answered that day. When they answer "<urlopen error [Errno 111]
+  Connection refused>" the voice line is down: `card calls`.
   deb line status shows every part DOWN until `deb line` starts it.
+  inception status: "codex app-server daemon version failed". firebase: "Cannot find module 'semver'".

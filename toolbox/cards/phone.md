@@ -14,7 +14,7 @@ Read the screen as words (the phone's MCP server, port 8080)
 
 adb (device 127.0.0.1:5555 is this phone)
   adb -s 127.0.0.1:5555 shell getprop ro.product.model        -> Pixel 11
-  adb devices                                                 also lists the Z Flip 7 and Yana's phone
+  adb devices                                                 also lists the Z Flip 7 and Yana's phone when they are on
   adb -s 127.0.0.1:5555 shell input tap X Y                   This taps George's visible screen at once.
   adb -s 127.0.0.1:5555 shell am start -n PACKAGE/ACTIVITY    This opens an app on George's visible screen.
 
@@ -28,6 +28,7 @@ Hidden screens: a screen only the agent sees. George's real screen does not chan
   deb bash /root/hidden-operator/scripts/hidden_display.sh text -n NAME 'words'
   deb bash /root/hidden-operator/scripts/hidden_display.sh stop -n NAME
   The screen named "web" holds the signed-in Chrome: see `card phone-browser`.
+  Every other verb (grid, zoom, swipe, key, ensure, reap) and the by-name driver: `card hidden-screens`.
 
 More of the phone, each on its own card
   mcp-see, mcp-touch, mcp-apps    the phone's MCP server: read the screen as words, tap, type, apps, notifications
@@ -39,4 +40,4 @@ The AI that phones a place for George (phone-do, phone-ask): see `card calls`.
 Full how-to: deb cat /root/.claude/device-control.md
 
 Known failure
-  "adb: more than one device/emulator": an adb command with no -s. Four devices are listed, so name one.
+  "adb: more than one device/emulator": an adb command with no -s. Several devices are listed, so name one.

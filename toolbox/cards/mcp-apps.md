@@ -36,6 +36,7 @@ Notifications (ids come from android_notification_list)
   mcp android_notification_reply '{"action_id":"f8ea555b","text":"On my way"}'
       This sends a real reply in that app at once. It works on actions whose accepts_text is true.
 
-Known failure (checked 2026-11-11)
-  The three camera tools answer "CAMERA permission not granted". The grant command is on `card mcp-see`.
+Known failure (checked 2026-11-19)
+  The camera tools have their permission since 2026-11-19 (`card mcp-see`). They were not run: each takes a
+  real photo or video.
   Writes answer an error while no writable storage location exists.

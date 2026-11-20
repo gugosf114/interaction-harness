@@ -30,7 +30,15 @@ Cancel one
 
 Facts
   The script must be a file with a shebang line and the run permission (chmod +x).
-  Checked 2026-11-11: the table holds seven timers and Android answers "No jobs found".
+  Checked 2026-11-19: the table holds ten timers and Android lists all ten as pending:
+  7730 mailcheck-termux.sh (the 30-minute mail check that texts Yana), 9106 watch-heartbeat (hourly: re-hangs
+  timers and alerts when one goes quiet), 7731 shizuku-watch, 7732 droidrun-watch, 7733 hidden_supervisor,
+  7734 wifi_debug_keeper, 7735 mcp_door_keeper, 7736 tailscale_keeper, 7742 the lane service's keeper,
+  7743 usage-watch. Timer 7919 (the old phone supervisor) is cancelled on George's word; do not hang it again.
+
+Not on a timer
+  ~/.local/bin/berkeley-job-mail-watch      alerts George when a new job-mail notification shows. Nothing runs it
+  today. Listed, not run.
 
 Known failure
   A timer drops off its hook after a reboot or an app update. `timers-ensure` puts it back.

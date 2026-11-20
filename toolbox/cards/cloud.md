@@ -23,12 +23,14 @@ The other accounts: where each key lives, and one read-only call
   cloud-check cloudflare     key /root/.cloudflare-api-token      -> "cloudflare token: active"
   cloud-check bing           key /root/.bing/apikey               -> "bing sites: ['https://mybakingcreations.com/']"
   cloud-check huggingface    key /root/.huggingface/token         -> "hugging face user: NAME"
-  cloud-check runpod         key /root/.runpod/config.toml        -> "runpod balance: N | pods: [...]"
+  cloud-check runpod         key /root/.runpod/config.toml        -> "runpod balance: N | pods: [...]" (below zero, no pods, 2026-11-19)
   cloud-check modal          key /root/.modal.toml                -> the list of Modal apps
   cloud-check brightdata     sign-in kept by the bdata program    -> the active zones (cli_unlocker, cli_browser)
   More of each: deb modal --help ; deb bdata --help (scrape, search, zones, budget, browser).
   The bakery's Cloudflare account uses two secrets, cloudflare-mbc-global-key and cloudflare-mbc-email,
   sent as the headers X-Auth-Key and X-Auth-Email.
+
+Every key file and all 46 secret names: `card keys`.
 
 Known failure
   A gcloud call that answers PERMISSION_DENIED and names play-publisher@bakers-agent means the selected

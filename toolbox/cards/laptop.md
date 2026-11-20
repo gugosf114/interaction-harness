@@ -24,13 +24,15 @@ Start a long job for Claude on the laptop
   deb bash /root/agent-bridge/scripts/laptop_task.sh ls              the 10 newest jobs
   Claude on the laptop runs with permission checks off. It acts without asking.
 
-The laptop's own signed-in Chrome (headless, debug port 9224 on the laptop)
-  The how-to is a note: deb cat /root/.claude/projects/-root/memory/laptop-headless-browser.md
+The laptop's two Chromes (headed on 9222, headless on 9224): `card browsers`.
+  Its scheduled tasks on 2026-11-19: AgentBridgeLaptop (running), GeorgeGoogleConsoleHeadless (running),
+  GeorgeJobApplicationsChrome (ready), ShowAgentChrome (ready). See them:
+  deb ssh wimlaptop 'schtasks /query /fo csv /nh | findstr /i "George AgentBridge ShowAgent"'
 
 Facts
   An admin action on the laptop needs George's Yes on the laptop screen.
   PowerShell output over ssh can end with a "#< CLIXML" block. That block is noise.
 
 Known failure
-  ssh times out while Tailscale shows the laptop green: restart Tailscale on the phone, then retry.
+  ssh times out: Tailscale on this phone is off (sh ~/bin/tailscale_keeper.sh once), or the laptop sleeps.
   The steps are in /root/.claude/device-control.md (deb cat /root/.claude/device-control.md).

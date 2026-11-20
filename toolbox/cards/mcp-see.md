@@ -34,13 +34,13 @@ Apps and files
       The built-in locations show only files this app made itself. Other files: use `card files`.
 
 Cameras
-  mcp android_list_cameras
+  mcp android_list_cameras                                       -> camera 0 back, camera 1 front
   mcp android_list_camera_photo_resolutions '{"camera_id":"0"}'
   mcp android_list_camera_video_resolutions '{"camera_id":"0"}'
 
-Known failure (checked 2026-11-11)
-  The camera tools answer "CAMERA permission not granted" and android_get_location answers
-  "Location permission not granted". The MCP app lacks those two permissions. The grant command:
-  rish -c 'pm grant com.danielealbano.androidremotecontrolmcp.debug android.permission.CAMERA'
-  rish -c 'pm grant com.danielealbano.androidremotecontrolmcp.debug android.permission.ACCESS_FINE_LOCATION'
+Known failure (checked 2026-11-19)
+  Camera and location work since 2026-11-19, when the MCP app was given those permissions. If a tool answers
+  "CAMERA permission not granted" or "Location permission not granted" again, the grant command is:
+  adb -s 127.0.0.1:5555 shell pm grant com.danielealbano.androidremotecontrolmcp.debug android.permission.CAMERA
+  (the same with android.permission.ACCESS_FINE_LOCATION)
   "the phone MCP server did not answer": run `deb phone-link`, which reopens the door.
