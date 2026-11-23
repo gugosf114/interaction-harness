@@ -4,13 +4,13 @@ Written 2026-11-23 by the session that built the operator pages and mapped the c
 
 ## 1. The job, in one paragraph
 
-George runs his own program on this phone, `interaction-harness`, that talks to models with his own API keys. `g2` is Claude Opus 5.5. `g1` is GPT-6.1 Sol. He calls it the API route. He wants it finished to its ceiling: every control the API road can give him, built, tested and proven, so he can stop thinking about it. The ceiling is a closed list of 18 boxes. Five are already done. Two need his own hands. Eleven are yours. Do all eleven in this one run, in the order given, without stopping to ask. Every decision is already made in section 5.
+George runs his own program on this phone, `interaction-harness`, that talks to models with his own API keys. `g2` is Claude Opus 5.5. `g1` is GPT-6.1 Sol. He calls it the API route. He wants it finished to its ceiling: every control the API road can give him, built, tested and proven, so he can stop thinking about it. The ceiling is a closed list of 18 boxes. Five are already done. One is his alone. Twelve are yours. Do all twelve in this one run, in the order given, without stopping to ask. Every decision is already made in section 5.
 
-**The last sentence of your last message is fixed.** When every one of your eleven boxes has its proof written in the progress file, your final message starts with exactly:
+**The last sentence of your last message is fixed.** When every one of your twelve boxes has its proof written in the progress file, your final message starts with exactly:
 
 > George, everything is done perfectly. The ceiling is reached.
 
-A false "done" is the deepest wound in George's record with models. So that sentence is earned, never assumed. If any box lacks its proof, your final message starts instead with "George, N of 11 boxes are closed." and names each open box and the exact thing in its way. Section 8 has the full ending.
+A false "done" is the deepest wound in George's record with models. So that sentence is earned, never assumed. If any box lacks its proof, your final message starts instead with "George, N of 12 boxes are closed." and names each open box and the exact thing in its way. Section 8 has the full ending.
 
 ## 2. Read these first, in this order
 
@@ -39,7 +39,7 @@ State you inherit, checked on 2026-11-23: the full suite ran green at commit `4b
 - **One box at a time, in order.** Each box ends with: tests added, full suite green, pull request merged, live folder pulled, live proof run, proof written to the progress file, progress file pushed.
 - **The progress file is your memory.** Create `handoff/CEILING-RUN-2026-11-23.md` in the repo at the start. After every box, write: box number, what changed (commit hash), the proof you ran and what you saw, and any trap you hit. Push it. This run is long and your context will be summarized; after a summary, read that file before you do anything else.
 - **Proof means the far end.** A box is closed when the thing was used the way George will use it and you saw the result. "It compiles" and "tests pass" are stages, and you name the stage you reached.
-- **No questions to George.** The decisions are below. A question is allowed only for a thing no code can reach: his fingerprint, a login that needs his face, a payment. Those are listed in section 7 and you stage them for the end.
+- **No questions to George.** The decisions are below. A question is allowed only for a thing no code can reach: his fingerprint, a login that needs his face, a payment. Box 12 says how to handle those.
 - **Money.** Lane calls spend his API credit. Budget for this whole run: 40 dollars. Read the usage meter (card `usage`) before and after each proof batch and write the totals in the progress file. Stop a batch that would pass the budget and say so there.
 - **Scope.** Do not change `tools_block.txt` unless a line in it would be false after your change; George said that page stays. Keep it under 8,000 characters. Do not change the visibility of any repository. Do not touch the bakery, WiM, or anything outside this job.
 - When a box gets hard: three honest attempts with different designs. Then write what failed in the progress file, go on to the next box, and come back to it before the wrap-up.
@@ -53,7 +53,7 @@ State you inherit, checked on 2026-11-23: the full suite ran green at commit `4b
 - Box 13: the face is the real Claude Code screen, talking to the API through the harness.
 - Box 15: run the bare test.
 
-## 6. The eleven boxes, in running order
+## 6. The twelve boxes, in running order
 
 ### Box 5. Bring the second reader and the README up to six rules
 
@@ -147,10 +147,16 @@ This is the largest box. Read the official Claude Code documentation for every s
 - **Do not** open, sign in to or fill the application portal. The identity check and the submit are George's.
 - **Proof:** the PDF opens and has every question with its answer; the requirements note is in the repo at `handoff/API-CYBER-PROGRAM-2026-11-23.md`; the key swap command passes its test with a dummy key.
 
-## 7. George's two boxes (stage them, do not count them)
+### Box 12. The three sign-ins the tool audit left open
 
-- **Box 12, three sign-ins:** `agy` and `grok` need his login; PayPal's developer dashboard needs "Transaction search" ticked. At the end, tell him each one as the smallest step, in one line each.
-- **Box 17, one real day:** he uses `g2` and `g1` for a day and sends each bother through `/wrong`. The gate holds zero learned rules today because that day has not happened. No build stands in for it.
+- **Why:** the Nov 19 tool audit marked three tools "needs George" and stopped there. Nobody tried them with his own signed-in browser. He has said the model holds more permissions on this phone than he does, so try first.
+- **The three:** `agy --print 'QUESTION'` answers "Authentication required. Please visit the URL to log in." `grok -p 'QUESTION'` answers "Not signed in." PayPal's transaction report (`paypal-get '/v1/reporting/transactions?...'`, card `money`) answers `NOT_AUTHORIZED` until "Transaction search" is ticked for the app in PayPal's developer dashboard.
+- **Do:** read the README of `gugosf114/phone-chrome-agent` first; it names the one browser pipe to use and the traps (never start another Chrome; ask each debug socket which browser it is). Start each login, open its address in George's signed-in browser, and finish it with the accounts already signed in there. Tick the PayPal box the same way. If a step asks for a password, a passkey, a text code you cannot read, or his face, stop that one sign-in there and hand him that single step at the end.
+- **Proof:** `agy` and `grok` each answer one real question; the PayPal call returns transactions. For any sign-in that ended at his hand, the exact screen it stopped on.
+
+## 7. George's one box (do not count it)
+
+- **Box 17, one real day:** he uses `g2` and `g1` for a day and sends each bother through `/wrong`. The gate holds zero learned rules today because that day has not happened. No build stands in for it. Name it in one line at the end.
 
 ## 8. The wrap-up and the ending
 
@@ -159,7 +165,7 @@ This is the largest box. Read the official Claude Code documentation for every s
 3. README brought up to date for everything you changed. A new handoff, `handoff/HANDOFF-2026-11-23.md`, in plain words: what exists now, how to start each thing, what is George's. Update the memory note `interaction-harness.md` and its line in `MEMORY.md`.
 4. Every file meant for George is in his Downloads and media-scanned. When you name a file to him, say "in your Downloads, named X". Paths and links mean nothing to him.
 5. Your final message, in his language: short sentences, small words, bullets, no tables.
-   - If all eleven boxes have proof: first line exactly **"George, everything is done perfectly. The ceiling is reached."** Then at most ten short lines: what he can type now and what each does. Then "Your hand:" with the three sign-ins and the real day.
-   - If not: first line **"George, N of 11 boxes are closed."** Then each open box with the one thing in its way.
+   - If all twelve boxes have proof: first line exactly **"George, everything is done perfectly. The ceiling is reached."** Then at most ten short lines: what he can type now and what each does. Then "Your hand:" with the real day, and any single sign-in step that needed his password or face.
+   - If not: first line **"George, N of 12 boxes are closed."** Then each open box with the one thing in its way.
 
 Tokens and time are not a limit. Take the whole job in one run.
