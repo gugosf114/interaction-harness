@@ -19,7 +19,7 @@ A false "done" is the deepest wound in George's record with models. So that sent
 3. `https://github.com/gugosf114/my-failures-2026-11-21` (public). It is the list of what the last session got wrong with George. The main one: he gave a clear order about his own property eight times and the model kept reviewing it. Do what the brief says. Add no checks, scans, warnings or smaller versions that nobody ordered.
 4. The code you will touch, before you touch it. Read the file, then the tests for it.
 
-State you inherit, checked on 2026-11-23: GitHub `main` and the live folder are both at `4bf585b`. The full suite ran green that day: 860 tests. Nothing is uncommitted in the live folder. No side branch holds unmerged work.
+State you inherit, checked on 2026-11-23: the full suite ran green at commit `4bf585b`: 860 tests. One docs-only commit came after it (this brief, `handoff/CEILING-BRIEF-2026-11-23.md`). GitHub `main` and the live folder are at the same commit. Nothing is uncommitted in the live folder. No side branch holds unmerged work.
 
 ## 3. This environment
 
